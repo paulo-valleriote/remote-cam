@@ -1,0 +1,38 @@
+# Secrets & environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+kubeconfig*
+secrets/
+
+# Dependencies
+node_modules/
+vendor/
+.venv/
+venv/
+
+# Build artifacts
+dist/
+build/
+out/
+*.egg-info/
+
+# Caches
+__pycache__/
+*.py[cod]
+.cache/
+.next/
+.turbo/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
