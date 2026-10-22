@@ -29,6 +29,11 @@ jobs:
         with:
           workspaces: "desktop -> target"
 
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfontconfig1-dev
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
