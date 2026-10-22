@@ -1,0 +1,16 @@
+[package]
+name = "remotecam-signaling"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+qrcode.workspace = true
+rcgen.workspace = true
+rustls.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+webrtc.workspace = true
