@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://remotecam.local/contracts/signing-messages.schema.json",
+  "title": "RemoteCam signaling messages",
+  "description": "Closed allowlist of signaling messages exchanged between the mobile capture app and the desktop receiver over the authenticated channel. The channel is a WebSocket over TLS 1.3 with exact SHA-256 certificate fingerprint pinning. Media never travels on this channel. Unknown fields are rejected, not ignored.",
+  "type": "object",
+  "required": ["version", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "Protocol version. A peer rejects any version greater than the highest it supports.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "type": {
+      "description": "Message type. Closed allowlist.",
+      "type": "string",
+      "enum": [
+        "pair",
+        "paired",
+        "offer",
+        "answer",
+        "ice",
+        "stats",
+        "close",
+        "error",
+        "ping",
+        "pong"
+      ]
+    }
+  },
+  "allOf": [
+    { "$ref": "#/$defs/pair" },
+    { "$ref": "#/$defs/paired" },
+    { "$ref": "#/$defs/offer" },
+    { "$ref": "#/$defs/answer" },
+    { "$ref": "#/$defs/ice" },
+    { "$ref": "#/$defs/stats" },
+    { "$ref": "#/$defs/close" },
+    { "$ref": "#/$defs/error" },
+    { "$ref": "#/$defs/ping" },
+    { "$ref": "#/$defs/pong" }
+  ],
+  "$defs": {
+    "fingerprint": {
+      "description": "SHA-256 digest of the DER-encoded leaf certificate, lowercase hex, exactly 64 characters. Never logged in full.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "privateAddress": {
+      "description": "RFC 1918 IPv4 or IPv6 link-local / ULA address. Any other destination aborts the session.",
+      "type": "string",
+      "pattern": "^(10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|192\\.168\\.[0-9]{1,3}\\.[0-9]{1,3}|172\\.(1[6-9]|2[0-9]|3[0-1])\\.[0-9]{1,3}\\.[0-9]{1,3}|169\\.254\\.[0-9]{1,3}\\.[0-9]{1,3})$"
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["address", "port", "component"],
+      "additionalProperties": false,
+      "properties": {
+        "address": { "$ref": "#/$defs/privateAddress" },
+        "port": { "$ref": "#/$defs/port" },
+        "component": {
+          "description": "ICE component id.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "protocol": {
+          "description": "Transport protocol. Only UDP is permitted; TCP candidates are rejected.",
+          "type": "string",
+          "enum": ["udp"]
+        }
+      }
+    },
+    "limits": {
+      "description": "Requested capture limits. The desktop may propose limits; the mobile decides and may refuse.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_width": { "type": "integer", "minimum": 160, "maximum": 3840 },
+        "max_height": { "type": "integer", "minimum": 120, "maximum": 2160 },
+        "max_frame_rate": { "type": "integer", "minimum": 1, "maximum": 60 },
+        "max_video_bitrate_kbps": { "type": "integer", "minimum": 200, "maximum": 8000 },
+        "max_audio_bitrate_kbps": { "type": "integer", "minimum": 8, "maximum": 128 }
+      }
+    },
+    "pair": {
+      "type": "object",
+      "required": ["version", "type", "token", "dtls_fingerprint", "limits"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "pair" },
+        "token": {
+          "description": "The 256-bit single-use pairing token read from the QR. Compared in constant time on the desktop. Never logged.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "dtls_fingerprint": { "$ref": "#/$defs/fingerprint" },
+        "limits": { "$ref": "#/$defs/limits" }
+      }
+    },
+    "paired": {
+      "type": "object",
+      "required": ["version", "type", "session_id", "epoch", "dtls_fingerprint", "accepted_limits"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "paired" },
+        "session_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "epoch": {
+          "description": "Monotonic session generation. A message carrying a lower epoch is discarded silently and counted as a protocol violation.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "dtls_fingerprint": { "$ref": "#/$defs/fingerprint" },
+        "accepted_limits": { "$ref": "#/$defs/limits" }
+      }
+    },
+    "offer": {
+      "description": "SDP offer from the mobile side. The mobile is always the offerer.",
+      "type": "object",
+      "required": ["version", "type", "epoch", "sdp"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "offer" },
+        "epoch": { "type": "integer", "minimum": 0 },
+        "sdp": { "type": "string", "minLength": 1, "maxLength": 8192 }
+      }
+    },
+    "answer": {
+      "description": "SDP answer from the desktop side. The desktop never creates a send track.",
+      "type": "object",
+      "required": ["version", "type", "epoch", "sdp"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "answer" },
+        "epoch": { "type": "integer", "minimum": 0 },
+        "sdp": { "type": "string", "minLength": 1, "maxLength": 8192 }
+      }
+    },
+    "ice": {
+      "type": "object",
+      "required": ["version", "type", "epoch", "candidates"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "ice" },
+        "epoch": { "type": "integer", "minimum": 0 },
+        "candidates": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/candidate" }
+        }
+      }
+    },
+    "stats": {
+      "description": "Optional client metrics. Carries no identifiers.",
+      "type": "object",
+      "required": ["version", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "stats" },
+        "fps": { "type": "number", "minimum": 0, "maximum": 120 },
+        "video_bitrate_kbps": { "type": "number", "minimum": 0 },
+        "rtt_ms": { "type": "number", "minimum": 0 },
+        "loss_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "thermal_status": {
+          "type": "string",
+          "enum": ["none", "light", "moderate", "severe", "critical", "emergency", "shutdown"]
+        }
+      }
+    },
+    "close": {
+      "type": "object",
+      "required": ["version", "type", "code"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "close" },
+        "code": {
+          "type": "string",
+          "enum": [
+            "ended_by_mobile",
+            "ended_by_desktop",
+            "superseded",
+            "timeout",
+            "media_failure",
+            "security_violation",
+            "internal_error"
+          ]
+        }
+      }
+    },
+    "error": {
+      "description": "Generic error. Never carries host data, paths, user names or public IP addresses.",
+      "type": "object",
+      "required": ["version", "type", "code"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "error" },
+        "code": { "type": "string", "enum": ["invalid_message", "unsupported_version", "rate_limited", "internal_error"] },
+        "message": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "ping": {
+      "type": "object",
+      "required": ["version", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "ping" }
+      }
+    },
+    "pong": {
+      "type": "object",
+      "required": ["version", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "pong" }
+      }
+    }
+  },
+  "x-invariants": [
+    "I2: the desktop MUST NOT create any send track. Every answer it emits MUST contain only recvonly or inactive media sections.",
+    "I2: the desktop MUST NOT send media over this channel, and the channel MUST NOT carry binary media data.",
+    "I3: no message may be replayed. The token is single use and the epoch is monotonic.",
+    "The offer MUST contain only audio and video sections. A data channel section MUST be rejected.",
+    "The mobile MUST reject an answer that contains any send track or a sendrecv direction.",
+    "ICE candidates of type srflx or relay MUST be rejected. Non-private addresses MUST be rejected.",
+    "Every message has a maximum encoded size of 16 KiB; a larger frame closes the session with security_violation.",
+    "A message with an unknown field is rejected with invalid_message; unknown fields are never ignored."
+  ],
+  "x-conformance": {
+    "description": "The Kotlin and Rust implementations MUST both pass the vectors in protocol/vectors/signaling/. Each vector names the message, the expected accept/reject outcome, and the expected reason code on rejection.",
+    "vector_directory": "protocol/vectors/signaling/",
+    "minimum_vectors": 40
+  }
+}

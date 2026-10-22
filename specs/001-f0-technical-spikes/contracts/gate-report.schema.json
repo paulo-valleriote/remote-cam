@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://remotecam.local/contracts/gate-report.schema.json",
+  "title": "F0 gate report and verdicts",
+  "description": "The five gate verdicts issued at a single phase review, with their evidence references, conditions, waivers and downstream impact. Artefact-only contract: it describes the report file produced by the spike, not a message exchanged by the product.",
+  "type": "object",
+  "required": [
+    "report_version",
+    "feature",
+    "phase_review_at",
+    "reference_environment",
+    "gates",
+    "downstream_status",
+    "open_questions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "report_version": { "type": "integer", "const": 1 },
+    "feature": {
+      "description": "The feature identifier.",
+      "type": "string",
+      "const": "001-f0-technical-spikes"
+    },
+    "phase_review_at": {
+      "description": "The single phase review at which all five verdicts were issued. ISO 8601 with offset.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "report_prepared_by": {
+      "description": "The technical lead who prepared the report.",
+      "type": "string",
+      "minLength": 1
+    },
+    "reference_environment": { "$ref": "#/$defs/environment" },
+    "gates": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": { "$ref": "#/$defs/gate" }
+    },
+    "downstream_status": { "$ref": "#/$defs/downstreamStatus" },
+    "decisions": {
+      "description": "Index of the decision records that this report relies upon.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/decisionIndexEntry" }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/openQuestion" }
+    },
+    "redistribution_note": {
+      "description": "A statement that the spike artefacts are non-production and must not be merged into product modules.",
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "environment": {
+      "type": "object",
+      "required": ["environment_id", "cpu_model", "cpu_logical_cores", "gpu_model", "os_build", "hardware_decode_verification"],
+      "additionalProperties": false,
+      "properties": {
+        "environment_id": { "type": "string" },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "cpu_model": { "type": "string", "minLength": 1 },
+        "cpu_logical_cores": { "type": "integer", "minimum": 1 },
+        "gpu_model": { "type": "string", "minLength": 1 },
+        "os_name": { "type": "string" },
+        "os_build": { "type": "string", "minLength": 1 },
+        "android_device_model": { "type": "string" },
+        "android_os_version": { "type": "string" },
+        "app_versions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "tool_versions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "network": { "$ref": "#/$defs/network" },
+        "hardware_decode_verification": { "$ref": "#/$defs/hardwareDecode" }
+      }
+    },
+    "network": {
+      "type": "object",
+      "required": ["band", "within_reference_conditions"],
+      "additionalProperties": false,
+      "properties": {
+        "band": { "type": "string", "enum": ["2_4_ghz", "5_ghz", "wired", "emulated"] },
+        "channel_width_mhz": { "type": "integer" },
+        "access_point_model": { "type": "string" },
+        "distance_m": { "type": "number" },
+        "client_adapter": { "type": "string" },
+        "wifi_power_save": { "type": "string", "enum": ["disabled", "enabled"] },
+        "baseline_throughput_mbps": { "type": "number" },
+        "baseline_rtt_ms": { "type": "number" },
+        "baseline_loss_pct": { "type": "number" },
+        "internet_enabled": { "type": "boolean" },
+        "within_reference_conditions": { "type": "boolean" }
+      }
+    },
+    "hardwareDecode": {
+      "type": "object",
+      "required": ["codec", "hardware_accelerated", "verified_at", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "codec": { "type": "string", "const": "H.264" },
+        "verified_at": { "type": "string", "format": "date-time" },
+        "discovery_method": {
+          "type": "string",
+          "enum": ["mft_enum_syncmft", "mft_enum_hardware", "gpu_engine_counter", "other"]
+        },
+        "decoder_found": { "type": "boolean" },
+        "hardware_accelerated": { "type": "boolean" },
+        "output_format_supported": { "type": "string", "enum": ["nv12", "i420", "other"] },
+        "evidence": { "type": "string", "minLength": 1 }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["gate_id", "title", "wave", "depends_on", "verdict", "accountable_role", "issued_at", "criterion", "measured_result", "rationale", "evidence_refs", "measurement_conditions"],
+      "additionalProperties": false,
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "enum": ["camera_injection", "desktop_receive_pipeline", "codec_interoperability", "pairing_handshake", "virtual_audio_and_licensing"]
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "wave": { "type": "integer", "enum": [1, 2, 3] },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "preconditions": {
+          "description": "The plan preconditions that guard this gate. A precondition that failed makes the verdict no_go with the failure code precondition_failed.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["PC-1", "PC-2", "PC-3", "PC-4", "PC-5", "PC-6"]
+          }
+        },
+        "accountable_role": { "$ref": "#/$defs/role" },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "verdict": { "type": "string", "enum": ["go", "no_go", "conditional"] },
+        "criterion": {
+          "description": "The measurable criterion the gate was judged against.",
+          "type": "string",
+          "minLength": 1
+        },
+        "measured_result": {
+          "description": "The measured value or values that produced the verdict.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "rationale": { "type": "string", "minLength": 1 },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "measurement_conditions": { "type": "string", "minLength": 1 },
+        "included_latency_stages": {
+          "description": "The latency budget stages inside the measured figure.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["capture", "encode", "network_and_jitter_buffer", "decode", "frame_handoff", "consumer_presentation"]
+          }
+        },
+        "excluded_latency_stages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["capture", "encode", "network_and_jitter_buffer", "decode", "frame_handoff", "consumer_presentation"]
+          }
+        },
+        "harness_floor_ms": {
+          "description": "The measurement apparatus's own latency floor, measured by the calibration procedure.",
+          "type": "number",
+          "minimum": 0
+        },
+        "raw_latency_p95_ms": {
+          "description": "The raw capture-at-consumer p95. This is the value the latency gate is judged on.",
+          "type": "number",
+          "minimum": 0
+        },
+        "floor_corrected_latency_p95_ms": {
+          "description": "The capture-at-consumer p95 with the harness floor removed. Reported alongside the raw value and never substituted for it.",
+          "type": "number",
+          "minimum": 0
+        },
+        "latency_attribution": {
+          "description": "Whether the latency outcome is attributable to the capture procedure or to the product under test. Stated whenever the outcome is not a clear pass.",
+          "type": "string",
+          "minLength": 1
+        },
+        "impairment_profile": {
+          "description": "The pinned impairment profile used by a loss-and-jitter scenario. One profile exists: 3 % uniform loss, 30 ms added latency, ±10 ms jitter, media only.",
+          "type": "object",
+          "required": ["profile_name", "loss_pct", "loss_distribution", "added_latency_ms", "jitter_ms", "applies_to"],
+          "additionalProperties": false,
+          "properties": {
+            "profile_name": { "type": "string", "const": "nominal-3pct-30ms-10ms" },
+            "loss_pct": { "type": "number", "const": 3 },
+            "loss_distribution": { "type": "string", "const": "uniform" },
+            "added_latency_ms": { "type": "number", "const": 30 },
+            "jitter_ms": { "type": "number", "const": 10 },
+            "applies_to": { "type": "string", "const": "media_only" },
+            "seed": { "type": "integer" },
+            "relay_log_ref": { "type": "string" }
+          }
+        },
+        "throttling_summary": {
+          "description": "The pairing throttling evidence: the per-origin attempt limit, the progressive blocking and the listener shutdown.",
+          "type": "object",
+          "required": ["attempt_limit_per_minute", "limit_exceeded_at_attempt", "consecutive_failures_at_listener_close", "listener_closed", "session_established"],
+          "additionalProperties": false,
+          "properties": {
+            "attempt_limit_per_minute": { "type": "integer", "const": 5 },
+            "limit_exceeded_at_attempt": { "type": "integer", "const": 6 },
+            "consecutive_failures_at_listener_close": { "type": "integer", "const": 10 },
+            "listener_closed": { "type": "boolean" },
+            "session_established": { "type": "boolean" },
+            "legitimate_pairing_unaffected": { "type": "boolean" },
+            "decisions_recorded": { "type": "integer", "minimum": 1 },
+            "evidence_ref": { "type": "string" }
+          }
+        },
+        "residue_summary": {
+          "description": "The pairing residue inspections: zero artefacts after a normal session end and after an application restart, using the same inspection method.",
+          "type": "object",
+          "required": ["method", "coverage", "after_session_end_artefacts_found", "after_application_restart_artefacts_found"],
+          "additionalProperties": false,
+          "properties": {
+            "method": { "type": "string", "minLength": 1 },
+            "coverage": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string" }
+            },
+            "after_session_end_artefacts_found": {
+              "type": "array",
+              "maxItems": 0
+            },
+            "after_application_restart_artefacts_found": {
+              "type": "array",
+              "maxItems": 0
+            },
+            "evidence_ref": { "type": "string" }
+          }
+        },
+        "audio_measurement_summary": {
+          "description": "The audio continuity and intelligibility evidence: the automated dropout analysis and the scripted human check.",
+          "type": "object",
+          "required": ["dropout_count", "detectors_agree", "consumer_renegotiations", "phrases_exact", "corpus_wer", "observer", "phrase_script_ref"],
+          "additionalProperties": false,
+          "properties": {
+            "dropout_count": { "type": "integer", "minimum": 0 },
+            "detectors_agree": { "type": "boolean" },
+            "consumer_renegotiations": { "type": "integer", "minimum": 0 },
+            "phrases_exact": { "type": "integer", "minimum": 0 },
+            "corpus_wer": { "type": "number", "minimum": 0 },
+            "observer": { "type": "string", "minLength": 1 },
+            "phrase_script_ref": { "type": "string", "minLength": 1 },
+            "device_pin": { "type": "string", "minLength": 1 },
+            "signature_verified": { "type": "boolean" }
+          }
+        },
+        "conditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "blocking_dependency": {
+          "description": "The gate whose no-go caused this verdict to be recorded.",
+          "type": "string"
+        },
+        "failure_code": {
+          "description": "The report-level reason code when the verdict is not go.",
+          "type": "string",
+          "enum": [
+            "criterion_not_met",
+            "harness_invalid",
+            "precondition_failed",
+            "dependency_failed",
+            "environment_out_of_reference",
+            "evidence_missing",
+            "evidence_incomplete",
+            "reproduction_failed",
+            "decision_unresolved",
+            "scope_reduced"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "gate_id": { "const": "desktop_receive_pipeline" } }, "required": ["gate_id"] },
+          "then": {
+            "required": ["harness_floor_ms", "raw_latency_p95_ms", "floor_corrected_latency_p95_ms", "included_latency_stages", "excluded_latency_stages"]
+          }
+        },
+        {
+          "if": { "properties": { "gate_id": { "const": "pairing_handshake" } }, "required": ["gate_id"] },
+          "then": {
+            "required": ["throttling_summary", "residue_summary"]
+          }
+        },
+        {
+          "if": { "properties": { "gate_id": { "const": "virtual_audio_and_licensing" } }, "required": ["gate_id"] },
+          "then": {
+            "required": ["audio_measurement_summary"]
+          }
+        }
+      ]
+    },
+    "role": {
+      "type": "object",
+      "required": ["role_type", "person_name"],
+      "additionalProperties": false,
+      "properties": {
+        "role_type": {
+          "type": "string",
+          "enum": ["technical_lead", "security_reviewer", "product_owner"]
+        },
+        "person_name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "required": ["condition_id", "description", "conditioned_phases", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "condition_id": { "type": "string" },
+        "description": { "type": "string", "minLength": 1 },
+        "conditioned_phases": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^F[0-9]+$" }
+        },
+        "status": { "type": "string", "enum": ["blocking", "waived", "resolved"] },
+        "waiver": { "$ref": "#/$defs/waiver" }
+      }
+    },
+    "waiver": {
+      "type": "object",
+      "required": ["waived_by", "waived_at", "waiver_conditions", "resolution_deadline"],
+      "additionalProperties": false,
+      "properties": {
+        "waived_by": { "$ref": "#/$defs/role" },
+        "waived_at": { "type": "string", "format": "date-time" },
+        "waiver_conditions": { "type": "string", "minLength": 1 },
+        "resolution_deadline": { "type": "string", "format": "date" }
+      }
+    },
+    "downstreamStatus": {
+      "description": "Whether the later phases are unblocked, and under what conditions.",
+      "type": "object",
+      "required": ["F1", "F2", "F3"],
+      "additionalProperties": false,
+      "properties": {
+        "F1": { "$ref": "#/$defs/phaseStatus" },
+        "F2": { "$ref": "#/$defs/phaseStatus" },
+        "F3": { "$ref": "#/$defs/phaseStatus" }
+      }
+    },
+    "phaseStatus": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["unblocked", "blocked", "conditional"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "conditions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "decisionIndexEntry": {
+      "type": "object",
+      "required": ["decision_id", "topic", "status", "owner", "date"],
+      "additionalProperties": false,
+      "properties": {
+        "decision_id": { "type": "string" },
+        "topic": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "accepted", "superseded"] },
+        "owner": { "type": "string" },
+        "approver": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "path": { "type": "string" },
+        "fallback": { "type": "string" }
+      }
+    },
+    "openQuestion": {
+      "type": "object",
+      "required": ["question_id", "question", "owner", "impact", "blocking", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "question_id": { "type": "string" },
+        "question": { "type": "string", "minLength": 1 },
+        "context": { "type": "string" },
+        "owner": { "type": "string", "minLength": 1 },
+        "impact": { "type": "string", "minLength": 1 },
+        "blocking": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["open", "answered", "deferred"] }
+      }
+    }
+  },
+  "x-invariants": [
+    "All five gate verdicts MUST carry the same phase_review_at, within one minute of each other.",
+    "A gate whose dependency received no_go MUST still carry a verdict, and that verdict MUST name the blocking dependency.",
+    "A conditional verdict MUST have at least one condition, and every condition MUST either have a waiver with a resolution deadline or remain explicitly blocking.",
+    "A waiver MUST be signed by the accountable role of the gate that owns the condition.",
+    "A gate with verdict go MUST have at least one evidence reference, and every referenced file MUST exist inside the evidence root.",
+    "A run labelled as outside the reference environment MUST NOT be cited as evidence for a go verdict.",
+    "The report MUST state, for the latency gate, which latency stages were included and which were excluded.",
+    "The latency gate MUST publish the raw capture-at-consumer p95, the measured harness floor and the floor-corrected p95 together, and MUST be judged on the raw value.",
+    "A loss-and-jitter scenario MUST record the pinned impairment profile, and a run that deviated from the profile MUST NOT be cited as evidence for a go verdict.",
+    "The pairing handshake gate MUST record the per-origin attempt limit, the progressive blocking and the listener shutdown, and MUST show zero pairing artefacts after both a normal session end and an application restart using the same inspection method.",
+    "The virtual audio gate MUST record both the automated dropout analysis and the scripted human intelligibility check with a named observer and the phrase script.",
+    "The report MUST NOT contain secrets, personal data, production credentials or real user media.",
+    "No verdict may be no_go or conditional without a failure_code."
+  ]
+}

@@ -1,0 +1,23 @@
+[versions]
+agp = "9.4.1"
+kotlin = "2.4.21"
+camerax = "1.6.2"
+webrtc = "150.7871.01"
+zxing = "3.5.4"
+kotlinxSerialization = "1.12.0"
+junit = "5.14.4"
+jacoco = "0.8.15"
+
+[libraries]
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+webrtc-android = { module = "io.github.webrtc-sdk:android", version.ref = "webrtc" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }

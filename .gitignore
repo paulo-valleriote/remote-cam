@@ -13,6 +13,17 @@ node_modules/
 vendor/
 .venv/
 venv/
+!desktop/vendor/
+!desktop/vendor/**
+
+# Rust
+desktop/target/
+
+# Android
+mobile/.gradle/
+mobile/**/build/
+mobile/local.properties
+mobile/.kotlin/
 
 # Build artifacts
 dist/
@@ -36,3 +47,15 @@ npm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
+
+# Spike evidence: raw captures stay local, derived metrics and procedures are versioned
+spikes/evidence/**/*.wav
+spikes/evidence/**/*.mp4
+spikes/evidence/**/*.mkv
+spikes/evidence/**/*.trace
+spikes/evidence/**/*.etl
+
+# Local Python environments and caches
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
