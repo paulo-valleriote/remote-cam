@@ -4450,6 +4450,9 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 name = "remotecam-app"
 version = "0.1.0"
 dependencies = [
+ "remotecam-protocol",
+ "serde",
+ "serde_json",
  "slint",
  "tokio",
  "windows",
@@ -4484,6 +4487,10 @@ dependencies = [
 [[package]]
 name = "remotecam-protocol"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "remotecam-signaling"

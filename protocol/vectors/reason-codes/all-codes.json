@@ -1,0 +1,218 @@
+{
+  "version": 1,
+  "description": "Pinned closed enumeration. Both implementations MUST spell every code exactly as listed.",
+  "codes": [
+    {
+      "code": "invalid_qr_payload",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "unsupported_qr_version",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "qr_expired",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "no_private_endpoint",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "desktop_unreachable",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "tls_handshake_failed",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": false,
+      "user_actionable": false
+    },
+    {
+      "code": "certificate_pin_mismatch",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": true,
+      "user_actionable": false
+    },
+    {
+      "code": "certificate_chain_rejected",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": true,
+      "user_actionable": false
+    },
+    {
+      "code": "tls_version_unsupported",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": true,
+      "user_actionable": false
+    },
+    {
+      "code": "token_invalid",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": false,
+      "user_actionable": false
+    },
+    {
+      "code": "token_expired",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": false,
+      "user_actionable": false
+    },
+    {
+      "code": "token_already_used",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": true,
+      "user_actionable": false
+    },
+    {
+      "code": "source_address_not_private",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": true,
+      "user_actionable": false
+    },
+    {
+      "code": "source_subnet_mismatch",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": true,
+      "user_actionable": false
+    },
+    {
+      "code": "rate_limited",
+      "categories": [
+        "pairing_rejection",
+        "signaling_error"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "listener_closed",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": true,
+      "user_actionable": false
+    },
+    {
+      "code": "superseded",
+      "categories": [
+        "pairing_rejection",
+        "session_close"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "protocol_violation",
+      "categories": [
+        "pairing_rejection"
+      ],
+      "security_event": false,
+      "user_actionable": false
+    },
+    {
+      "code": "internal_error",
+      "categories": [
+        "pairing_rejection",
+        "session_close",
+        "signaling_error"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "ended_by_mobile",
+      "categories": [
+        "session_close"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "ended_by_desktop",
+      "categories": [
+        "session_close"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "timeout",
+      "categories": [
+        "session_close"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "media_failure",
+      "categories": [
+        "session_close"
+      ],
+      "security_event": false,
+      "user_actionable": true
+    },
+    {
+      "code": "security_violation",
+      "categories": [
+        "session_close"
+      ],
+      "security_event": true,
+      "user_actionable": false
+    },
+    {
+      "code": "invalid_message",
+      "categories": [
+        "signaling_error"
+      ],
+      "security_event": false,
+      "user_actionable": false
+    },
+    {
+      "code": "unsupported_version",
+      "categories": [
+        "signaling_error"
+      ],
+      "security_event": false,
+      "user_actionable": false
+    }
+  ]
+}

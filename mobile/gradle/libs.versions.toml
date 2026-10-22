@@ -1,6 +1,6 @@
 [versions]
 agp = "9.4.1"
-kotlin = "2.4.21"
+kotlin = "2.4.10"
 camerax = "1.6.2"
 webrtc = "150.7871.01"
 zxing = "3.5.4"

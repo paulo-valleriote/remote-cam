@@ -1,0 +1,1153 @@
+{
+  "version": 1,
+  "description": "Pinned signaling and pairing scenarios. kind=message cases are executed by both protocol consumers; kind=handshake cases are executed by the pairing harness.",
+  "scenarios": [
+    {
+      "id": "msg-pair-valid",
+      "kind": "message",
+      "description": "A valid pair message.",
+      "message": {
+        "version": 1,
+        "type": "pair",
+        "token": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30,
+          "max_video_bitrate_kbps": 2500,
+          "max_audio_bitrate_kbps": 48
+        }
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-paired-valid",
+      "kind": "message",
+      "description": "A valid paired message.",
+      "message": {
+        "version": 1,
+        "type": "paired",
+        "session_id": "00112233445566778899aabbccddeeff",
+        "epoch": 7,
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "accepted_limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30
+        }
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-offer-valid",
+      "kind": "message",
+      "description": "A valid SDP offer.",
+      "message": {
+        "version": 1,
+        "type": "offer",
+        "epoch": 7,
+        "sdp": "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n"
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-answer-valid",
+      "kind": "message",
+      "description": "A valid recvonly SDP answer.",
+      "message": {
+        "version": 1,
+        "type": "answer",
+        "epoch": 7,
+        "sdp": "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=recvonly\r\n"
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-ice-valid",
+      "kind": "message",
+      "description": "A valid ICE candidate list.",
+      "message": {
+        "version": 1,
+        "type": "ice",
+        "epoch": 7,
+        "candidates": [
+          {
+            "address": "192.168.1.42",
+            "port": 51234,
+            "component": 1,
+            "protocol": "udp"
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 51235,
+            "component": 2,
+            "protocol": "udp"
+          }
+        ]
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-stats-valid",
+      "kind": "message",
+      "description": "A valid stats message.",
+      "message": {
+        "version": 1,
+        "type": "stats",
+        "fps": 30,
+        "video_bitrate_kbps": 2500,
+        "rtt_ms": 12.4,
+        "loss_pct": 0.0,
+        "thermal_status": "none"
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-close-valid",
+      "kind": "message",
+      "description": "A valid session close.",
+      "message": {
+        "version": 1,
+        "type": "close",
+        "code": "ended_by_mobile"
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-error-valid",
+      "kind": "message",
+      "description": "A valid signaling error.",
+      "message": {
+        "version": 1,
+        "type": "error",
+        "code": "invalid_message"
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-ping-valid",
+      "kind": "message",
+      "description": "A valid ping.",
+      "message": {
+        "version": 1,
+        "type": "ping"
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-pong-valid",
+      "kind": "message",
+      "description": "A valid pong.",
+      "message": {
+        "version": 1,
+        "type": "pong"
+      },
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "msg-missing-version",
+      "kind": "message",
+      "description": "version is required.",
+      "message": {
+        "type": "ping"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-missing-type",
+      "kind": "message",
+      "description": "type is required.",
+      "message": {
+        "version": 1
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-version-zero",
+      "kind": "message",
+      "description": "Version 0 is below the supported minimum.",
+      "message": {
+        "version": 0,
+        "type": "ping"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-version-two",
+      "kind": "message",
+      "description": "A newer protocol version is rejected with its own code, not silently accepted.",
+      "message": {
+        "version": 2,
+        "type": "ping"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "unsupported_version"
+    },
+    {
+      "id": "msg-version-wrong-type",
+      "kind": "message",
+      "description": "A string version does not satisfy the schema.",
+      "message": {
+        "version": "1",
+        "type": "ping"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-type-unknown",
+      "kind": "message",
+      "description": "The type enumeration is closed.",
+      "message": {
+        "version": 1,
+        "type": "hello"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-type-wrong-type",
+      "kind": "message",
+      "description": "A non-string type does not satisfy the schema.",
+      "message": {
+        "version": 1,
+        "type": 1
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-pair-missing-token",
+      "kind": "message",
+      "description": "pair requires the single-use token.",
+      "message": {
+        "version": 1,
+        "type": "pair",
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30,
+          "max_video_bitrate_kbps": 2500,
+          "max_audio_bitrate_kbps": 48
+        }
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-pair-short-token",
+      "kind": "message",
+      "description": "The pairing token must be exactly 256 bits.",
+      "message": {
+        "version": 1,
+        "type": "pair",
+        "token": "00000000000000000000000000000000000000000000000000000000000000",
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30,
+          "max_video_bitrate_kbps": 2500,
+          "max_audio_bitrate_kbps": 48
+        }
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-pair-non-hex-token",
+      "kind": "message",
+      "description": "The pairing token must be lowercase hexadecimal.",
+      "message": {
+        "version": 1,
+        "type": "pair",
+        "token": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30,
+          "max_video_bitrate_kbps": 2500,
+          "max_audio_bitrate_kbps": 48
+        }
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-pair-unknown-field",
+      "kind": "message",
+      "description": "Unknown fields are rejected, never ignored.",
+      "message": {
+        "version": 1,
+        "type": "pair",
+        "token": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30,
+          "max_video_bitrate_kbps": 2500,
+          "max_audio_bitrate_kbps": 48
+        },
+        "token_hint": "leak"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-pair-bad-fingerprint",
+      "kind": "message",
+      "description": "The DTLS fingerprint is exactly 64 lowercase hex characters.",
+      "message": {
+        "version": 1,
+        "type": "pair",
+        "token": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "dtls_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30,
+          "max_video_bitrate_kbps": 2500,
+          "max_audio_bitrate_kbps": 48
+        }
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-pair-out-of-range-limit",
+      "kind": "message",
+      "description": "A capture limit outside the declared range is rejected.",
+      "message": {
+        "version": 1,
+        "type": "pair",
+        "token": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "limits": {
+          "max_width": 9000
+        }
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-paired-missing-session",
+      "kind": "message",
+      "description": "paired requires the session identifier.",
+      "message": {
+        "version": 1,
+        "type": "paired",
+        "epoch": 7,
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "accepted_limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30
+        }
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-paired-bad-session-length",
+      "kind": "message",
+      "description": "The session identifier is exactly 128 bits.",
+      "message": {
+        "version": 1,
+        "type": "paired",
+        "session_id": "ababababababababababababababab",
+        "epoch": 7,
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "accepted_limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30
+        }
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-paired-negative-epoch",
+      "kind": "message",
+      "description": "The epoch cannot be negative.",
+      "message": {
+        "version": 1,
+        "type": "paired",
+        "session_id": "00112233445566778899aabbccddeeff",
+        "epoch": -1,
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "accepted_limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30
+        }
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-paired-unknown-field",
+      "kind": "message",
+      "description": "paired rejects unknown fields.",
+      "message": {
+        "version": 1,
+        "type": "paired",
+        "session_id": "00112233445566778899aabbccddeeff",
+        "epoch": 7,
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "accepted_limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30
+        },
+        "role": "host"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-offer-empty-sdp",
+      "kind": "message",
+      "description": "The SDP body must not be empty.",
+      "message": {
+        "version": 1,
+        "type": "offer",
+        "epoch": 7,
+        "sdp": ""
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-offer-oversized-sdp",
+      "kind": "message",
+      "description": "The SDP body is capped at 8192 characters.",
+      "message": {
+        "version": 1,
+        "type": "offer",
+        "epoch": 7,
+        "sdp": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-answer-missing-sdp",
+      "kind": "message",
+      "description": "answer requires an SDP body.",
+      "message": {
+        "version": 1,
+        "type": "answer",
+        "epoch": 7
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-ice-public-candidate",
+      "kind": "message",
+      "description": "A candidate with a public address is rejected.",
+      "message": {
+        "version": 1,
+        "type": "ice",
+        "epoch": 7,
+        "candidates": [
+          {
+            "address": "203.0.113.9",
+            "port": 5000,
+            "component": 1
+          }
+        ]
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-ice-tcp-candidate",
+      "kind": "message",
+      "description": "Only UDP ICE candidates are permitted.",
+      "message": {
+        "version": 1,
+        "type": "ice",
+        "epoch": 7,
+        "candidates": [
+          {
+            "address": "192.168.1.42",
+            "port": 5000,
+            "component": 1,
+            "protocol": "tcp"
+          }
+        ]
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-ice-candidate-missing-port",
+      "kind": "message",
+      "description": "A candidate requires its port.",
+      "message": {
+        "version": 1,
+        "type": "ice",
+        "epoch": 7,
+        "candidates": [
+          {
+            "address": "192.168.1.42",
+            "component": 1
+          }
+        ]
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-ice-bad-component",
+      "kind": "message",
+      "description": "The ICE component is 1 or 2.",
+      "message": {
+        "version": 1,
+        "type": "ice",
+        "epoch": 7,
+        "candidates": [
+          {
+            "address": "192.168.1.42",
+            "port": 5000,
+            "component": 3
+          }
+        ]
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-ice-too-many-candidates",
+      "kind": "message",
+      "description": "At most 64 candidates are accepted.",
+      "message": {
+        "version": 1,
+        "type": "ice",
+        "epoch": 7,
+        "candidates": [
+          {
+            "address": "192.168.1.42",
+            "port": 5000,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5001,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5002,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5003,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5004,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5005,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5006,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5007,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5008,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5009,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5010,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5011,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5012,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5013,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5014,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5015,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5016,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5017,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5018,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5019,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5020,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5021,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5022,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5023,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5024,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5025,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5026,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5027,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5028,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5029,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5030,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5031,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5032,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5033,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5034,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5035,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5036,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5037,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5038,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5039,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5040,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5041,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5042,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5043,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5044,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5045,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5046,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5047,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5048,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5049,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5050,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5051,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5052,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5053,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5054,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5055,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5056,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5057,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5058,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5059,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5060,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5061,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5062,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5063,
+            "component": 1
+          },
+          {
+            "address": "192.168.1.42",
+            "port": 5064,
+            "component": 1
+          }
+        ]
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-stats-fps-out-of-range",
+      "kind": "message",
+      "description": "fps is capped at 120.",
+      "message": {
+        "version": 1,
+        "type": "stats",
+        "fps": 121,
+        "video_bitrate_kbps": 2500,
+        "rtt_ms": 12.4,
+        "loss_pct": 0.0,
+        "thermal_status": "none"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-stats-unknown-field",
+      "kind": "message",
+      "description": "stats carries no identifiers and rejects unknown fields.",
+      "message": {
+        "version": 1,
+        "type": "stats",
+        "fps": 30,
+        "video_bitrate_kbps": 2500,
+        "rtt_ms": 12.4,
+        "loss_pct": 0.0,
+        "thermal_status": "none",
+        "device_name": "phone"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-close-unknown-code",
+      "kind": "message",
+      "description": "The close code enumeration is closed.",
+      "message": {
+        "version": 1,
+        "type": "close",
+        "code": "bye"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-error-unknown-code",
+      "kind": "message",
+      "description": "The error code enumeration is closed.",
+      "message": {
+        "version": 1,
+        "type": "error",
+        "code": "oops"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-error-message-too-long",
+      "kind": "message",
+      "description": "The human-readable error text is capped at 200 characters.",
+      "message": {
+        "version": 1,
+        "type": "error",
+        "code": "invalid_message",
+        "message": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-ping-unknown-field",
+      "kind": "message",
+      "description": "ping carries no payload and rejects unknown fields.",
+      "message": {
+        "version": 1,
+        "type": "ping",
+        "nonce": "123"
+      },
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-not-an-object",
+      "kind": "message",
+      "description": "A non-object frame is not a signaling message.",
+      "message": "hello",
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "msg-invalid-json",
+      "kind": "message",
+      "description": "Malformed JSON is rejected without detail.",
+      "raw_frame": "{not json",
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_message"
+    },
+    {
+      "id": "hs-valid-pairing",
+      "kind": "handshake",
+      "description": "The valid pairing scenario establishes the authenticated channel.",
+      "requires_network": true,
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    },
+    {
+      "id": "hs-wrong-fingerprint",
+      "kind": "handshake",
+      "description": "One byte of the certificate fingerprint differs.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "certificate_pin_mismatch"
+    },
+    {
+      "id": "hs-chain-only-trust",
+      "kind": "handshake",
+      "description": "The peer presents a public-CA chain instead of the pinned certificate.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "certificate_chain_rejected"
+    },
+    {
+      "id": "hs-tls-downgrade",
+      "kind": "handshake",
+      "description": "The peer offers TLS 1.2 or attempts a downgrade.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "tls_version_unsupported"
+    },
+    {
+      "id": "hs-token-expired",
+      "kind": "handshake",
+      "description": "The pairing token outlived its 120 s window.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "token_expired"
+    },
+    {
+      "id": "hs-token-reused",
+      "kind": "handshake",
+      "description": "A consumed pairing token is presented again.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "token_already_used"
+    },
+    {
+      "id": "hs-token-wrong",
+      "kind": "handshake",
+      "description": "A forged pairing token is presented.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "token_invalid"
+    },
+    {
+      "id": "hs-source-not-private",
+      "kind": "handshake",
+      "description": "The connection originates outside the private ranges.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "source_address_not_private"
+    },
+    {
+      "id": "hs-interception-proxy",
+      "kind": "handshake",
+      "description": "An intercepting proxy terminates TLS with its own certificate.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "certificate_pin_mismatch"
+    },
+    {
+      "id": "hs-qr-expired",
+      "kind": "handshake",
+      "description": "The QR payload expired before it was scanned.",
+      "requires_network": false,
+      "expected_outcome": "reject",
+      "expected_reason_code": "qr_expired"
+    },
+    {
+      "id": "hs-qr-malformed",
+      "kind": "handshake",
+      "description": "The QR payload fails structural validation.",
+      "requires_network": false,
+      "expected_outcome": "reject",
+      "expected_reason_code": "invalid_qr_payload"
+    },
+    {
+      "id": "hs-qr-public-endpoint",
+      "kind": "handshake",
+      "description": "The QR payload advertises only a public endpoint.",
+      "requires_network": false,
+      "expected_outcome": "reject",
+      "expected_reason_code": "no_private_endpoint"
+    },
+    {
+      "id": "hs-qr-unsupported-version",
+      "kind": "handshake",
+      "description": "The QR payload version is newer than this build supports.",
+      "requires_network": false,
+      "expected_outcome": "reject",
+      "expected_reason_code": "unsupported_qr_version"
+    },
+    {
+      "id": "hs-desktop-unreachable",
+      "kind": "handshake",
+      "description": "The advertised endpoint is closed or blocked.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "desktop_unreachable"
+    },
+    {
+      "id": "hs-tls-handshake-failed",
+      "kind": "handshake",
+      "description": "The TLS handshake fails for a network or protocol reason.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "tls_handshake_failed"
+    },
+    {
+      "id": "hs-source-subnet-mismatch",
+      "kind": "handshake",
+      "description": "The source address is private but outside the announced subnet.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "source_subnet_mismatch"
+    },
+    {
+      "id": "hs-superseded",
+      "kind": "handshake",
+      "description": "A newer QR supersedes the session under test.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "superseded"
+    },
+    {
+      "id": "hs-protocol-violation",
+      "kind": "handshake",
+      "description": "A second pair message with a stale epoch is discarded and counted.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "protocol_violation"
+    },
+    {
+      "id": "hs-internal-error",
+      "kind": "handshake",
+      "description": "An unexpected internal fault is reported with a closed code.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "internal_error"
+    },
+    {
+      "id": "hs-rate-limited",
+      "kind": "handshake",
+      "description": "The sixth attempt from one origin within a minute is refused.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "rate_limited"
+    },
+    {
+      "id": "hs-listener-closed",
+      "kind": "handshake",
+      "description": "Ten consecutive failures close the pairing listener.",
+      "requires_network": true,
+      "expected_outcome": "reject",
+      "expected_reason_code": "listener_closed"
+    },
+    {
+      "id": "hs-flood-second-origin-succeeds",
+      "kind": "handshake",
+      "description": "A flood from one origin does not deny a legitimate second origin.",
+      "requires_network": true,
+      "expected_outcome": "accept",
+      "expected_reason_code": null
+    }
+  ]
+}

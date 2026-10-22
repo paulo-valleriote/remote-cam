@@ -1,0 +1,10 @@
+{
+  "id": "empty-endpoints",
+  "description": "No endpoint record is present; endpoints_len must be a non-zero multiple of 19.",
+  "now_unix": 1893400000,
+  "expected": {
+    "accepted": false,
+    "reason_code": "invalid_qr_payload",
+    "payload_hex": "52434d310100000000112233445566778899aabbccddeeff000000070000000070dbd880000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a0011"
+  }
+}
