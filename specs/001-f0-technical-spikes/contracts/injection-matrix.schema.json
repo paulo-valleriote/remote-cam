@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://remotecam.local/contracts/injection-matrix.schema.json",
+  "title": "Virtual camera injection compatibility matrix",
+  "description": "Per-application, per-backend result of the virtual camera injection gate. The backend decision MUST be derivable from this matrix. Artefact-only contract: it describes a file produced by the spike, not a message exchanged by the product.",
+  "type": "object",
+  "required": ["matrix_version", "environment_id", "backends_evaluated", "applications", "cells", "selected_backend", "decision_rationale"],
+  "additionalProperties": false,
+  "properties": {
+    "matrix_version": { "type": "integer", "const": 1 },
+    "environment_id": {
+      "description": "Reference environment the matrix was produced in.",
+      "type": "string",
+      "minLength": 1
+    },
+    "captured_at": {
+      "description": "ISO 8601 timestamp with offset.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "backends_evaluated": {
+      "description": "Every backend that was evaluated, including a backend that was evaluated and failed.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/backend" }
+    },
+    "applications": {
+      "description": "The target application matrix. The five minimum categories MUST all be present, and both bitnesses MUST be represented.",
+      "type": "array",
+      "minItems": 5,
+      "items": { "$ref": "#/$defs/application" }
+    },
+    "cells": {
+      "type": "array",
+      "minItems": 5,
+      "items": { "$ref": "#/$defs/cell" }
+    },
+    "selected_backend": {
+      "description": "The backend chosen for the product.",
+      "type": "string",
+      "enum": ["mf_virtual_camera", "dshow_filter"]
+    },
+    "decision_rationale": {
+      "description": "Why the selected backend was chosen, referencing the matrix cells that drove the decision.",
+      "type": "string",
+      "minLength": 1
+    },
+    "licensing_impact": {
+      "description": "Licensing and distribution consequences of the selected backend.",
+      "type": "string"
+    },
+    "media_phase_consequences": {
+      "description": "What the selected backend means for the later media and injection phase.",
+      "type": "string"
+    },
+    "multi_consumer_observation": {
+      "description": "What was observed when two consumer applications opened the camera at the same time.",
+      "type": "object",
+      "required": ["tested", "outcome"],
+      "additionalProperties": false,
+      "properties": {
+        "tested": { "type": "boolean" },
+        "outcome": {
+          "type": "string",
+          "enum": ["both_worked", "one_failed", "undefined", "not_tested"]
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "backend": {
+      "type": "object",
+      "required": ["backend", "registration", "requires_admin", "licensing"],
+      "additionalProperties": false,
+      "properties": {
+        "backend": { "type": "string", "enum": ["mf_virtual_camera", "dshow_filter"] },
+        "version": { "type": "string" },
+        "registration": {
+          "description": "How the backend is registered on the machine.",
+          "type": "string",
+          "enum": ["per_user", "per_machine", "msix", "msi", "unknown"]
+        },
+        "requires_admin": { "type": "boolean" },
+        "installer_required": { "type": "string", "enum": ["none", "msi", "msix", "unknown"] },
+        "licensing": {
+          "description": "Licence of the vendored component.",
+          "type": "string",
+          "enum": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "MPL-2.0", "GPL-2.0", "GPL-3.0", "proprietary", "unknown"]
+        },
+        "license_file_present": {
+          "description": "Whether the upstream repository ships an actual licence file. A licence asserted only in a README is not acceptable provenance for a commercial product.",
+          "type": "boolean"
+        },
+        "source_reference": { "type": "string" }
+      }
+    },
+    "application": {
+      "type": "object",
+      "required": ["application_id", "category", "product_name", "version", "bitness"],
+      "additionalProperties": false,
+      "properties": {
+        "application_id": { "type": "string", "minLength": 1 },
+        "category": {
+          "description": "The consumer application category.",
+          "type": "string",
+          "enum": ["chromium_browser", "video_conferencing_client", "obs", "windows_camera_app", "screen_recorder"]
+        },
+        "product_name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "bitness": { "type": "string", "enum": ["32_bit", "64_bit"] },
+        "capture_method": {
+          "description": "How the outcome was observed.",
+          "type": "string",
+          "enum": ["getusermedia_mediarecorder", "obs_websocket", "gdigrab_window_capture", "app_native_recording", "manual_observation"]
+        }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "required": ["backend", "application_id", "outcome"],
+      "additionalProperties": false,
+      "properties": {
+        "backend": { "type": "string", "enum": ["mf_virtual_camera", "dshow_filter"] },
+        "application_id": { "type": "string", "minLength": 1 },
+        "outcome": {
+          "type": "string",
+          "enum": ["frames_delivered", "device_not_visible", "frames_unstable", "not_tested"]
+        },
+        "observed_duration_s": { "type": "number", "minimum": 0 },
+        "requested_resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "width": { "type": "integer" },
+            "height": { "type": "integer" },
+            "frame_rate": { "type": "integer" }
+          }
+        },
+        "delivered_size_ok": { "type": "boolean" },
+        "delivered_rate_ok": { "type": "boolean" },
+        "longest_stall_ms": { "type": "number", "minimum": 0 },
+        "duplicate_frames": { "type": "integer", "minimum": 0 },
+        "discarded_frames": { "type": "integer", "minimum": 0 },
+        "evidence_ref": { "type": "string" },
+        "not_tested_reason": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "outcome": { "const": "frames_delivered" } }, "required": ["outcome"] },
+          "then": {
+            "required": ["observed_duration_s", "delivered_size_ok", "delivered_rate_ok", "longest_stall_ms"],
+            "properties": {
+              "observed_duration_s": { "minimum": 1800 },
+              "longest_stall_ms": { "maximum": 2000 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "outcome": { "const": "not_tested" } }, "required": ["outcome"] },
+          "then": { "required": ["not_tested_reason"] }
+        }
+      ]
+    }
+  },
+  "x-criteria": {
+    "gate": "virtual_camera_injection",
+    "criterion": "Every cell for the selected backend has outcome frames_delivered, observed_duration_s >= 1800, delivered_size_ok = true, delivered_rate_ok = true and longest_stall_ms <= 2000.",
+    "coverage_rule": "Both a 32-bit and a 64-bit consumer MUST be present in the matrix. A 32-bit consumer that does not see the device is a matrix failure, not an acceptable limitation.",
+    "fallback_rule": "If any cell for the primary backend fails, the alternative backend MUST also be evaluated, and per-application results for both backends MUST be recorded."
+  }
+}
