@@ -1,0 +1,27 @@
+{
+  "harness_version": "1.0.0",
+  "scenarios": [
+    {
+      "throttle_id": "throttle-rate-limit",
+      "attempt_limit_per_minute": 5,
+      "limit_exceeded_at_attempt": 6,
+      "listener_closed": false,
+      "legitimate_pairing_unaffected": true
+    },
+    {
+      "throttle_id": "throttle-listener-close",
+      "attempt_limit_per_minute": 5,
+      "limit_exceeded_at_attempt": 6,
+      "listener_closed": true,
+      "consecutive_failures_at_listener_close": 10,
+      "legitimate_pairing_unaffected": true
+    },
+    {
+      "throttle_id": "throttle-legitimate-origin",
+      "attempt_limit_per_minute": 5,
+      "limit_exceeded_at_attempt": 6,
+      "listener_closed": false,
+      "legitimate_pairing_unaffected": true
+    }
+  ]
+}

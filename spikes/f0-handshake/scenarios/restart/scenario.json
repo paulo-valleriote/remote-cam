@@ -1,0 +1,17 @@
+{
+  "harness_version": "1.0.0",
+  "scenario_id": "restart-token-replay",
+  "category": "residue",
+  "preconditions": "A session paired once; both applications are then terminated without unwinding and restarted; the previous pairing token is replayed.",
+  "expected_result": "The previous token is refused with token_invalid; the residue scans for session_key, pairing_token, fingerprint and pairing_record are empty in both cases.",
+  "steps": [
+    "Pair once and capture the session key, pairing token and fingerprint as hex before teardown.",
+    "Run residue_scan.py with --root <app-data> and the captured --needle values (after_session_end).",
+    "Terminate the desktop application with Stop-Process -Force and the mobile application with adb shell am force-stop, so neither unwinds.",
+    "Restart both applications and replay the previous token; it must be refused.",
+    "Re-run the identical scan command with --restart-observed (after_application_restart).",
+    "Confirm both inspections name the same method and coverage and report no artefacts."
+  ],
+  "evidence": "spikes/evidence/pairing/pairing_residue.json",
+  "procedure": "docs/spike/gate-2-pairing-handshake.md"
+}
