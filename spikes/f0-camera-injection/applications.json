@@ -1,0 +1,101 @@
+{
+  "plan_version": 1,
+  "run_duration_s": 1800,
+  "requested": { "width": 1280, "height": 720, "frame_rate": 30 },
+  "operator_instructions": [
+    "Fill in product_name and version for every application before a live run; run_matrix.py refuses to start without them, because the exact product build is gate evidence and cannot be recovered afterwards.",
+    "Fill in harness_args for the window-capture applications, at minimum --window-title <window title> and --exe <path to the application executable> so its file version is recorded.",
+    "Placeholders in angle brackets are deliberate: a live run that still contains them fails loudly instead of recording a cell against the wrong product.",
+    "Bitness values are fixed by the plan and are re-checked against what the harness observed; a 32-bit consumer that cannot see the camera fails the matrix."
+  ],
+  "backends": [
+    {
+      "backend": "mf_virtual_camera",
+      "version": "0.1.0-spike",
+      "registration": "per_user",
+      "requires_admin": false,
+      "installer_required": "none",
+      "licensing": "MIT",
+      "license_file_present": true,
+      "source_reference": "microsoft/Windows-Camera Samples/VirtualCamera"
+    },
+    {
+      "backend": "dshow_filter",
+      "version": "0.1.0-spike",
+      "registration": "per_user",
+      "requires_admin": false,
+      "installer_required": "none",
+      "licensing": "proprietary",
+      "license_file_present": false,
+      "source_reference": "desktop/vendor/dshow-vcam-fallback"
+    }
+  ],
+  "applications": [
+    {
+      "application_id": "chrome",
+      "category": "chromium_browser",
+      "bitness": "64_bit",
+      "product_hint": "Google Chrome or Microsoft Edge, 64-bit",
+      "product_name": "",
+      "version": "",
+      "harness": "browser",
+      "harness_args": [],
+      "capture_method": "getusermedia_mediarecorder"
+    },
+    {
+      "application_id": "chrome32",
+      "category": "chromium_browser",
+      "bitness": "32_bit",
+      "product_hint": "A 32-bit Chromium-based browser (x86 build)",
+      "product_name": "",
+      "version": "",
+      "harness": "browser32",
+      "harness_args": [],
+      "capture_method": "getusermedia_mediarecorder"
+    },
+    {
+      "application_id": "conferencing",
+      "category": "video_conferencing_client",
+      "bitness": "64_bit",
+      "product_hint": "The team's video conferencing client",
+      "product_name": "",
+      "version": "",
+      "harness": "window_capture",
+      "harness_args": ["--window-title", "<the conferencing client window title>", "--exe", "<C:\\path\\to\\client.exe>"],
+      "capture_method": "gdigrab_window_capture"
+    },
+    {
+      "application_id": "obs",
+      "category": "obs",
+      "bitness": "64_bit",
+      "product_hint": "OBS Studio with obs-websocket 5.7.x",
+      "product_name": "",
+      "version": "",
+      "harness": "obs",
+      "harness_args": [],
+      "capture_method": "obs_websocket"
+    },
+    {
+      "application_id": "windows_camera",
+      "category": "windows_camera_app",
+      "bitness": "64_bit",
+      "product_hint": "The inbox Windows Camera application",
+      "product_name": "",
+      "version": "",
+      "harness": "window_capture",
+      "harness_args": ["--window-title", "Camera"],
+      "capture_method": "gdigrab_window_capture"
+    },
+    {
+      "application_id": "screen_recorder",
+      "category": "screen_recorder",
+      "bitness": "64_bit",
+      "product_hint": "The team's screen recorder, recording the preview of the camera",
+      "product_name": "",
+      "version": "",
+      "harness": "window_capture",
+      "harness_args": ["--capture-method", "app_native_recording", "--capture-file", "<the recording the application produced>"],
+      "capture_method": "app_native_recording"
+    }
+  ]
+}
