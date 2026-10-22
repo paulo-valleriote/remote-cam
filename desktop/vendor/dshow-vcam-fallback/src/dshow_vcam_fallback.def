@@ -1,0 +1,14 @@
+; COM and filter exports for the DirectShow fallback virtual camera (T034).
+;
+; regsvr32 needs DllRegisterServer/DllUnregisterServer; the DirectShow graph
+; builder needs DllGetClassObject/DllCanUnloadNow. The CLSIDs live in
+; include/dshow_vcam_fallback.h and are not exported: exporting them would let a
+; consumer link against one bitness's identifier by accident.
+
+LIBRARY dshow_vcam_fallback
+
+EXPORTS
+    DllGetClassObject       PRIVATE
+    DllCanUnloadNow         PRIVATE
+    DllRegisterServer       PRIVATE
+    DllUnregisterServer     PRIVATE
