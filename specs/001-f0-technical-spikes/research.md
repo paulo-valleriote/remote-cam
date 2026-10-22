@@ -249,6 +249,8 @@ Required by constitution Principle I: *"problem solved, alternatives discarded, 
 | `windows` | 0.62.2 (exact) | Media Foundation, WASAPI, COM, DXGI | `windows-sys` (unsafe); `windows-bindgen` 0.100.0 (unpublished umbrella) | Medium — umbrella 0.100.0 unpublished; 0.62.2 is edition 2021 | MIT OR Apache-2.0 |
 | `qrcode` | 0.14.1 | Deterministic binary-mode QR generation on the desktop | `qrcodegen`; image rendering by hand | Low | MIT OR Apache-2.0 |
 | `sha2` | 0.11.1 | Fingerprint computation | `ring` (already in the tree via `webrtc`) | Low — 0.11 was a breaking bump | MIT OR Apache-2.0 |
+| `serde` | 1.0.229 (exact) | Derive-based parsing of the JSON signaling contract and its vectors | Hand-written JSON traversal; `simd-json` (no benefit at this size) | Low — mature 1.x, exact pin for reproducible builds | MIT OR Apache-2.0 |
+| `serde_json` | 1.0.154 (exact) | JSON parsing for the contract consumer and the conformance binary | `simd-json`; `json` | Low — exact pin, no unsafe parsing | MIT OR Apache-2.0 |
 | `openh264` | 0.9.9 | Software H.264 decode **in CI only** | `ffmpeg-next` (LGPL) | Low — constrained baseline only, never the product path | BSD-2-Clause (Cisco), patent royalties covered |
 | `criterion` | 0.8.2 | Latency and jitter micro-benchmarks | `iai` | Low | MIT OR Apache-2.0 |
 
@@ -259,7 +261,7 @@ Required by constitution Principle I: *"problem solved, alternatives discarded, 
 | `androidx.camera` (CameraX) | 1.6.2 | Camera lifecycle, lens selection, YUV frame delivery | Camera2 directly; libwebrtc's native Camera2 capturer | Low — 1.6 required from 2026-11-01 for Extensions | Apache-2.0 |
 | `io.github.webrtc-sdk:android` | 150.7871.01 (exact) | Peer connection, H.264 and Opus encoding, RTP packetisation, PLI | Dead `org.webrtc:google-webrtc`; building from source | Medium — community build; API churn between M-versions | BSD-3-Clause |
 | `com.google.zxing:core` | 3.5.4 | Offline QR decoding | `zxing-android-embedded` (unmaintained, Camera1); ML Kit (Play Services) | Low | Apache-2.0 |
-| `kotlinx-serialization` | pinned in the version catalog | Strict-schema JSON for signaling messages | `org.json`; Moshi | Low | Apache-2.0 |
+| `kotlinx-serialization` | 1.12.0 JSON runtime, Kotlin 2.4.10 compiler | Strict-schema JSON for signaling messages | `org.json`; Moshi | Low — the compiler plugin is not applied because AGP 9's built-in Kotlin (KGP 2.2.10) predates metadata 2.4.0; the build pins KGP 2.4.10 in the root buildscript for the runtime only | Apache-2.0 |
 | CameraX `camera-camera2` | 1.6.2 | `Camera2Interop` for fps range and video-call stream use case | Camera2 only | Low | Apache-2.0 |
 
 ### Windows vendor components
@@ -276,6 +278,10 @@ Required by constitution Principle I: *"problem solved, alternatives discarded, 
 | --- | --- | --- | --- |
 | FFmpeg | ≥ 8.1 (pin 8.1.3 or 9.0.2) | Synthetic source, `silencedetect`, `gdigrab`, `astats` | LGPL/GPL depending on build — used only offline, never redistributed |
 | `zxing-cpp` | 3.1.1 | QR decoding of captured frames | Apache-2.0 |
+| `qrcode` (Python) | 8.2 | QR generation for the self-test round-trip and the harness-floor calibration | BSD-3-Clause |
+| `pillow` | 13.0.0 | Rasterising the generated QR symbol for the decoder | HPND |
+| `jsonschema` | 4.26.0 | Validating evidence against the contracts' JSON Schemas | MIT |
+| `pytest` / `ruff` | 9.1.1 / 0.17.1 | Test runner and linter for the measurement package | MIT |
 | `numpy` / `scipy` | 2.5.4 / 1.18.1 | Signal analysis | BSD-3-Clause |
 | `jiwer` | 4.0.0 | Word error rate | MIT |
 | `soundfile` / `pystoi` / `pyloudnorm` | 0.14.0 / 0.4.1 / 0.2.0 | Audio I/O and supplementary intelligibility metrics | MIT / BSD / MIT |

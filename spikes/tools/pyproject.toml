@@ -15,6 +15,9 @@ dependencies = [
     "soundfile==0.14.0",
     "pystoi==0.4.1",
     "pyloudnorm==0.2.0",
+    "jsonschema==4.26.0",
+    "qrcode==8.2",
+    "pillow==13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +29,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["analysis*", "metrics*", "validation*", "report*"]
+
+[tool.setuptools]
+py-modules = ["preflight", "redaction", "selftest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": 1,
+  "description": "Canonical closed reason-code set for RemoteCam protocol version 1. Every rejection, session termination and signaling error carries exactly one of these codes. The spellings are stable identifiers: adding a code or changing the meaning of an existing code requires a protocol version bump.",
+  "codes": [
+    {
+      "code": "invalid_qr_payload",
+      "categories": ["pairing_rejection"],
+      "meaning": "The scanned payload failed structural validation.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "unsupported_qr_version",
+      "categories": ["pairing_rejection"],
+      "meaning": "The payload version is newer than the highest supported version.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "qr_expired",
+      "categories": ["pairing_rejection"],
+      "meaning": "The payload expiry is in the past.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "no_private_endpoint",
+      "categories": ["pairing_rejection"],
+      "meaning": "The payload advertises no reachable private address.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "desktop_unreachable",
+      "categories": ["pairing_rejection"],
+      "meaning": "The advertised endpoint could not be reached.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "tls_handshake_failed",
+      "categories": ["pairing_rejection"],
+      "meaning": "The TLS 1.3 handshake did not complete.",
+      "user_actionable": false,
+      "security_event": false
+    },
+    {
+      "code": "certificate_pin_mismatch",
+      "categories": ["pairing_rejection"],
+      "meaning": "The presented certificate fingerprint did not match the pinned value.",
+      "user_actionable": false,
+      "security_event": true
+    },
+    {
+      "code": "certificate_chain_rejected",
+      "categories": ["pairing_rejection"],
+      "meaning": "The peer attempted chain-only trust instead of the exact pinned certificate.",
+      "user_actionable": false,
+      "security_event": true
+    },
+    {
+      "code": "tls_version_unsupported",
+      "categories": ["pairing_rejection"],
+      "meaning": "The peer offered a TLS version other than 1.3 or attempted a downgrade.",
+      "user_actionable": false,
+      "security_event": true
+    },
+    {
+      "code": "token_invalid",
+      "categories": ["pairing_rejection"],
+      "meaning": "The pairing token did not match.",
+      "user_actionable": false,
+      "security_event": false
+    },
+    {
+      "code": "token_expired",
+      "categories": ["pairing_rejection"],
+      "meaning": "The pairing token validity window had closed.",
+      "user_actionable": false,
+      "security_event": false
+    },
+    {
+      "code": "token_already_used",
+      "categories": ["pairing_rejection"],
+      "meaning": "The pairing token had already been consumed.",
+      "user_actionable": false,
+      "security_event": true
+    },
+    {
+      "code": "source_address_not_private",
+      "categories": ["pairing_rejection"],
+      "meaning": "The connection came from an address outside the permitted private ranges.",
+      "user_actionable": false,
+      "security_event": true
+    },
+    {
+      "code": "source_subnet_mismatch",
+      "categories": ["pairing_rejection"],
+      "meaning": "The connection came from an address outside the announced sub-network.",
+      "user_actionable": false,
+      "security_event": true
+    },
+    {
+      "code": "rate_limited",
+      "categories": ["pairing_rejection", "signaling_error"],
+      "meaning": "The peer exceeded the permitted attempt or message rate.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "listener_closed",
+      "categories": ["pairing_rejection"],
+      "meaning": "The listener was closed after repeated failures, or the session was superseded.",
+      "user_actionable": false,
+      "security_event": true
+    },
+    {
+      "code": "superseded",
+      "categories": ["pairing_rejection", "session_close"],
+      "meaning": "A newer pairing or session replaced this one.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "protocol_violation",
+      "categories": ["pairing_rejection"],
+      "meaning": "A message violated the contract (unknown field, stale epoch, oversized frame).",
+      "user_actionable": false,
+      "security_event": false
+    },
+    {
+      "code": "internal_error",
+      "categories": ["pairing_rejection", "session_close", "signaling_error"],
+      "meaning": "An unexpected internal fault.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "ended_by_mobile",
+      "categories": ["session_close"],
+      "meaning": "The user ended the session on the phone.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "ended_by_desktop",
+      "categories": ["session_close"],
+      "meaning": "The user ended the session on the desktop.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "timeout",
+      "categories": ["session_close"],
+      "meaning": "A session timeout elapsed (handshake, ICE or first frames).",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "media_failure",
+      "categories": ["session_close"],
+      "meaning": "The media pipeline failed irrecoverably.",
+      "user_actionable": true,
+      "security_event": false
+    },
+    {
+      "code": "security_violation",
+      "categories": ["session_close"],
+      "meaning": "A security invariant was violated.",
+      "user_actionable": false,
+      "security_event": true
+    },
+    {
+      "code": "invalid_message",
+      "categories": ["signaling_error"],
+      "meaning": "The message did not satisfy the schema.",
+      "user_actionable": false,
+      "security_event": false
+    },
+    {
+      "code": "unsupported_version",
+      "categories": ["signaling_error"],
+      "meaning": "The message carried a protocol version this peer does not support.",
+      "user_actionable": false,
+      "security_event": false
+    }
+  ]
+}

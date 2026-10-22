@@ -1,0 +1,25 @@
+{
+  "id": "ipv6-v1",
+  "description": "IPv6 link-local endpoint with H.264, VP8 and 720p30 capabilities.",
+  "now_unix": 1893400000,
+  "expected": {
+    "accepted": true,
+    "reason_code": null,
+    "payload_hex": "52434d310100001300112233445566778899aabbccddeeff000000070000000070dbd880000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a001306fe800000000000001c9b2f4d8a119c02ca6f"
+  },
+  "encoder_input": {
+    "session_id_hex": "00112233445566778899aabbccddeeff",
+    "epoch": 7,
+    "expires_at": 1893456000,
+    "pairing_token_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "tls_fingerprint_hex": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+    "capabilities": 19,
+    "endpoints": [
+      {
+        "family": 6,
+        "address": "fe80::1c9b:2f4d:8a11:9c02",
+        "port": 51823
+      }
+    ]
+  }
+}

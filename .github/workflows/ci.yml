@@ -72,6 +72,15 @@ jobs:
       - name: Run tests
         run: python -m pytest spikes/tools
 
+      - name: Record the preflight environment
+        run: python spikes/tools/preflight.py --no-network-probe
+
+      - name: Run the toolchain self-test
+        run: python spikes/tools/selftest.py
+
+      - name: Validate the recorded evidence
+        run: python spikes/tools/validation/validate_evidence.py --evidence-root spikes/evidence
+
   android:
     name: Android contract module
     runs-on: ubuntu-latest
@@ -95,7 +104,15 @@ jobs:
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Run unit tests and JaCoCo report
-        run: gradle -p mobile :protocol:testDebugUnitTest :protocol:jacocoTestReport --no-daemon
+        run: gradle -p mobile :protocol:testDebugUnitTest :protocol:jacocoTestReport :core:testDebugUnitTest --no-daemon
 
       - name: Publish coverage
         run: python3 scripts/ci/coverage_summary.py mobile/protocol/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install pinned Rust toolchain for conformance
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.99.1"
+
+      - name: Run protocol conformance on both stacks
+        run: bash protocol/vectors/run_conformance.sh

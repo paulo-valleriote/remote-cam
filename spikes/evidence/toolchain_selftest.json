@@ -1,0 +1,76 @@
+{
+  "all_passed": true,
+  "checks": [
+    {
+      "expected": {
+        "below_threshold_gap_ms": 40,
+        "dropout_count": 2,
+        "dropout_durations_ms": [
+          60,
+          120
+        ]
+      },
+      "name": "silence_fixture",
+      "observed": {
+        "below_threshold_durations_ms": [
+          40
+        ],
+        "dropout_count": 2,
+        "dropout_durations_ms": [
+          60,
+          120
+        ],
+        "threshold_dbfs": -50.0,
+        "window_ms": 5.0
+      },
+      "passed": true
+    },
+    {
+      "expected": {
+        "decoded_payload_sha256": "ca6ee6c05342158a975484fd71c4d614e7e6fc93469b3e6aefce91f7c9abac17",
+        "payload_bytes": 121
+      },
+      "name": "qr_roundtrip",
+      "observed": {
+        "decoded_as": "raw bytes",
+        "decoded_payload_sha256": "ca6ee6c05342158a975484fd71c4d614e7e6fc93469b3e6aefce91f7c9abac17",
+        "error_correction": "M",
+        "payload_bytes": 121,
+        "qr_version": 7
+      },
+      "passed": true
+    },
+    {
+      "expected": {
+        "delta_p95_cpu_pct": "<= 1.0"
+      },
+      "name": "sampler_agreement",
+      "observed": {
+        "delta_p95_cpu_pct": 0.158,
+        "note": "typeperf is Windows-only; the cross-check used two independent Linux counter paths",
+        "sampler_a": "getrusage+procstat",
+        "sampler_a_p95": 6.943,
+        "sampler_b": "procfs",
+        "sampler_b_p95": 7.101
+      },
+      "passed": true
+    },
+    {
+      "expected": {
+        "floor_ms": "measured"
+      },
+      "name": "harness_floor",
+      "observed": {
+        "basis": "local-software-only",
+        "floor_ms": 14.82,
+        "method": "software QR render and decode",
+        "note": "This host has no display-capture apparatus. The value measures the QR render/decode path only and MUST be replaced by the documented capture floor on the reference Windows machine before any latency-gate result is cited.",
+        "reference_measurement_required": true,
+        "samples": 21,
+        "within_expected_range": false
+      },
+      "passed": true
+    }
+  ],
+  "run_at": "2026-10-22T17:34:15+00:00"
+}

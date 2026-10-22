@@ -1,0 +1,16 @@
+{
+  "fixture": "calibration-40-60-120.wav",
+  "provenance": "synthetic; no recorded human speech",
+  "generator": "spikes/fixtures/tools/generate_calibration.py",
+  "sample_rate_hz": 48000,
+  "channels": 1,
+  "sample_width_bytes": 2,
+  "segment_s": 1.2,
+  "gaps_ms": [
+    40,
+    60,
+    120
+  ],
+  "expected_dropouts": 2,
+  "below_threshold_gap_ms": 40
+}
