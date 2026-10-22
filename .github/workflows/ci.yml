@@ -66,11 +66,11 @@ jobs:
 
       - name: Lint
         run: |
-          python -m ruff check spikes/tools
-          python -m ruff format --check spikes/tools
+          python -m ruff check spikes/tools spikes/f0-camera-injection
+          python -m ruff format --check spikes/tools spikes/f0-camera-injection
 
       - name: Run tests
-        run: python -m pytest spikes/tools
+        run: python -m pytest spikes/tools spikes/f0-camera-injection
 
       - name: Record the preflight environment
         run: python spikes/tools/preflight.py --no-network-probe
