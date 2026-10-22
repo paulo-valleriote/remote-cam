@@ -162,15 +162,27 @@ fn shutdown_releases_queued_frames_and_wakes_waiting_readers() {
     }
     assert_eq!(buffer.stats().depth, 3);
 
+    // The waiter must be *waiting* for the test to mean anything, so its own
+    // cursor is advanced past every queued frame first. Without this the reader
+    // would legitimately return one of the backlog frames and the assertion
+    // below would be testing the backlog rather than the wake-up.
+    let mut waiter = buffer.reader();
+    let drained: Vec<u64> = std::iter::from_fn(|| waiter.try_next())
+        .map(|frame| frame.sequence)
+        .collect();
+    assert_eq!(drained, vec![1, 2, 3], "the waiter consumed the backlog");
+
     let (sender, receiver) = mpsc::channel();
-    let waiter = buffer.reader();
     let handle = thread::spawn(move || {
-        let mut waiter = waiter;
         sender
             .send(waiter.next().is_none())
             .expect("test channel alive");
     });
 
+    // Give the waiter a moment to block. The assertion holds either way — an
+    // early shutdown also makes `next` observe closure — but sleeping first is
+    // what makes this a wake-up test rather than a shutdown-then-read test.
+    thread::sleep(Duration::from_millis(20));
     buffer.shutdown();
 
     assert!(buffer.is_shutdown());
