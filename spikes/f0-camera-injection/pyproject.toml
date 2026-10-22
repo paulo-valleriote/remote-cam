@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["../tools", "."]
+addopts = "-ra --strict-markers --strict-config"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["../tools", "."]
+
+# The same rule set the measurement tooling uses, so the two Python trees cannot
+# drift into different styles.
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP", "W"]

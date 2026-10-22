@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RemoteCam injection gate — Chromium capture harness</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; max-width: 62rem; }
+      video { width: 640px; background: #111; }
+      canvas { display: none; }
+      table { border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #ccc; padding: 2px 8px; text-align: right; }
+      th:first-child, td:first-child { text-align: left; }
+      .ok { color: #076b1f; font-weight: 600; }
+      .bad { color: #a11; font-weight: 600; }
+      code { background: #f2f2f2; padding: 0 3px; }
+    </style>
+  </head>
+  <body>
+    <h1>Chromium capture harness</h1>
+    <p>
+      This page is the 64-bit <em>and</em> 32-bit Chromium consumer for gate 1. It opens the
+      virtual camera with <code>getUserMedia</code>, observes every frame the browser
+      actually presents, records it with <code>MediaRecorder</code>, and uploads both the
+      recording and the per-frame observation.
+    </p>
+
+    <p id="status">Starting…</p>
+    <video id="preview" playsinline muted></video>
+    <canvas id="probe" width="1280" height="720"></canvas>
+
+    <table id="summary"></table>
+
+    <p>
+      <button id="start" disabled>Start the run</button>
+      <span id="progress"></span>
+    </p>
+
+    <h2>What is being measured</h2>
+    <ul>
+      <li><strong>presented frames</strong> — one row per frame the browser presented, timed
+        with <code>requestVideoFrameCallback</code>'s <code>presentationTime</code>;</li>
+      <li><strong>frame marker</strong> — the 20-block pattern in the top-left corner of the
+        picture, decoded here from the canvas (the same geometry as
+        <code>spikes/tools/analysis/marker.py</code>);</li>
+      <li><strong>announced track settings</strong> — the size and rate the browser
+        negotiated with the camera.</li>
+    </ul>
+
+    <script type="module">
+      // Marker geometry shared with the producer and the Python decoder.
+      const MARKER_MARGIN = 8;
+      const MARKER_BLOCK = 40;
+      const MARKER_BITS = 16;
+      const MARKER_SYNC = 0b1010;
+      const MARKER_SYNC_BITS = 4;
+      const MARKER_TOTAL_BITS = MARKER_SYNC_BITS + MARKER_BITS;
+      const BIT_THRESHOLD = 128;
+
+      const params = new URLSearchParams(location.search);
+      const durationS = Number(params.get("duration") ?? 1800);
+      const wantWidth = Number(params.get("width") ?? 1280);
+      const wantHeight = Number(params.get("height") ?? 720);
+      const wantFps = Number(params.get("fps") ?? 30);
+      const applicationId = params.get("application") ?? "chrome";
+      const backend = params.get("backend") ?? "mf_virtual_camera";
+      const uploadUrl = "/upload";
+
+      const video = document.getElementById("preview");
+      const canvas = document.getElementById("probe");
+      const status = document.getElementById("status");
+      const summary = document.getElementById("summary");
+      const startButton = document.getElementById("start");
+      const progress = document.getElementById("progress");
+
+      let stream = null;
+      let samples = [];
+      let framesSeen = 0;
+      let startedAt = 0;
+      let stopping = false;
+
+      function blockFor(width) {
+        return Math.max(1, Math.min(MARKER_BLOCK, Math.floor((width - 2 * MARKER_MARGIN) / MARKER_TOTAL_BITS)));
+      }
+
+      function markerOrigins(width, height, block) {
+        return [
+          [MARKER_MARGIN, MARKER_MARGIN],
+          [width - MARKER_MARGIN - block * MARKER_TOTAL_BITS, height - MARKER_MARGIN - block],
+        ];
+      }
+
+      function readMarker(image, width, height, block, originX, originY) {
+        const centreY = originY + Math.floor(block / 2);
+        let raw = 0;
+        for (let bit = 0; bit < MARKER_TOTAL_BITS; bit += 1) {
+          const centreX = originX + bit * block + Math.floor(block / 2);
+          if (centreX < 0 || centreX >= width || centreY < 0 || centreY >= height) return null;
+          const offset = (centreY * width + centreX) * 4;
+          raw = (raw << 1) | (image.data[offset] > BIT_THRESHOLD ? 1 : 0);
+        }
+        if (raw >> MARKER_BITS !== MARKER_SYNC) return null;
+        return raw & 0xffff;
+      }
+
+      function decodeMarker() {
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        const width = canvas.width;
+        const height = canvas.height;
+        const block = blockFor(width);
+        const image = context.getImageData(0, 0, width, height);
+        for (const [originX, originY] of markerOrigins(width, height, block)) {
+          const value = readMarker(image, width, height, block, originX, originY);
+          if (value !== null) return value;
+        }
+        return null;
+      }
+
+      function onFrame(_now, metadata) {
+        // requestVideoFrameCallback fires once per presented frame; the
+        // presentation time is on the same clock as performance.now(), so a
+        // delivery stall shows up as a gap between consecutive rows.
+        const presentationMs = metadata.presentationTime * 1000;
+        canvas.width = video.videoWidth || wantWidth;
+        canvas.height = video.videoHeight || wantHeight;
+        canvas.getContext("2d", { willReadFrequently: true }).drawImage(video, 0, 0, canvas.width, canvas.height);
+        samples.push({
+          capture_host_ms: presentationMs,
+          width: canvas.width,
+          height: canvas.height,
+          frame_no: decodeMarker(),
+        });
+        framesSeen += 1;
+        if (framesSeen % 30 === 0) {
+          const elapsed = (performance.now() - startedAt) / 1000;
+          renderSummary(elapsed);
+        }
+        if (!stopping && video.requestVideoFrameCallback) video.requestVideoFrameCallback(onFrame);
+      }
+
+      function trackSettings() {
+        const track = stream ? stream.getVideoTracks()[0] : null;
+        if (!track) return {};
+        try {
+          return track.getSettings();
+        } catch (error) {
+          return { error: String(error) };
+        }
+      }
+
+      function renderSummary(elapsedS) {
+        const settings = trackSettings();
+        const last = samples.length ? samples[samples.length - 1] : null;
+        const first = samples.length ? samples[0] : null;
+        const observedS = first && last ? (last.capture_host_ms - first.capture_host_ms) / 1000 : 0;
+        const rate = observedS > 0 ? (samples.length - 1) / observedS : 0;
+        summary.innerHTML = `
+          <tr><th>elapsed</th><td>${elapsedS.toFixed(1)} s of ${durationS} s</td></tr>
+          <tr><th>frames presented</th><td>${samples.length}</td></tr>
+          <tr><th>observed rate</th><td>${rate.toFixed(2)} fps</td></tr>
+          <tr><th>identified markers</th><td>${samples.filter((s) => s.frame_no !== null).length}</td></tr>
+          <tr><th>negotiated size</th><td>${settings.width ?? "?"}×${settings.height ?? "?"}</td></tr>
+          <tr><th>negotiated rate</th><td>${settings.frameRate ?? "?"} fps</td></tr>
+          <tr><th>device</th><td>${(trackSettings().deviceId ?? "").slice(0, 12)}…</td></tr>`;
+      }
+
+      function requestedBitness() {
+        // A 32-bit Chromium on 64-bit Windows reports WOW64 in its user agent;
+        // this is recorded so a cell can never claim the wrong bitness.
+        return /WOW64|Win32/i.test(navigator.userAgent) && !/x64|Win64|WOW64; rv/i.test(navigator.userAgent)
+          ? "32_bit"
+          : "64_bit";
+      }
+
+      async function listCameras() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        return devices
+          .filter((device) => device.kind === "videoinput")
+          .map((device) => device.label || device.deviceId);
+      }
+
+      async function start() {
+        startButton.disabled = true;
+        status.textContent = "Requesting the camera…";
+
+        const constraints = {
+          audio: false,
+          video: {
+            width: { exact: wantWidth },
+            height: { exact: wantHeight },
+            frameRate: { ideal: wantFps },
+          },
+        };
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (error) {
+          status.innerHTML =
+            `<span class="bad">the camera could not be opened: ${error.name} — ${error.message}.</span> ` +
+            "Record this as device_not_visible for the cell.";
+          reportFailure(String(error));
+          return;
+        }
+
+        const cameras = await listCameras();
+        video.srcObject = stream;
+        await video.play();
+
+        const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((candidate) =>
+          window.MediaRecorder && MediaRecorder.isTypeSupported(candidate),
+        );
+        if (!mimeType) {
+          status.innerHTML = '<span class="bad">MediaRecorder is unavailable in this browser.</span>';
+          reportFailure("MediaRecorder unavailable");
+          return;
+        }
+
+        const chunks = [];
+        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+        recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size) chunks.push(event.data);
+        };
+
+        const finished = new Promise((resolve) => {
+          recorder.onstop = resolve;
+        });
+
+        samples = [];
+        framesSeen = 0;
+        startedAt = performance.now();
+        stopping = false;
+        recorder.start();
+        if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(onFrame);
+        status.innerHTML = `<span class="ok">recording</span> — ${cameras.length} camera(s) visible`;
+        renderSummary(0);
+
+        setTimeout(() => {
+          stopping = true;
+          recorder.stop();
+        }, durationS * 1000);
+
+        const ticker = setInterval(() => {
+          renderSummary((performance.now() - startedAt) / 1000);
+        }, 1000);
+
+        await finished;
+        clearInterval(ticker);
+        const blob = new Blob(chunks, { type: mimeType });
+        status.textContent = `Uploading ${(blob.size / 1e6).toFixed(1)} MB…`;
+        await upload(blob, { cameras, mimeType, bitness: requestedBitness() });
+      }
+
+      async function upload(blob, extra) {
+        const settings = trackSettings();
+        const payload = {
+          application_id: applicationId,
+          backend,
+          capture_method: "getusermedia_mediarecorder",
+          bitness: extra.bitness,
+          user_agent: navigator.userAgent,
+          cameras: extra.cameras,
+          mime_type: extra.mimeType,
+          negotiated: {
+            width: settings.width ?? null,
+            height: settings.height ?? null,
+            frame_rate: settings.frameRate ?? null,
+          },
+          observations: samples,
+        };
+        const form = new FormData();
+        form.append("payload", JSON.stringify(payload));
+        form.append("capture", blob, "capture.webm");
+        form.append("extension", "webm");
+
+        const response = await fetch(uploadUrl, { method: "POST", body: form });
+        const result = await response.json();
+        status.innerHTML = result.ok
+          ? `<span class="ok">done</span> — ${result.observations} frame observations written to ${result.directory}`
+          : `<span class="bad">the harness refused the run:</span> ${result.error}`;
+        document.body.dataset.done = "true";
+      }
+
+      function reportFailure(reason) {
+        fetch("/failed", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ application_id: applicationId, reason }),
+        }).finally(() => {
+          document.body.dataset.done = "true";
+        });
+      }
+
+      requestAnimationFrame(async () => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          status.innerHTML =
+            '<span class="bad">this page needs a secure context (http://localhost is fine) and a camera.</span>';
+          return;
+        }
+        await navigator.mediaDevices.getUserMedia({ audio: false, video: true })
+          .then((granted) => granted.getTracks().forEach((track) => track.stop()))
+          .catch(() => {});
+        startButton.disabled = false;
+        status.textContent = "Ready. Select the virtual camera in the permission prompt, then start the run.";
+      });
+
+      startButton.addEventListener("click", () => {
+        start().catch((error) => reportFailure(String(error)));
+      });
+    </script>
+  </body>
+</html>

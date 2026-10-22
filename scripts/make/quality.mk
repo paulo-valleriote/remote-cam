@@ -3,7 +3,7 @@
 test: ## Run the desktop, mobile and measurement-tooling tests
 	$(CARGO) test --manifest-path desktop/Cargo.toml --workspace
 	$(GRADLE) -p mobile :protocol:testDebugUnitTest :core:testDebugUnitTest
-	cd spikes/tools && $(PYTHON_BIN) -m pytest
+	cd spikes/tools && $(PYTHON_BIN) -m pytest tests ../f0-camera-injection
 	bash protocol/vectors/run_conformance.sh
 
 coverage: ## Report coverage for the delivered contract packages
@@ -16,3 +16,5 @@ lint: ## Check formatting and run the linters
 	$(CARGO) clippy --manifest-path desktop/Cargo.toml --workspace --all-targets -- -D warnings
 	cd spikes/tools && $(PYTHON_BIN) -m ruff check .
 	cd spikes/tools && $(PYTHON_BIN) -m ruff format --check .
+	cd spikes/f0-camera-injection && $(PYTHON_BIN) -m ruff check .
+	cd spikes/f0-camera-injection && $(PYTHON_BIN) -m ruff format --check .
