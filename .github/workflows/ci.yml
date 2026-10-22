@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.99.1"
+          components: rustfmt, clippy
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "desktop -> target"
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace
+
+      - name: Install coverage tooling
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Measure protocol coverage
+        run: |
+          cargo llvm-cov --package remotecam-protocol --summary-only | tee coverage.txt
+          awk '/^TOTAL/ {print "Rust protocol coverage: " $NF}' coverage.txt >> "$GITHUB_STEP_SUMMARY"
+
+  python:
+    name: Python measurement tooling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install measurement package
+        run: python -m pip install -e "spikes/tools[dev]"
+
+      - name: Lint
+        run: |
+          python -m ruff check spikes/tools
+          python -m ruff format --check spikes/tools
+
+      - name: Run tests
+        run: python -m pytest spikes/tools
+
+  android:
+    name: Android contract module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.1"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Run unit tests and JaCoCo report
+        run: gradle -p mobile :protocol:testDebugUnitTest :protocol:jacocoTestReport --no-daemon
+
+      - name: Publish coverage
+        run: python3 scripts/ci/coverage_summary.py mobile/protocol/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml >> "$GITHUB_STEP_SUMMARY"

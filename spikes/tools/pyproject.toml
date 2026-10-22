@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "remotecam-spike-tools"
+version = "0.1.0"
+description = "Non-production measurement tooling for the RemoteCam F0 spikes"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy==2.5.4",
+    "scipy==1.18.1",
+    "zxing-cpp==3.1.1",
+    "jiwer==4.0.0",
+    "soundfile==0.14.0",
+    "pystoi==0.4.1",
+    "pyloudnorm==0.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.17.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["analysis*", "metrics*", "validation*", "report*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP", "W"]
