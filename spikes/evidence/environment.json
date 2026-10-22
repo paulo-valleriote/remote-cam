@@ -1,0 +1,51 @@
+{
+  "android_device_model": "not_connected",
+  "android_os_version": "not_connected",
+  "app_versions": {
+    "chrome": "not_detected",
+    "obs": "not_detected",
+    "windows_camera": "not_detected"
+  },
+  "captured_at": "2026-10-22T17:34:11+00:00",
+  "cpu_logical_cores": 12,
+  "cpu_model": "Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz",
+  "environment_id": "linux-x86_64-3d3ad039",
+  "gpu_model": "not_detected",
+  "hardware_decode_verification": {
+    "codec": "H.264",
+    "decoder_found": false,
+    "discovery_method": "other",
+    "evidence": "MFTEnumEx(SYNCMFT|SORTANDFILTER) requires Windows Media Foundation; this host is Linux. No H.264 decoder was detected either.",
+    "hardware_accelerated": false,
+    "output_format_supported": "other",
+    "verified_at": "2026-10-22T17:34:11+00:00"
+  },
+  "network": {
+    "band": "wired",
+    "baseline_loss_pct": 0.0,
+    "baseline_rtt_ms": 0.289,
+    "client_adapter": "hv_netvsc",
+    "internet_enabled": true,
+    "wifi_power_save": "disabled",
+    "within_reference_conditions": false
+  },
+  "os_build": "6.18.33.2-microsoft-standard-WSL2",
+  "os_name": "Ubuntu 24.04.4 LTS",
+  "tool_versions": {
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "ffmpeg": "not_detected",
+    "ffprobe": "not_detected",
+    "gradle": "not_detected",
+    "iperf3": "not_detected",
+    "jsonschema": "4.26.0",
+    "numpy": "2.5.4",
+    "pytest": "9.1.1",
+    "python": "3.12.3",
+    "qrcode": "8.2",
+    "ruff": "0.17.1",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "scipy": "1.18.1",
+    "soundfile": "0.14.0",
+    "zxing_cpp": "3.1.1"
+  }
+}

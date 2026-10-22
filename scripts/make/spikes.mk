@@ -1,6 +1,8 @@
 PIPELINE_MANIFEST ?= spikes/f0-pipeline/Cargo.toml
+CONFORMANCE_SCRIPT ?= protocol/vectors/run_conformance.sh
 
-.PHONY: preflight selftest spike-handshake spike-pipeline spike-synthetic-source \
+.PHONY: preflight selftest validate-evidence conformance generate-fixtures \
+	spike-handshake spike-pipeline spike-synthetic-source \
 	spike-latency spike-loss spike-resources spike-drift spike-stall \
 	spike-injection spike-interop spike-audio gate-report
 
@@ -11,6 +13,17 @@ preflight: ## Record the reference environment and verify hardware decode
 selftest: ## Run the measurement toolchain self-test
 	$(call need_script,spikes/tools/selftest.py)
 	$(PYTHON) spikes/tools/selftest.py
+
+validate-evidence: ## Validate the recorded evidence against the contracts
+	$(call need_script,spikes/tools/validation/validate_evidence.py)
+	$(PYTHON) spikes/tools/validation/validate_evidence.py --evidence-root spikes/evidence
+
+conformance: ## Run the protocol vectors against the Rust and Kotlin implementations
+	$(call need_script,$(CONFORMANCE_SCRIPT))
+	bash $(CONFORMANCE_SCRIPT)
+
+generate-fixtures: ## Regenerate the committed synthetic fixtures
+	$(PYTHON) spikes/fixtures/tools/generate_calibration.py
 
 spike-handshake: ## Run the pairing, throttling and residue scenarios
 	$(call need_script,spikes/f0-handshake/Cargo.toml)

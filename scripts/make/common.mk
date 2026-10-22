@@ -1,4 +1,7 @@
 PYTHON ?= python3
+# Resolve a relative interpreter path (for example spikes/tools/.venv/bin/python)
+# before a recipe changes directory. Bare commands such as python3 pass through.
+PYTHON_BIN = $(if $(wildcard $(PYTHON)),$(abspath $(PYTHON)),$(PYTHON))
 CARGO ?= cargo
 GRADLE ?= gradle
 
