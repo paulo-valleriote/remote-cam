@@ -1,0 +1,289 @@
+{
+  "harness_version": "1.0.0",
+  "scenarios": [
+    {
+      "attempt_limit_per_minute": 5,
+      "attempts_observed": 7,
+      "block_duration_s": 60,
+      "blocked": true,
+      "decisions": [
+        {
+          "action": "allowed",
+          "at_ms": 0,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 1
+        },
+        {
+          "action": "allowed",
+          "at_ms": 3,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 2
+        },
+        {
+          "action": "allowed",
+          "at_ms": 6,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 3
+        },
+        {
+          "action": "allowed",
+          "at_ms": 18,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 4
+        },
+        {
+          "action": "allowed",
+          "at_ms": 21,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 5
+        },
+        {
+          "action": "rate_limited",
+          "at_ms": 24,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt 6 refused; origin blocked for 60 s",
+          "reason_code": "rate_limited",
+          "sequence": 6
+        },
+        {
+          "action": "allowed",
+          "at_ms": 24,
+          "origin_id": "127.0.0.2",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 7
+        }
+      ],
+      "legitimate_pairing_unaffected": true,
+      "limit_exceeded_at_attempt": 6,
+      "listener_closed": false,
+      "origin_id": "127.0.0.1",
+      "reason_code": "rate_limited",
+      "security_event": false,
+      "session_established": false,
+      "throttle_id": "throttle-rate-limit",
+      "trace_ref": "spikes/evidence/pairing/throttle-rate-limit.trace"
+    },
+    {
+      "attempt_limit_per_minute": 5,
+      "attempts_observed": 11,
+      "block_duration_s": 60,
+      "blocked": true,
+      "consecutive_failures_at_listener_close": 10,
+      "decisions": [
+        {
+          "action": "allowed",
+          "at_ms": 0,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 1
+        },
+        {
+          "action": "allowed",
+          "at_ms": 3,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 2
+        },
+        {
+          "action": "allowed",
+          "at_ms": 13,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 3
+        },
+        {
+          "action": "allowed",
+          "at_ms": 16,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 4
+        },
+        {
+          "action": "allowed",
+          "at_ms": 28,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 5
+        },
+        {
+          "action": "rate_limited",
+          "at_ms": 32,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt 6 refused; origin blocked for 60 s",
+          "reason_code": "rate_limited",
+          "sequence": 6
+        },
+        {
+          "action": "blocked",
+          "at_ms": 42,
+          "origin_id": "127.0.0.1",
+          "outcome": "origin blocked for another 59 s",
+          "reason_code": "rate_limited",
+          "sequence": 7
+        },
+        {
+          "action": "blocked",
+          "at_ms": 43,
+          "origin_id": "127.0.0.1",
+          "outcome": "origin blocked for another 59 s",
+          "reason_code": "rate_limited",
+          "sequence": 8
+        },
+        {
+          "action": "blocked",
+          "at_ms": 44,
+          "origin_id": "127.0.0.1",
+          "outcome": "origin blocked for another 59 s",
+          "reason_code": "rate_limited",
+          "sequence": 9
+        },
+        {
+          "action": "allowed",
+          "at_ms": 45,
+          "origin_id": "127.0.0.2",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 10
+        },
+        {
+          "action": "blocked",
+          "at_ms": 49,
+          "origin_id": "127.0.0.1",
+          "outcome": "origin blocked for another 59 s",
+          "reason_code": "rate_limited",
+          "sequence": 11
+        },
+        {
+          "action": "listener_closed",
+          "at_ms": 49,
+          "origin_id": "127.0.0.1",
+          "outcome": "pairing listener closed after 10 consecutive failures",
+          "reason_code": "listener_closed",
+          "sequence": 11
+        }
+      ],
+      "legitimate_pairing_unaffected": true,
+      "limit_exceeded_at_attempt": 6,
+      "listener_closed": true,
+      "origin_id": "127.0.0.1",
+      "reason_code": "rate_limited",
+      "security_event": true,
+      "session_established": false,
+      "throttle_id": "throttle-listener-close",
+      "trace_ref": "spikes/evidence/pairing/throttle-listener-close.trace"
+    },
+    {
+      "attempt_limit_per_minute": 5,
+      "attempts_observed": 10,
+      "block_duration_s": 60,
+      "blocked": true,
+      "decisions": [
+        {
+          "action": "allowed",
+          "at_ms": 0,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 1
+        },
+        {
+          "action": "allowed",
+          "at_ms": 2,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 2
+        },
+        {
+          "action": "allowed",
+          "at_ms": 5,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 3
+        },
+        {
+          "action": "allowed",
+          "at_ms": 34,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 4
+        },
+        {
+          "action": "allowed",
+          "at_ms": 37,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 5
+        },
+        {
+          "action": "rate_limited",
+          "at_ms": 39,
+          "origin_id": "127.0.0.1",
+          "outcome": "attempt 6 refused; origin blocked for 60 s",
+          "reason_code": "rate_limited",
+          "sequence": 6
+        },
+        {
+          "action": "blocked",
+          "at_ms": 40,
+          "origin_id": "127.0.0.1",
+          "outcome": "origin blocked for another 59 s",
+          "reason_code": "rate_limited",
+          "sequence": 7
+        },
+        {
+          "action": "blocked",
+          "at_ms": 40,
+          "origin_id": "127.0.0.1",
+          "outcome": "origin blocked for another 59 s",
+          "reason_code": "rate_limited",
+          "sequence": 8
+        },
+        {
+          "action": "blocked",
+          "at_ms": 41,
+          "origin_id": "127.0.0.1",
+          "outcome": "origin blocked for another 59 s",
+          "reason_code": "rate_limited",
+          "sequence": 9
+        },
+        {
+          "action": "allowed",
+          "at_ms": 41,
+          "origin_id": "127.0.0.2",
+          "outcome": "attempt allowed",
+          "reason_code": null,
+          "sequence": 10
+        }
+      ],
+      "legitimate_pairing_unaffected": true,
+      "limit_exceeded_at_attempt": 6,
+      "listener_closed": false,
+      "origin_id": "127.0.0.1",
+      "reason_code": "rate_limited",
+      "security_event": false,
+      "session_established": false,
+      "throttle_id": "throttle-legitimate-origin",
+      "trace_ref": "spikes/evidence/pairing/throttle-legitimate-origin.trace"
+    }
+  ]
+}
