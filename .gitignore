@@ -18,6 +18,7 @@ venv/
 
 # Rust
 desktop/target/
+spikes/**/target/
 
 # Android
 mobile/.gradle/

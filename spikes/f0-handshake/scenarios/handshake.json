@@ -1,0 +1,96 @@
+{
+  "harness_version": "1.0.0",
+  "scenarios": [
+    {
+      "scenario_id": "valid-01",
+      "category": "valid",
+      "expected_reason_code": null,
+      "preconditions": "Fresh desktop session; QR displayed; mobile scans raw bytes and pins the leaf SHA-256.",
+      "expected_result": "TLS 1.3 channel established and the token accepted; no media starts before authentication."
+    },
+    {
+      "scenario_id": "adversarial-wrong-fingerprint",
+      "category": "adversarial",
+      "expected_reason_code": "certificate_pin_mismatch",
+      "preconditions": "The mobile is configured with a fingerprint that differs from the leaf in one byte.",
+      "expected_result": "The TLS handshake aborts with certificate_pin_mismatch before any media."
+    },
+    {
+      "scenario_id": "adversarial-chain-only-trust",
+      "category": "adversarial",
+      "expected_reason_code": "certificate_chain_rejected",
+      "preconditions": "The presented leaf chains to a CA the client knows, but is not the pinned leaf.",
+      "expected_result": "The attempt is rejected as chain-only trust, with no fallback to CA validation."
+    },
+    {
+      "scenario_id": "adversarial-tls-downgrade",
+      "category": "adversarial",
+      "expected_reason_code": "tls_version_unsupported",
+      "preconditions": "The client offers TLS 1.2; the listener is TLS 1.3 only.",
+      "expected_result": "The handshake is refused as a downgrade attempt."
+    },
+    {
+      "scenario_id": "adversarial-expired-token",
+      "category": "adversarial",
+      "expected_reason_code": "token_expired",
+      "preconditions": "The correct token is presented after its 120-second window closed.",
+      "expected_result": "The listener rejects the token as expired."
+    },
+    {
+      "scenario_id": "adversarial-reused-token",
+      "category": "adversarial",
+      "expected_reason_code": "token_already_used",
+      "preconditions": "A token that already paired once is replayed against a restarted listener with the same store.",
+      "expected_result": "The replay is rejected; the previous pairing is not reusable."
+    },
+    {
+      "scenario_id": "adversarial-wrong-token",
+      "category": "adversarial",
+      "expected_reason_code": "token_invalid",
+      "preconditions": "The mobile presents a forged 256-bit token.",
+      "expected_result": "The listener rejects the token."
+    },
+    {
+      "scenario_id": "adversarial-non-private-source",
+      "category": "adversarial",
+      "expected_reason_code": "source_address_not_private",
+      "preconditions": "The connection arrives from an address outside the permitted private ranges.",
+      "expected_result": "The listener refuses the source before the TLS handshake."
+    },
+    {
+      "scenario_id": "adversarial-interception-proxy",
+      "category": "adversarial",
+      "expected_reason_code": "certificate_pin_mismatch",
+      "preconditions": "A proxy terminates TLS with its own certificate and answers the paired message.",
+      "expected_result": "The client aborts on the pin before sending the pairing token."
+    },
+    {
+      "scenario_id": "adversarial-qr-expired",
+      "category": "adversarial",
+      "expected_reason_code": "qr_expired",
+      "preconditions": "The scanned payload carries an expiry equal to the current time.",
+      "expected_result": "The payload is refused at decode time."
+    },
+    {
+      "scenario_id": "adversarial-malformed-qr",
+      "category": "adversarial",
+      "expected_reason_code": "invalid_qr_payload",
+      "preconditions": "The scanned bytes are shorter than the fixed header and carry no magic.",
+      "expected_result": "The payload is refused at decode time."
+    },
+    {
+      "scenario_id": "adversarial-public-endpoint",
+      "category": "adversarial",
+      "expected_reason_code": "no_private_endpoint",
+      "preconditions": "The payload advertises a public address as its only endpoint.",
+      "expected_result": "The payload is refused at decode time; no QR is displayable."
+    },
+    {
+      "scenario_id": "adversarial-tampered-media-fingerprint",
+      "category": "adversarial",
+      "expected_reason_code": "protocol_violation",
+      "preconditions": "The token is correct but the DTLS fingerprint differs from the value the listener expects.",
+      "expected_result": "The session aborts before any media starts."
+    }
+  ]
+}

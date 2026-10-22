@@ -43,6 +43,13 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+      - name: Test and lint the pairing harness
+        working-directory: .
+        run: |
+          cargo fmt --manifest-path spikes/f0-handshake/Cargo.toml -- --check
+          cargo clippy --manifest-path spikes/f0-handshake/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path spikes/f0-handshake/Cargo.toml
+
       - name: Install coverage tooling
         uses: taiki-e/install-action@cargo-llvm-cov
 
@@ -66,11 +73,11 @@ jobs:
 
       - name: Lint
         run: |
-          python -m ruff check spikes/tools spikes/f0-camera-injection
-          python -m ruff format --check spikes/tools spikes/f0-camera-injection
+          python -m ruff check spikes/tools spikes/f0-camera-injection spikes/f0-handshake
+          python -m ruff format --check spikes/tools spikes/f0-camera-injection spikes/f0-handshake
 
       - name: Run tests
-        run: python -m pytest spikes/tools spikes/f0-camera-injection
+        run: python -m pytest spikes/tools spikes/f0-camera-injection spikes/f0-handshake
 
       - name: Record the preflight environment
         run: python spikes/tools/preflight.py --no-network-probe

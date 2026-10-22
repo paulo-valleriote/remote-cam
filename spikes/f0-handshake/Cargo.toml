@@ -1,0 +1,25 @@
+[package]
+name = "f0-handshake"
+version = "0.1.0"
+edition = "2024"
+license = "Proprietary"
+publish = false
+
+[dependencies]
+remotecam-protocol = { path = "../../desktop/crates/protocol" }
+remotecam-signaling = { path = "../../desktop/crates/signaling" }
+futures-util = "0.3.34"
+rustls = "0.23.46"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+tokio = { version = "1.54.1", features = [
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+tokio-rustls = "0.26.6"
+tokio-tungstenite = "0.30.0"
