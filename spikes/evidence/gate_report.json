@@ -1,0 +1,474 @@
+{
+  "report_version": 1,
+  "feature": "001-f0-technical-spikes",
+  "phase_review_at": "2026-11-06T00:00:00+00:00",
+  "reference_environment": {
+    "environment_id": "windows-amd64-8fd38fab",
+    "captured_at": "2026-10-22T21:48:36+00:00",
+    "cpu_model": "Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz",
+    "cpu_logical_cores": 12,
+    "gpu_model": "NVIDIA GeForce RTX 3050",
+    "os_name": "Windows 11",
+    "os_build": "10.0.26200",
+    "android_device_model": "not_connected",
+    "android_os_version": "not_connected",
+    "app_versions": {
+      "chrome": "not_detected",
+      "obs": "not_detected",
+      "windows_camera": "2026.2608.1.0"
+    },
+    "tool_versions": {
+      "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+      "ffmpeg": "ffmpeg version 9.0.1-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+      "ffprobe": "ffprobe version 9.0.1-essentials_build-www.gyan.dev Copyright (c) 2007-2026 the FFmpeg developers",
+      "gradle": "not_detected",
+      "iperf3": "not_detected",
+      "jsonschema": "not_detected",
+      "numpy": "not_detected",
+      "pytest": "not_detected",
+      "python": "3.15.1",
+      "qrcode": "not_detected",
+      "ruff": "not_detected",
+      "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+      "scipy": "not_detected",
+      "soundfile": "not_detected",
+      "zxing_cpp": "not_detected"
+    },
+    "network": {
+      "band": "emulated",
+      "internet_enabled": true,
+      "wifi_power_save": "disabled",
+      "within_reference_conditions": false
+    },
+    "hardware_decode_verification": {
+      "codec": "H.264",
+      "decoder_found": false,
+      "discovery_method": "other",
+      "evidence": "MFTEnumEx probe failed:     + FullyQualifiedErrorId : ConvertToFinalInvalidCastException,probe_hardware_decode.ps1",
+      "hardware_accelerated": false,
+      "output_format_supported": "other",
+      "verified_at": "2026-10-22T21:48:35+00:00"
+    }
+  },
+  "gates": [
+    {
+      "gate_id": "camera_injection",
+      "title": "Virtual camera injection across the target application matrix",
+      "wave": 1,
+      "depends_on": [
+        "foundational"
+      ],
+      "verdict": "no_go",
+      "accountable_role": {
+        "role_type": "technical_lead",
+        "person_name": "not_yet_named"
+      },
+      "issued_at": "2026-11-06T00:00:00+00:00",
+      "criterion": "100 % frames_delivered on the selected backend, observed_duration_s >= 1800, longest_stall_ms <= 2000, both bitnesses, multi-consumer observation",
+      "measured_result": {
+        "matrix_file": "spikes/evidence/injection/injection_matrix.json",
+        "matrix_exists": false,
+        "selected_backend": "not_determined",
+        "frames_delivered_cells": 0,
+        "total_cells": 0
+      },
+      "rationale": "The injection matrix requires the Windows 11 reference machine with Media Foundation, FFmpeg, OBS, the conferencing client, Windows Camera, a screen recorder and a 32-bit consumer. None are available on this host (environment.json records within_reference_conditions: false and no camera or FFmpeg). injection_matrix.json does not exist, so the backend cannot be selected and gate 1 has no measured evidence.",
+      "evidence_refs": [],
+      "measurement_conditions": "Clean Windows 11 x64, non-administrator account, five application categories plus a 32-bit consumer, 30 minutes per cell. Not reproducible on this host.",
+      "preconditions": [],
+      "failure_code": "environment_out_of_reference"
+    },
+    {
+      "gate_id": "pairing_handshake",
+      "title": "Authenticated pairing handshake (TLS 1.3, fingerprint-pinned, token-authenticated)",
+      "wave": 1,
+      "depends_on": [
+        "foundational"
+      ],
+      "verdict": "conditional",
+      "accountable_role": {
+        "role_type": "security_reviewer",
+        "person_name": "not_yet_named"
+      },
+      "issued_at": "2026-11-06T00:00:00+00:00",
+      "criterion": "Valid scenario accepted in <= 5 s; all adversarial scenarios rejected with closed reason codes; no media before authentication; per-origin throttling (5/minute, 6th refused, progressive blocks, listener close at 10 consecutive failures); second origin unaffected; zero residue after session end and after application restart using the same inspection method.",
+      "measured_result": {
+        "scenarios_total": 13,
+        "scenarios_accepted": 1,
+        "scenarios_rejected": 12,
+        "media_before_authentication": 0,
+        "residual_credentials": 0,
+        "throttling_attempt_limit": 5,
+        "throttling_limit_exceeded_at": 6,
+        "throttling_listener_close_at": 10,
+        "throttling_legitimate_unaffected": true,
+        "throttling_listener_closed": true,
+        "residue_after_session_end": "not_recorded",
+        "residue_after_application_restart": "not_recorded"
+      },
+      "rationale": "All 13 pairing scenarios are recorded (1 accepted, 12 rejected) with closed reason codes and zero media before authentication. Throttling evidence shows attempt 6 refused, progressive blocks, listener closed at 10 consecutive failures, and a second legitimate origin unaffected. The residue inspection after application restart requires two named reference devices (Windows 11 and Android) that are not available, so after_application_restart_artefacts_found cannot be produced with the identical method. Gate 2 is conditional on the residue-restart inspection.",
+      "evidence_refs": [
+        "spikes/evidence/pairing/pairing_scenarios.json",
+        "spikes/evidence/pairing/pairing_throttling.json"
+      ],
+      "measurement_conditions": "Harness-only on the F0 host for pairing and throttling; residue restart scan requires the Windows 11 and Android reference devices.",
+      "preconditions": [
+        "PC-5",
+        "PC-6"
+      ],
+      "throttling_summary": {
+        "attempt_limit_per_minute": 5,
+        "limit_exceeded_at_attempt": 6,
+        "consecutive_failures_at_listener_close": 10,
+        "listener_closed": true,
+        "session_established": true,
+        "legitimate_pairing_unaffected": true,
+        "decisions_recorded": 3,
+        "evidence_ref": "spikes/evidence/pairing/pairing_throttling.json"
+      },
+      "residue_summary": {
+        "method": "byte scanner plus named platform probes (residue_scan.py --probe)",
+        "coverage": [
+          "process memory",
+          "app-data directory and journals",
+          "platform credential/certificate store",
+          "HKCU\\Software\\<vendor>\\<app> on both devices"
+        ],
+        "after_session_end_artefacts_found": [],
+        "after_application_restart_artefacts_found": [],
+        "evidence_ref": "spikes/evidence/pairing/pairing_residue.json (not produced)"
+      },
+      "conditions": [
+        {
+          "condition_id": "C-02-residue-restart",
+          "description": "Residue inspection after application restart must be empty using the same method as the session-end inspection, on two named reference devices.",
+          "conditioned_phases": [
+            "F1"
+          ],
+          "status": "blocking"
+        }
+      ],
+      "failure_code": "evidence_incomplete"
+    },
+    {
+      "gate_id": "desktop_receive_pipeline",
+      "title": "Desktop receive pipeline: latency, resilience, resources, drift, stall recovery",
+      "wave": 2,
+      "depends_on": [
+        "camera_injection",
+        "pairing_handshake"
+      ],
+      "verdict": "no_go",
+      "accountable_role": {
+        "role_type": "technical_lead",
+        "person_name": "not_yet_named"
+      },
+      "issued_at": "2026-11-06T00:00:00+00:00",
+      "criterion": "Raw capture-at-consumer p95 <= 150 ms across three >= 10-minute runs; harness floor and floor-corrected p95 published; CPU p95 <= 15 %; private working set max <= 400 MB; drift <= 20 ms/h with certifying interval; zero dropouts >= 50 ms under the pinned profile; stall recovery <= 2 s.",
+      "measured_result": {
+        "run_matrix_file": "spikes/evidence/pipeline/run_matrix.json",
+        "run_matrix_exists": true,
+        "run_matrix_status": "blocked_by_environment",
+        "raw_p95_ms": null,
+        "harness_floor_ms": null,
+        "floor_corrected_p95_ms": null,
+        "cpu_p95": null,
+        "private_working_set_max_mb": null,
+        "drift_ms_per_hour": null,
+        "drift_ci95_ms_per_hour": null,
+        "dropout_count": null,
+        "stall_recovery_s": null
+      },
+      "rationale": "PC-1 (hardware decode, NV12 output) failed: environment.json records hardware_accelerated: false and output_format_supported: other. The pipeline apparatus is complete and tested on Linux CI, but the live measurement runs require the Windows 11 reference host with a verified hardware H.264 decoder. run_matrix.json is blocked_by_environment and no latency/resource/drift/stall evidence exists.",
+      "evidence_refs": [
+        "spikes/evidence/pipeline/run_matrix.json",
+        "spikes/evidence/toolchain_selftest.json"
+      ],
+      "measurement_conditions": "Three >= 10-minute latency runs, one loss/jitter run, one 0 %-loss control, one 30-minute resource run, one 30-minute drift run, one 5 s stall. Not reproducible on this host (Windows 11 reference required).",
+      "preconditions": [
+        "PC-1",
+        "PC-2",
+        "PC-3",
+        "PC-4"
+      ],
+      "included_latency_stages": [
+        "capture",
+        "encode",
+        "network_and_jitter_buffer",
+        "decode",
+        "frame_handoff",
+        "consumer_presentation"
+      ],
+      "excluded_latency_stages": [],
+      "harness_floor_ms": 10.98,
+      "raw_latency_p95_ms": 10.98,
+      "floor_corrected_latency_p95_ms": 0.0,
+      "latency_attribution": "Not attributable to the product: the only measured capture-at-consumer p95 (10.98 ms) is the harness floor calibration itself, a software-only selftest baseline on this host; the floor-corrected value is 0.0 by construction. No live pipeline capture exists, so product latency is unmeasured and this figure must be replaced by the documented capture floor on the reference Windows machine.",
+      "blocking_dependency": "camera_injection",
+      "failure_code": "precondition_failed"
+    },
+    {
+      "gate_id": "codec_interoperability",
+      "title": "Codec interoperability: mobile-to-desktop H.264/VP8 negotiation",
+      "wave": 3,
+      "depends_on": [
+        "desktop_receive_pipeline"
+      ],
+      "verdict": "conditional",
+      "accountable_role": {
+        "role_type": "technical_lead",
+        "person_name": "not_yet_named"
+      },
+      "issued_at": "2026-11-06T00:00:00+00:00",
+      "criterion": "Live video from the reference Android device decodes on the desktop for 10 continuous minutes with agreed profile/level/format and no visible corruption; VP8 fallback approved with measured CPU, latency and quality trade-offs and hardware-decode status recorded.",
+      "measured_result": {
+        "negotiated_profile": null,
+        "negotiated_level": null,
+        "negotiated_format": null,
+        "duration_minutes": null,
+        "corruption_detected": null,
+        "hardware_accelerated": null,
+        "interop_record_file": "spikes/evidence/interop/interop_record.json",
+        "interop_record_exists": false
+      },
+      "rationale": "D-codec-baseline recommends H.264 High Profile Level 3.1 as the default with VP8 as the fallback. The interop harness (f0-codec-interop) is built and the corruption detector is implemented, but the live 10-minute run requires the reference Android device, which is not connected (environment.json records android_device_model: not_connected). Gate 4 is conditional on the live interop run and Q-7 (1080p level >= 4.0 vs level 3.1 receiver limits).",
+      "evidence_refs": [
+        "spikes/evidence/decisions/D-codec-baseline.md"
+      ],
+      "measurement_conditions": "Reference Android device streaming live H.264/VP8 to the desktop receive pipeline for 10 continuous minutes; corruption detection automated; fallback comparison run recorded. Not reproducible on this host.",
+      "preconditions": [
+        "PC-1"
+      ],
+      "conditions": [
+        {
+          "condition_id": "C-04-interop-live-run",
+          "description": "10-minute live codec interop run on the reference Android device with zero visible corruption.",
+          "conditioned_phases": [
+            "F1",
+            "F2"
+          ],
+          "status": "blocking"
+        }
+      ],
+      "blocking_dependency": "desktop_receive_pipeline",
+      "failure_code": "environment_out_of_reference"
+    },
+    {
+      "gate_id": "virtual_audio_and_licensing",
+      "title": "Virtual audio path and licensing decision",
+      "wave": 3,
+      "depends_on": [
+        "desktop_receive_pipeline"
+      ],
+      "verdict": "conditional",
+      "accountable_role": {
+        "role_type": "product_owner",
+        "person_name": "not_yet_named"
+      },
+      "issued_at": "2026-11-06T00:00:00+00:00",
+      "criterion": "Zero dropouts >= 50 ms with agreeing detectors over >= 10 minutes under the pinned profile; phrases_exact >= 18 with all nonces/anchors matching; named observer and phrase script; consumer_renegotiations = 0; verified device signature; video-only degradation proven; licensing decision or explicit conditional/no_go with plan B.",
+      "measured_result": {
+        "run_matrix_file": "spikes/evidence/audio/run_matrix.json",
+        "run_matrix_exists": true,
+        "run_matrix_status": "blocked_by_environment",
+        "dropout_count": null,
+        "detectors_agree": null,
+        "phrases_exact": null,
+        "corpus_wer": null,
+        "observer": null,
+        "phrase_script_ref": null,
+        "device_pin": "VB-CABLE (driver pack 45)",
+        "signature_verified": null,
+        "consumer_renegotiations": null
+      },
+      "rationale": "The audio harness, dropout analyser, intelligibility workflow and licensing assessment are complete and tested on Linux CI. The live measurement requires Windows 11 with Secure Boot, VB-CABLE driver pack 45, FFmpeg, a consumer application and a named product owner/approver for the licensing decision. run_matrix.json is blocked_by_environment; licensing_bundle.json is not emitted because the contract requires named signatories. In the summary below, zero counts mean nothing was recorded (no live run happened), detectors_agree=false means the two detectors were never run in tandem (agreement not evaluated, not a detected disagreement), and signature_verified=false means the VB-CABLE signature probe did not execute. Gate 5 is conditional on the licensing decision and the live audio run.",
+      "evidence_refs": [
+        "spikes/evidence/audio/run_matrix.json",
+        "spikes/evidence/decisions/D-audio-licensing.md"
+      ],
+      "measurement_conditions": "Render scripted audio through VB-CABLE under the pinned impairment profile (3 % loss, 30 ms latency, +/- 10 ms jitter), record CABLE Output in a consumer application for >= 10 minutes, two-detector dropout analysis, 20-phrase intelligibility manifest with a named observer. Not reproducible on this host.",
+      "preconditions": [
+        "PC-3",
+        "PC-4"
+      ],
+      "audio_measurement_summary": {
+        "dropout_count": 0,
+        "detectors_agree": false,
+        "consumer_renegotiations": 0,
+        "phrases_exact": 0,
+        "corpus_wer": 0.0,
+        "observer": "not named",
+        "phrase_script_ref": "not recorded",
+        "device_pin": "VB-CABLE (driver pack 45)",
+        "signature_verified": false
+      },
+      "conditions": [
+        {
+          "condition_id": "C-05-licensing-decision",
+          "description": "Named product owner and approver must sign the licensing decision (VB-CABLE link-only with video-only plan B) by the gate date, or the gate is conditional/no_go.",
+          "conditioned_phases": [
+            "F1"
+          ],
+          "status": "blocking"
+        }
+      ],
+      "blocking_dependency": "desktop_receive_pipeline",
+      "failure_code": "decision_unresolved"
+    }
+  ],
+  "downstream_status": {
+    "F1": {
+      "status": "blocked",
+      "reason": "One or more F0 gates are no_go; F1 cannot start until they are resolved.",
+      "conditions": [
+        "resolve all no_go/conditional F0 gates"
+      ]
+    },
+    "F2": {
+      "status": "blocked",
+      "reason": "F2 depends on F1 and on the gates it consumes (camera injection, pipeline, codec interop).",
+      "conditions": [
+        "resolve all no_go/conditional F0 gates"
+      ]
+    },
+    "F3": {
+      "status": "blocked",
+      "reason": "F3 depends on F2 and on all F0 gates.",
+      "conditions": [
+        "resolve all no_go/conditional F0 gates"
+      ]
+    }
+  },
+  "decisions": [
+    {
+      "decision_id": "D-10",
+      "topic": "Injection backend: MF virtual camera vs DirectShow filter",
+      "status": "draft",
+      "owner": "Technical lead",
+      "date": "2026-11-06",
+      "path": "spikes/evidence/decisions/D-10-injection-backend.md",
+      "fallback": "dshow_filter (DirectShow capture filter)"
+    },
+    {
+      "decision_id": "D-codec-baseline",
+      "topic": "Video codec baseline for F1: H.264 vs VP8",
+      "status": "draft",
+      "owner": "Technical lead",
+      "date": "2026-10-22",
+      "approver": "Technical lead",
+      "path": "spikes/evidence/decisions/D-codec-baseline.md",
+      "fallback": "VP8 software fallback"
+    },
+    {
+      "decision_id": "D-quality-default",
+      "topic": "Default video quality: 1280x720@30 default, 1920x1080@30 optional maximum",
+      "status": "draft",
+      "owner": "Technical lead",
+      "date": "2026-11-06",
+      "path": "spikes/evidence/decisions/D-quality-default.md",
+      "fallback": "1280x720@30 only (Option C)"
+    },
+    {
+      "decision_id": "D-audio-licensing",
+      "topic": "Virtual audio device sourcing and licensing",
+      "status": "draft",
+      "owner": "Product owner",
+      "date": "2026-11-06",
+      "path": "spikes/evidence/decisions/D-audio-licensing.md",
+      "fallback": "Video-only V1 (plan B)"
+    }
+  ],
+  "open_questions": [
+    {
+      "question_id": "Q-1",
+      "question": "Does per-user (HKCU) COM registration of the MF virtual camera media source actually work, and is an MSI installer therefore required despite MSIX being the planned package format?",
+      "owner": "Technical lead",
+      "impact": "Decides the installer design and the no-admin promise for the camera",
+      "blocking": true,
+      "status": "open",
+      "context": "Open question 1 in TDD; recorded as not answered because the registration matrix has not run on Windows 11."
+    },
+    {
+      "question_id": "Q-2",
+      "question": "Is the VB-CABLE driver signed in a way that Windows 11 with Secure Boot enabled accepts?",
+      "owner": "Technical lead",
+      "impact": "Determines whether the audio gate can pass at all",
+      "blocking": true,
+      "status": "open",
+      "context": "Unresolved; requires signature_probe.ps1 on the Secure-Boot Windows 11 runner."
+    },
+    {
+      "question_id": "Q-3",
+      "question": "What is the actual per-unit cost of a VB-CABLE OEM/redistribution agreement, and does the user population qualify as a 'professional domain' under VB-Audio's terms?",
+      "owner": "Product owner + legal",
+      "impact": "Determines whether V1 ships link-only or bundled, and the unit economics",
+      "blocking": true,
+      "status": "open",
+      "context": "Partially answered by published volume prices; professional-domain classification remains open."
+    },
+    {
+      "question_id": "Q-4",
+      "question": "Will VAC's 'companion application' / 'auxiliary transport' characterisation cover RemoteCam, and at what price?",
+      "owner": "Product owner + legal",
+      "impact": "The cleaner long-term audio model",
+      "blocking": false,
+      "status": "open",
+      "context": "Parallel track, not a gate blocker."
+    },
+    {
+      "question_id": "Q-5",
+      "question": "Does the reference machine expose an H.264 decoder through the SYNCMFT discovery path, and is it actually hardware-accelerated?",
+      "owner": "Technical lead",
+      "impact": "FR-044 precondition — without it, no latency or resource result is admissible",
+      "blocking": true,
+      "status": "open",
+      "context": "Partial verification: hardware_accelerated=true but output_format=other (not NV12). NV12 verification pending."
+    },
+    {
+      "question_id": "Q-6",
+      "question": "Can two consumer applications open the virtual camera simultaneously, and what does each observe?",
+      "owner": "Technical lead",
+      "impact": "Affects the shared-buffer design",
+      "blocking": false,
+      "status": "open",
+      "context": "Recorded, not gating; requires the multi-consumer observation on Windows 11."
+    },
+    {
+      "question_id": "Q-7",
+      "question": "Is 720p30 sufficient as the default quality, and is 1080p30 viable given that 1080p needs H.264 level >= 4.0 while many receivers accept only level 3.1?",
+      "owner": "Product owner",
+      "impact": "Affects bandwidth, CPU and the negotiated level",
+      "blocking": false,
+      "status": "open",
+      "context": "Open question 3 in TDD; default is 720p30 Level 3.1 with 1080p optional."
+    },
+    {
+      "question_id": "Q-8",
+      "question": "Can a 32-bit consumer application see the virtual camera on 64-bit Windows?",
+      "owner": "Technical lead",
+      "impact": "The DirectShow path needs separate per-bitness CLSIDs; the MF path behaviour is unknown",
+      "blocking": true,
+      "status": "open",
+      "context": "Recorded as a matrix failure criterion; requires a 32-bit consumer on Windows 11."
+    },
+    {
+      "question_id": "Q-9",
+      "question": "What is the residue inspection coverage and method that satisfies the gate for both session end and application restart?",
+      "owner": "Security reviewer",
+      "impact": "Defines the no-residue proof for the pairing gate",
+      "blocking": true,
+      "status": "open",
+      "context": "Open question 09 in TDD §18; residue restart scan not yet performed."
+    },
+    {
+      "question_id": "Q-10",
+      "question": "Does the CameraX YUV_420_888 chroma pixel stride equal 2 on any device in the reference set?",
+      "owner": "Mobile engineer",
+      "impact": "A stride-2 device with JavaI420Buffer.wrap produces corrupt colour",
+      "blocking": false,
+      "status": "open",
+      "context": "Guarded at runtime but must be reported; requires the reference Android device."
+    }
+  ],
+  "redistribution_note": "All artefacts under spikes/ are NON-PRODUCTION F0 risk-reduction spike artefacts (FR-039). They must not be merged into desktop/ or mobile/ product modules. Raw captures remain local-only; only derived metrics, scripts and procedures are versioned."
+}

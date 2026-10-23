@@ -9,10 +9,13 @@ test: ## Run the desktop, mobile and measurement-tooling tests
 	cd spikes/tools && $(PYTHON_BIN) -m pytest tests ../f0-camera-injection ../f0-handshake ../f0-virtual-audio
 	bash protocol/vectors/run_conformance.sh
 
-coverage: ## Report coverage for the delivered contract packages
+coverage: ## Report coverage for the delivered contract packages (≥90% required; spikes/ exempt per T117)
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || { echo "error: cargo-llvm-cov is required; install it with 'cargo install cargo-llvm-cov'." >&2; exit 1; }
-	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-protocol --summary-only
+	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-protocol --summary-only > .coverage/rust_protocol_summary.txt
 	$(GRADLE) -p mobile :protocol:jacocoTestReport
+	python3 scripts/ci/coverage_gate.py \
+		--rust-summary .coverage/rust_protocol_summary.txt \
+		--jacoco-report mobile/protocol/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
 
 lint: ## Check formatting and run the linters
 	$(CARGO) fmt --manifest-path desktop/Cargo.toml --all -- --check

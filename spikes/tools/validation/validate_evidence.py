@@ -648,15 +648,31 @@ def _gate_pairing(gate: dict[str, Any], report: _Report) -> None:
 
 
 def _gate_audio(gate: dict[str, Any], report: _Report) -> None:
+    # The schema forces gate 5 to publish an audio_measurement_summary even when no
+    # live run exists (the summary records honest not-measured values in that case).
+    # The pass-level invariants below are therefore only binding for a go verdict:
+    # a conditional/no_go gate must record the measured truth (zero counts when
+    # nothing was recorded, detectors_agree=false meaning agreement was not
+    # evaluated) and explain it in the rationale.
+    if gate.get("verdict") != "go":
+        return
     audio = gate.get("audio_measurement_summary")
     if not isinstance(audio, dict):
+        report.error(
+            "gate_report.audio_summary_missing",
+            "a go verdict for the audio gate requires an audio_measurement_summary",
+        )
         return
     if audio.get("dropout_count") != 0:
-        report.error("gate_report.audio_dropouts", "a go verdict requires zero dropouts")
+        report.error(
+            "gate_report.audio_dropouts",
+            "a go verdict requires zero dropouts",
+        )
     if audio.get("detectors_agree") is not True:
         report.error(
             "gate_report.audio_detectors_disagree",
-            "detectors_agree MUST be true; a disagreement is a finding, never resolved silently",
+            "detectors_agree MUST be true under a go verdict; a disagreement is a "
+            "finding, never resolved silently",
         )
     if audio.get("consumer_renegotiations") != 0:
         report.error(
@@ -664,9 +680,15 @@ def _gate_audio(gate: dict[str, Any], report: _Report) -> None:
             "a go verdict requires zero consumer renegotiations",
         )
     if (audio.get("phrases_exact") or 0) < 18:
-        report.error("gate_report.audio_phrases", "a go verdict requires at least 18 exact phrases")
+        report.error(
+            "gate_report.audio_phrases",
+            "a go verdict requires at least 18 exact phrases",
+        )
     if (audio.get("corpus_wer") or 0) > 0.05:
-        report.error("gate_report.audio_wer", "a go verdict requires corpus_wer <= 0.05")
+        report.error(
+            "gate_report.audio_wer",
+            "a go verdict requires corpus_wer <= 0.05",
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -99,4 +99,6 @@ spike-audio: ## Run the virtual audio scenario
 
 gate-report: ## Assemble the F0 gate report from the evidence
 	$(call need_script,spikes/tools/report/build_gate_report.py)
-	$(PYTHON) spikes/tools/report/build_gate_report.py
+	$(call need_script,spikes/tools/report/render_report.py)
+	$(PYTHON) spikes/tools/report/build_gate_report.py --out spikes/evidence/gate_report.json
+	$(PYTHON) spikes/tools/report/render_report.py

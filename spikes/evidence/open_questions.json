@@ -1,0 +1,108 @@
+{
+  "generated_at": "2026-11-06T00:00:00+00:00",
+  "feature": "001-f0-technical-spikes",
+  "source": "research.md §3 (open-questions register), decisions/*.md",
+  "notes": "An `answered` question MUST reference a decision record. Questions marked blocking must be resolved before F1 can proceed.",
+  "open_questions": [
+    {
+      "question_id": "Q-1",
+      "question": "Does per-user (HKCU) COM registration of the MF virtual camera media source actually work, and is an MSI installer therefore required despite MSIX being the planned package format?",
+      "owner": "Technical lead",
+      "impact": "Decides the installer design and the no-admin promise for the camera",
+      "blocking": true,
+      "status": "open",
+      "context": "Open question 1 in TDD; not answered because the registration matrix has not run on Windows 11.",
+      "decision_ref": "spikes/evidence/decisions/D-10-injection-backend.md (draft)"
+    },
+    {
+      "question_id": "Q-2",
+      "question": "Is the VB-CABLE driver signed in a way that Windows 11 with Secure Boot enabled accepts?",
+      "owner": "Technical lead",
+      "impact": "Determines whether the audio gate can pass at all",
+      "blocking": true,
+      "status": "open",
+      "context": "Unresolved; requires signature_probe.ps1 on the Secure-Boot Windows 11 runner.",
+      "decision_ref": "spikes/evidence/decisions/D-audio-licensing.md (draft)"
+    },
+    {
+      "question_id": "Q-3",
+      "question": "What is the actual per-unit cost of a VB-CABLE OEM/redistribution agreement, and does the user population qualify as a \"professional domain\" under VB-Audio's terms?",
+      "owner": "Product owner + legal",
+      "impact": "Determines whether V1 ships link-only or bundled, and the unit economics",
+      "blocking": true,
+      "status": "open",
+      "context": "Partially answered by published volume prices; professional-domain classification remains open.",
+      "decision_ref": "spikes/evidence/decisions/D-audio-licensing.md (draft)"
+    },
+    {
+      "question_id": "Q-4",
+      "question": "Will VAC's \"companion application\" / \"auxiliary transport\" characterisation cover RemoteCam, and at what price?",
+      "owner": "Product owner + legal",
+      "impact": "The cleaner long-term audio model",
+      "blocking": false,
+      "status": "open",
+      "context": "Parallel track, not a gate blocker.",
+      "decision_ref": null
+    },
+    {
+      "question_id": "Q-5",
+      "question": "Does the reference machine expose an H.264 decoder through the SYNCMFT discovery path, and is it actually hardware-accelerated?",
+      "owner": "Technical lead",
+      "impact": "FR-044 precondition — without it, no latency or resource result is admissible",
+      "blocking": true,
+      "status": "open",
+      "context": "Partial verification: hardware_accelerated=true but output_format=other (not NV12). NV12 verification pending via probe_hardware_decode.ps1.",
+      "decision_ref": "spikes/evidence/decisions/D-quality-default.md (draft)"
+    },
+    {
+      "question_id": "Q-6",
+      "question": "Can two consumer applications open the virtual camera simultaneously, and what does each observe?",
+      "owner": "Technical lead",
+      "impact": "Affects the shared-buffer design",
+      "blocking": false,
+      "status": "open",
+      "context": "Recorded, not gating; requires the multi-consumer observation on Windows 11.",
+      "decision_ref": "spikes/evidence/decisions/D-10-injection-backend.md (draft)"
+    },
+    {
+      "question_id": "Q-7",
+      "question": "Is 720p30 sufficient as the default quality, and is 1080p30 viable given that 1080p needs H.264 level >= 4.0 while many receivers accept only level 3.1?",
+      "owner": "Product owner",
+      "impact": "Affects bandwidth, CPU and the negotiated level",
+      "blocking": false,
+      "status": "open",
+      "context": "Open question 3 in TDD; default is 720p30 Level 3.1 with 1080p optional.",
+      "decision_ref": "spikes/evidence/decisions/D-codec-baseline.md (draft)"
+    },
+    {
+      "question_id": "Q-8",
+      "question": "Can a 32-bit consumer application see the virtual camera on 64-bit Windows?",
+      "owner": "Technical lead",
+      "impact": "The DirectShow path needs separate per-bitness CLSIDs; the MF path behaviour is unknown",
+      "blocking": true,
+      "status": "open",
+      "context": "Recorded as a matrix failure criterion; requires a 32-bit consumer on Windows 11.",
+      "decision_ref": "spikes/evidence/decisions/D-10-injection-backend.md (draft)"
+    },
+    {
+      "question_id": "Q-9",
+      "question": "What is the residue inspection coverage and method that satisfies the gate for both session end and application restart?",
+      "owner": "Security reviewer",
+      "impact": "Defines the no-residue proof for the pairing gate",
+      "blocking": true,
+      "status": "open",
+      "context": "Open question 09 in TDD §18; residue restart scan not yet performed.",
+      "decision_ref": null
+    },
+    {
+      "question_id": "Q-10",
+      "question": "Does the CameraX YUV_420_888 chroma pixel stride equal 2 on any device in the reference set?",
+      "owner": "Mobile engineer",
+      "impact": "A stride-2 device with JavaI420Buffer.wrap produces corrupt colour",
+      "blocking": false,
+      "status": "open",
+      "context": "Guarded at runtime but must be reported; requires the reference Android device.",
+      "decision_ref": null
+    }
+  ]
+}

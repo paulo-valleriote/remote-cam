@@ -71,7 +71,8 @@ target below is documented here.
 | `make help` | List the available targets. |
 | `make install` | Install the Python measurement package and its development dependencies. |
 | `make build-desktop` | Build the Rust workspace in `desktop/`. |
-| `make build-mobile` | Assemble the Android debug application. |
+| `make build-desktop-win` | Mirror the workspace to the Windows filesystem (`/mnt/c/Users/<user>/remotecam-win`) and build natively from WSL2; avoids the UNC filesystem error (see `docs/windows-build.md`). |
+| `make build-mobile` | Assemble the Android debug application (`mobile/app/build/outputs/apk/debug/app-debug.apk`). |
 | `make test` | Run the desktop, mobile and measurement-tooling tests. |
 | `make coverage` | Report coverage for the delivered contract packages. |
 | `make lint` | Check Rust formatting, run Clippy and lint the Python tooling. |
@@ -89,6 +90,9 @@ target below is documented here.
 | `make spike-interop` | Run the codec interoperability scenario. |
 | `make spike-audio` | Run the virtual audio scenario. |
 | `make gate-report` | Assemble the F0 gate report from the evidence. |
+| `make generate-fixtures` | Regenerate the committed synthetic fixtures. |
+| `make conformance` | Run the protocol vectors against the Rust and Kotlin implementations. |
+| `make validate-evidence` | Validate the recorded evidence against the contracts. |
 | `make clean` | Remove generated build artefacts, never committed evidence. |
 
 The gate targets validate their prerequisites and fail with an actionable
