@@ -226,11 +226,7 @@ def test_report_validates_against_the_published_schema():
     from jsonschema import Draft202012Validator
 
     schema_path = (
-        REPO_ROOT
-        / "specs"
-        / "001-f0-technical-spikes"
-        / "contracts"
-        / "gate-report.schema.json"
+        REPO_ROOT / "specs" / "001-f0-technical-spikes" / "contracts" / "gate-report.schema.json"
     )
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     errors = sorted(

@@ -605,8 +605,7 @@ def build_report() -> dict:
         "F3": {
             "status": phase_status,
             "reason": (
-                "F3 depends on the F2 exit and on the carried injection and pipeline "
-                "obligations."
+                "F3 depends on the F2 exit and on the carried injection and pipeline obligations."
             ),
             "conditions": f3_conditions,
         },
