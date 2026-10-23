@@ -1,6 +1,5 @@
 # mobile/ — AGENTS.md
 
-> Worktree: `remotecam-investigation/mobile/` (branch `main`, commit `cd5865b`)
 > Mobile-specific rules. Do NOT apply to `desktop/`, `protocol/`, or `spikes/`.
 
 ## Context and architecture
