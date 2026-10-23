@@ -7,9 +7,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.builtins.encodeToString
-import kotlinx.serialization.builtins.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.serializer
 
 /** Requested capture limits. Every field is optional; supplied values are range-checked. */
 data class Limits(
@@ -29,6 +30,7 @@ data class Candidate(
 )
 
 /** Optional client metrics. Carries no identifiers. */
+@Serializable
 data class Stats(
     val fps: Double? = null,
     val videoBitrateKbps: Double? = null,
