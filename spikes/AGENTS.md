@@ -2,12 +2,12 @@
 
 > Spike-specific rules. Do NOT apply to `desktop/`, `mobile/`, or `protocol/`.
 
-> Worktree: `remotecam-investigation/spikes/` (branch `main`, commit `cd5865b`)
-> Spike-specific rules. Do NOT apply to `desktop/`, `mobile/`, or `protocol/`.
+**Quick start:**
+- **Scope:** non-production F0 harnesses (`f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/`).
+- **Hard rules:** see "Absolute rule (FR-039)" below — non-negotiable.
+- **Before editing:** read `spikes/README.md`; run `preflight` + `selftest`; register `environment.json`.
 
-**Quick start:** Scope = non-production F0 harnesses (`f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/`). Hard rules: FR-039 (no merge into desktop/mobile), quality = evidence + procedure (`spikes/evidence/`), not test coverage; all source tagged `NON-PRODUCTION`; `Cargo.toml` `publish = false`; Python `publish = false`. Before edit: read `spikes/README.md`; run `preflight` + `selftest`; register `environment.json`.
-
-**Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`. Agent commands: `speckit.checklist`, `speckit.implement` (see `.opencode/`).
+**Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`.
 
 ## Absolute rule (FR-039) — NON-NEGOTIABLE
 
@@ -22,8 +22,7 @@
 
 ## Context and architecture
 
-- **5 active spikes:** `f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/` (skeleton/incomplete).
-- **5 active spikes:** `f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/` (harness complete; live run blocked on the Windows reference host).
+- **Active spikes:** `f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/`. `f0-virtual-audio/` is a skeleton (`.gitkeep` only); the others are built harnesses. Live measurement runs require the Windows reference host.
 - **Fixtures:** `fixtures/` (calibration WAV 48kHz mono 16-bit, CSV phrases with nonce).
 - **Tooling:** `tools/` (Python: analysis, metrics, validation, redaction, preflight, selftest, report assembly).
 - **Evidence:** `spikes/evidence/` — derived only; raw captures (`.wav/.mp4/.etl/.webm/.trace`) are `.gitignore`.
@@ -39,11 +38,11 @@
 
 ### 2. Evidence and validation
 
-- `validate_evidence.py` validates all 14 artifact kinds against JSON Schema (`gate-report.schema.json`, `injection-matrix.schema.json`, `signaling-messages.schema.json`) + semantic rules.
+- `validate_evidence.py` validates evidence artefacts against JSON Schema (`gate-report.schema.json`, `injection-matrix.schema.json`, `signaling-messages.schema.json`) and semantic rules.
 - Semantic rules (examples): latency `basis=raw`, stage sum ≤ raw, pairing `residue` empty, dropout = 0, detectors agree, phrases ≥18, WER ≤0.05.
 - `redaction.py` applied to every generated file; no secrets, fingerprints, or personal data.
-- `preflight.py` — verifies reference environment (`hardware_accelerated`, `within_reference_conditions`). If false, evidence must be flagged.
-- `selftest.py` — 4 mandatory checks (silence fixture, QR roundtrip, sampler agreement, harness floor). If fails, no measurement is valid.
+- `preflight.py` — verifies reference environment (`hardware_accelerated`, `within_reference_conditions`). If either check is false, evidence must be flagged.
+- `selftest.py` — mandatory checks (silence fixture, QR roundtrip, sampler agreement, harness floor). If any check fails, no measurement is valid.
 
 ### 3. Each spike
 
@@ -54,7 +53,6 @@
 | `f0-camera-injection/` | Python + PowerShell | Virtual camera injection (Gate 1): per-app matrix, MF vs DirectShow backends | `spikes/evidence/injection/` | `spike-injection` |
 | `f0-codec-interop/` | Rust | Codec interop (Gate 4): H.264/VP8 negotiation, hardware acceleration | `spikes/evidence/` (via `InteropMetrics`) | `spike-interop` |
 | `f0-virtual-audio/` | None (skeleton `.gitkeep`) | Virtual audio (Gate 4, skeleton) | (skeleton `audio/`) | `spike-audio` (references missing manifest) |
-| `f0-virtual-audio/` | Rust + Python + PowerShell | Virtual audio + licensing (Gate 5): two-detector dropouts, scripted intelligibility, device signature, degraded video-only, licence catalogue | `spikes/evidence/audio/`, `spikes/evidence/licensing/` | `spike-audio` |
 
 ### 4. Python tooling (`tools/`)
 

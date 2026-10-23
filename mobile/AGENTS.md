@@ -2,10 +2,15 @@
 
 > Mobile-specific rules. Do NOT apply to `desktop/`, `protocol/`, or `spikes/`.
 
-> Worktree: `remotecam-investigation/mobile/` (branch `main`, commit `cd5865b`)
-> Mobile-specific rules. Do NOT apply to `desktop/`, `protocol/`, or `spikes/`.
-
-**Quick start:** Scope = mobile-only (Kotlin, AGP 9.4.1, compileSdk 36, minSdk 29, 3 modules). Hard rules: `kotlinx-serialization-json` (no `.proto`), strict parsing (unknown keys / version >1 rejected), TLS 1.3 cert pinning (`X509TrustManager` + SHA-256, `hostnameVerifier` disabled), `CameraXCaptureSource` only `ImageAnalysis`, `Non-production` in all source. Before edit: read `protocol/AGENTS.md`; build via `make build-mobile`.
+**Quick start:**
+- **Scope:** `mobile/` only — Kotlin, AGP 9.4.1, `compileSdk` 36, `minSdk` 29, three modules.
+- **Hard rules:**
+  - Serialization is `kotlinx-serialization-json` (no `.proto`).
+  - Parsing is strict: unknown keys and `version > 1` are rejected.
+  - TLS 1.3 certificate pinning (`X509TrustManager` + SHA-256); `hostnameVerifier` is disabled.
+  - `CameraXCaptureSource` uses only `ImageAnalysis`.
+  - Every source file is tagged `NON-PRODUCTION`.
+- **Before editing:** read `protocol/AGENTS.md` if touching contracts; build with `make build-mobile`.
 
 **Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`.
 
@@ -40,7 +45,7 @@
 - `SignalingClient` uses custom `X509TrustManager`; verifies leaf certificate DER SHA-256 fingerprint; `hostnameVerifier` disabled (`{ _, _ -> true }`).
 - No root store in product path.
 - Ephemeral certificate (`rcgen` equivalent on Kotlin side).
-- Rejects certificates with different fingerprint (constant pin, not constant-time in Kotlin but equivalent logic).
+- Rejects certificates with a different fingerprint. The Kotlin comparison is not constant-time, which is acceptable because the pinned fingerprint is a public value, not a secret.
 
 ### 4. `:protocol` module — shared contract
 

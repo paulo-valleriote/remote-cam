@@ -1,9 +1,11 @@
 # RemoteCam — AGENTS.md (General)
 
-> Worktree: `remotecam-investigation` (from `main`, commit `cd5865b`).
 > Full context: F0 risk-reduction phase; `spikes/` are non-production harnesses.
 
-**Quick start:** Scope = cross-cutting rules for 4 sub-parts (`desktop/`, `mobile/`, `protocol/`, `spikes/`). Hard rules: FR-039 (spikes non-prod), protocol v1 only (no >1), ≥90% coverage on protocol. Before edit: read sub-part `AGENTS.md`; build via `make build-desktop` / `make build-mobile`; evidence-first for spikes (`spikes/evidence/`).
+**Quick start:**
+- **Scope:** cross-cutting rules for the four sub-parts (`desktop/`, `mobile/`, `protocol/`, `spikes/`).
+- **Hard rules:** see "Absolute rule" below — non-negotiable.
+- **Before editing:** read the sub-part `AGENTS.md`; build with `make build-desktop` / `make build-mobile`; for spikes, be evidence-first (`spikes/evidence/`).
 
 **Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`. Agent commands: `speckit.plan`, `speckit.implement`, `speckit.checklist` (see `.opencode/`).
 
@@ -11,7 +13,7 @@
 
 - `spikes/` is **non-production**. Nothing under `spikes/` may be merged into `desktop/` or `mobile/` (FR-039).
 - All `spikes/` code is disposable. Spike quality = documented procedure + evidence, **not** test coverage.
-- `protocol/` is the shared, versioned contract (v1). No contract accepts greater versions; future versions are rejected.
+- `protocol/` is the shared, versioned contract (v1 only).
 
 ## Repository layout
 
@@ -41,7 +43,7 @@ Every complex subdirectory (`desktop/`, `mobile/`, `protocol/`, `spikes/`) has i
 
 - `desktop/AGENTS.md` — Windows Media Foundation, DirectShow fallback, `rust-toolchain.toml` (1.99.1), `rustls`, `subtle` constant-time pinning, token zeroization.
 - `mobile/AGENTS.md` — Kotlin Serialization JSON, strict parsing (unknown keys rejected), TLS 1.3 certificate pinning, `compileSdk` 36, `:protocol`/`:core`/`:app` modules, non-production rules.
-- `protocol/AGENTS.md` — Versioned contracts (v1), `signaling.schema.json`, `reason-codes.json` (26 closed codes), conformance harness, `protocol/vectors/`.
+- `protocol/AGENTS.md` — Versioned contracts (v1), `signaling.schema.json`, `reason-codes.json` (closed reason codes), conformance harness, `protocol/vectors/`.
 - `spikes/AGENTS.md` — FR-039 (no merge), evidence in `spikes/evidence/`, `validate_evidence.py`, `redaction.py`, Python tooling (`pyproject.toml`), Rust harnesses (`Cargo.toml` non-production).
 
 ## When to create/update

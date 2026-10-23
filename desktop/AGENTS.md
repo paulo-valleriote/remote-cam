@@ -2,10 +2,14 @@
 
 > Desktop-specific rules. Do NOT apply to `mobile/`, `protocol/`, or `spikes/`.
 
-> Worktree: `remotecam-investigation/desktop/` (branch `main`, commit `cd5865b`)
-> Desktop-specific rules. Do NOT apply to `mobile/`, `protocol/`, or `spikes/`.
-
-**Quick start:** Scope = desktop-only (Rust workspace, 6 crates, MSRV 1.92). Hard rules: pinned `=` dependencies (`Cargo.lock` versioned), `cfg(windows)` only on Windows 11 SDK, DirectShow fallback only when matrix fails (`vendor/dshow-vcam-fallback/` not default), token zeroization (`subtle` + `ptr::write_volatile`), TLS 1.3 + SHA-256 pinning. Before edit: read `protocol/AGENTS.md` for contracts; build via `make build-desktop`.
+**Quick start:**
+- **Scope:** `desktop/` only — Rust workspace, 6 crates, MSRV 1.92; pinned toolchain 1.99.1 via `rust-toolchain.toml`.
+- **Hard rules:**
+  - All dependencies are pinned with `=`; `Cargo.lock` is versioned.
+  - Windows APIs only behind `cfg(windows)`, targeting the Windows 11 SDK.
+  - DirectShow fallback is built only when a matrix cell fails — never by default.
+  - Tokens are zeroized; TLS uses ephemeral certs with SHA-256 pinning.
+- **Before editing:** read `protocol/AGENTS.md` if touching contracts; build with `make build-desktop`.
 
 **Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/research.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`.
 
@@ -29,7 +33,7 @@ All dependencies are pinned with `=` (e.g., `webrtc = "=0.21.1"`, `tokio = "=1.5
 
 - `media-core/src/adapters/mf_decoder.rs` — `MFTEnumEx`, `IMFDXGIDeviceManager`, `D3D11CreateDevice`, `IMF2DBuffer2::Lock2DSize`. Only runs on Windows 11 SDK + MSVC.
 - `media-core/src/adapters/wasapi_render.rs` — WASAPI render.
-- `injection/src/mf_virtual_camera.rs` — `IMFMediaSource`, `IMFMediaStream`, `IMFMediaEventGenerator`, `IClassFactory`, `DllGetClassObject`, `DllCanUnloadNow`. ~533 lines.
+- `injection/src/mf_virtual_camera.rs` — `IMFMediaSource`, `IMFMediaStream`, `IMFMediaEventGenerator`, `IClassFactory`, `DllGetClassObject`, `DllCanUnloadNow`.
 - `injection/src/registration.rs` — COM registration (`HKCU` per-user primary, `HKLM` fallback, `WOW6432Node`).
 - `audio-bridge/src/lib.rs` — empty by design (Phase 2).
 - **Linux CI:** `cargo check` works because `windows` is behind `cfg(windows)`. Never cite `software_decoder` (OpenH264) results as latency evidence.
@@ -43,7 +47,7 @@ All dependencies are pinned with `=` (e.g., `webrtc = "=0.21.1"`, `tokio = "=1.5
 ### 4. Security and privacy (protocol/signaling/app crates)
 
 - `protocol/src/hex.rs` — hex via `0123456789abcdef` (lowercase); uppercase rejected.
-- `protocol/src/reason.rs` — 26 closed codes; no additions without contract update.
+- `protocol/src/reason.rs` — closed reason codes (see `protocol/reason-codes.json`); no additions without contract update.
 - `signaling/src/token.rs` — mandatory zeroization (`ptr::write_volatile` + memory fence) for 32-byte pairing tokens. No token persists beyond session.
 - `signaling/src/certificate.rs` — TLS 1.3 (`rustls`), ephemeral `rcgen` cert, SHA-256 pinning (`subtle` constant-time), no root store in product path.
 - `app/src/logging.rs` — mandatory redaction: hex ≥32 chars, absolute paths (`/home/`, `/Users/`, `C:\Users\` → `<path>`), correlation IDs = 32 lowercase hex, operations = `[a-z][a-z0-9_.]{0,63}`.
