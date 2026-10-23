@@ -7,8 +7,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
 
@@ -109,11 +107,11 @@ sealed class SignalingMessage {
     abstract val type: String
 
     /** Serializes this message as a JSON string. */
-    fun toJson(): String = encodeToString(this)
+    fun toJson(): String = Json.encodeToString(this)
 
     /** Parses a JSON string into a SignalingMessage. */
     companion object {
-        fun parse(json: String): SignalingMessage = decodeFromString(json)
+        fun parse(json: String): SignalingMessage = Json.decodeFromString(json)
     }
 }
 
