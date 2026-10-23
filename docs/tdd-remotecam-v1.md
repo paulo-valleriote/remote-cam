@@ -152,7 +152,7 @@ graph LR
 | Servidor de sinalização | Escuta TLS local, valida token/QR, negocia SDP/ICE, aplica substituição de sessão | Windows |
 | Media core | PeerConnection receive-only, jitter buffer, decode, sincronização, métricas | Windows (Rust; também compila no Linux para testes) |
 | Ponte de vídeo | Publicação de NV12 em buffer compartilhado, com produtor em Rust | Windows |
-| Filtro de câmera virtual | Source filter DirectShow que expõe os frames aos aplicativos | Windows |
+| Câmera virtual | Media source MF (`MFCreateVirtualCamera`) que expõe os frames aos aplicativos; filtro DirectShow apenas como fallback | Windows |
 | Ponte de áudio | Render PCM no dispositivo virtual de áudio | Windows |
 | App Windows (shell) | UI, QR, instalação/verificação de drivers, diagnóstico, bandeja, firewall, updates | Windows (Rust + Slint) |
 | Protocolo (especificação) | Contrato versionado de mensagens, estados e regras de validação, com implementações em Kotlin e Rust | Ambos |
@@ -170,7 +170,7 @@ Rust foi escolhido para o app Windows: binário único, sem runtime gerenciado, 
 | Desktop (linguagem) | Rust (edition 2024) em todo o app, incluindo mídia, sinalização e UI | Binário único sem runtime gerenciado, segurança de memória, bom suporte a COM/Win32 pela crate `windows` e desenvolvimento no Linux |
 | UI Windows | Slint | Nativo e leve, sem WebView, com desenvolvimento e depuração no Linux; alternativa de UI web via Tauri se o design exigir |
 | Media core Windows | Rust + `webrtc` (webrtc-rs) + Media Foundation (decode H.264) + libopus | Transporte ICE/DTLS/SRTP/RTP/RTCP em Rust puro; decode por hardware entrega NV12; jitter buffer e sincronização são implementados por nós |
-| Injeção de vídeo | Produtor em Rust + filtro DirectShow de câmera virtual (base MIT, user-mode) por memória compartilhada | Não exige driver de kernel nem WHQL; toda a lógica e o produtor ficam em Rust; filtro é componente de dispositivo |
+| Injeção de vídeo | Produtor em Rust + media source de câmera virtual do Windows 11 (fallback: filtro DirectShow) por memória compartilhada | Não exige driver de kernel; toda a lógica e o produtor ficam em Rust; o filtro DirectShow é fallback de dispositivo |
 | Injeção de áudio | WASAPI (crate `windows`) renderizando para dispositivo virtual instalado pelo usuário | Único caminho viável sem driver de kernel próprio; funciona com qualquer dispositivo virtual compatível |
 | Transporte | WebRTC (DTLS-SRTP), H.264 (preferido) / VP8, Opus | Baixa latência, criptografia obrigatória, NACK/PLI; jitter buffer próprio por ser receptor-only |
 | Sinalização | WebSocket sobre TLS 1.3 (tokio + rustls) com certificado efêmero (rcgen) fixado pelo QR | Canal autenticado, sem PKI externa, sem estado, com verificação de certificado customizada |
@@ -280,6 +280,13 @@ sequenceDiagram
 - Comparação de token em tempo constante, uso único, limite de 5 tentativas por minuto por origem, bloqueio progressivo e encerramento do listener após 10 falhas consecutivas.
 - Rejeição de conexões cujo IP de origem não seja privado (RFC 1918 / link-local) e que não pertença à mesma sub-rede do endpoint anunciado.
 
+> **Emenda F0 (finding 12 — D-32).** O limite de 5 tentativas por minuto, o bloqueio
+> progressivo e o encerramento do listener após 10 falhas consecutivas são **evidência
+> medida**, não configuração: o gate de pairing registra cada decisão com código de
+> motivo, prova que a tentativa 6 é recusada, que o listener fecha e que uma segunda
+> origem legítima não é afetada. Um limite global seria um defeito de negação de
+> serviço, não um controle.
+
 **Substituição de sessão (last pairing wins)**
 
 | Cenário | Comportamento |
@@ -301,6 +308,11 @@ O desktop sinaliza visual e sonoramente toda substituição ("Sessão assumida p
 - **Resiliência**: serviço em primeiro plano tipado como câmera e microfone, notificação persistente com botão "Encerrar", wake lock parcial, Wi-Fi lock de alto desempenho, opção "manter tela ligada". Em status térmico severo, redução automática de fps/resolução com aviso.
 - **Privacidade visível**: indicadores de câmera/microfone do Android permanecem visíveis; ao perder a sessão, a captura para imediatamente e a notificação muda para estado encerrado.
 - **Rede**: exige Wi-Fi em sub-rede privada; recusa iniciar pareamento em rede móvel. Não usa localização (o QR já contém o endereço).
+- **API do libwebrtc**: a API Java mudou materialmente; `CapturerObserver` é top-level com três métodos e `OfferToReceive*` não existe mais. A implementação de F2 usa a API atual, não tutoriais antigos (D-17).
+
+> **Emenda F0 (finding 8 — D-17).** O capturer próprio e o `PeerConnection` do app
+> Android são escritos contra a API Java atual do libwebrtc; a nota acima é
+> obrigatória na revisão do código de F2.
 
 ### 5.5 Transporte de mídia
 
@@ -334,34 +346,49 @@ Mensagens de sinalização são JSON com schema estrito (campos desconhecidos re
 
 A interoperabilidade H.264 entre o SDK Android (libwebrtc) e o webrtc-rs (perfil/fmtp negociado) é um gate do spike F0; se houver incompatibilidade, a V1 usa VP8 sem alterar a arquitetura, aceitando maior uso de CPU.
 
+> **Emenda F0 (finding 11 — D-30).** O único perfil de perda/jitter válido para gate é
+> **3 % de perda uniforme, 30 ms de latência adicional e ±10 ms de jitter, apenas
+> mídia**. Qualquer desvio é rotulado como fora do perfil e não pode passar em gate;
+> perda em rajada é julgada por dropouts detectados, nunca pela média de perda.
+
 Códigos de encerramento: `ended_by_mobile`, `ended_by_desktop`, `superseded`, `timeout`, `media_failure`, `security_violation`, `internal_error`. Nenhuma mensagem do desktop carrega mídia, caminho de arquivo, nome de dispositivo, tela, clipboard ou informação do sistema além de códigos genéricos.
 
 ### 5.6 Injeção no Windows
 
 #### Vídeo — câmera virtual
 
-- **Base**: filtro de câmera virtual DirectShow em user-mode, derivado de projeto open source com licença permissiva (MIT), como o UnityCapture, com o produtor de frames escrito em Rust. Não há driver de kernel, portanto não há exigência de WHQL; o binário é assinado com certificado Authenticode. O filtro é a única peça em C++ e é tratado como componente de dispositivo vendorizado; a reescrita em Rust via COM (crate `windows`) fica para a V2.
-- **Backends de decode**: Media Foundation (H.264 por hardware, saída NV12, padrão no Windows) e OpenH264 (software, usado no Linux/CI e como fallback). O backend é selecionável e reportado no diagnóstico.
-- **Publicação de frames**: o decode entrega NV12 (MF) ou I420 convertido para NV12 (OpenH264); o produtor Rust escreve em um ring buffer de 3 buffers com cabeçalho (largura, altura, stride, formato, timestamp, contador de sequência). O filtro lê o buffer mais recente; descarte do mais antigo em caso de atraso, nunca bloqueio da thread de rede.
+- **Base**: media source de câmera virtual do Windows 11 (`MFCreateVirtualCamera` com `MFVirtualCameraAccess_CurrentUser`, hospedado pelo Frame Server), com o produtor de frames em Rust. Não há driver de kernel; a instalação é por usuário via **MSI** (ver §5.10). O filtro DirectShow de `desktop/vendor/dshow-vcam-fallback/` passa a **fallback**, construído apenas quando uma célula da matriz falhar; a reescrita completa em Rust via COM fica para a V2.
+- **Backends de decode**: Media Foundation (H.264 por hardware, saída NV12, padrão no Windows) e OpenH264 (software, usado no Linux/CI e como fallback). O backend é selecionável e reportado no diagnóstico. `MFT_ENUM_FLAG_HARDWARE` não é confiável: a descoberta usa `MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_SORTANDFILTER` e a capacidade de hardware é verificada empiricamente (NV12) antes de qualquer medição (PC-1, D-05). O acesso ao buffer segue `IMF2DBuffer2::Lock2DSize`; o caminho GPU é `IMFGetService(MR_BUFFER_SERVICE)` → `IMFDXGIBackBuffer` → `ID3D11Texture2D` — `IMFHardwareBuffer` não existe.
+- **Publicação de frames**: o decode entrega NV12 (MF) ou I420 convertido para NV12 (OpenH264); o produtor Rust escreve em um ring buffer de 3 buffers com cabeçalho (largura, altura, stride, formato, timestamp, contador de sequência). O media source (ou o filtro de fallback) lê o buffer mais recente; descarte do mais antigo em caso de atraso, nunca bloqueio da thread de rede.
 - **Modos anunciados**: 640×480@30, 1280×720@30, 1920×1080@30. O aplicativo consumidor escolhe; o buffer é reescalado apenas se necessário e o frame é repetido para completar a taxa solicitada.
 - **Registro**: por usuário (sem exigir administrador), com opção por máquina. A validação de que o registro por usuário é visível para apps de 32/64 bits é um gate do spike.
-- **Compatibilidade**: matriz mínima de aplicativos consumidores (navegador Chromium, cliente de videoconferência, OBS, app de câmera do Windows, gravador). Se algum consumidor relevante não enxergar o filtro DirectShow, o plano B é um backend alternativo baseado na API de câmera virtual do Windows 11 (media source próprio registrado por `MFCreateVirtualCamera`), sem driver e com escopo de usuário atual. A escolha do backend é transparente para o usuário e verificável no diagnóstico.
+- **Compatibilidade**: matriz mínima de aplicativos consumidores (navegador Chromium, cliente de videoconferência, OBS, app de câmera do Windows, gravador). O backend primário é o media source do Windows 11; se algum consumidor relevante não enxergar a câmera, o fallback é o filtro DirectShow de `desktop/vendor/dshow-vcam-fallback/`, construído apenas para essa célula. A escolha é transparente para o usuário e verificável no diagnóstico.
+
+> **Emenda F0 (findings 1, 4 e 5 — D-10, D-05).** O backend primário mudou de filtro
+> DirectShow para `MFCreateVirtualCamera`; o filtro é fallback. `IMFHardwareBuffer` não
+> existe: o acesso é `IMF2DBuffer2` e o caminho GPU é `IMFGetService(MR_BUFFER_SERVICE)`
+> → `IMFDXGIBackBuffer`. `MFT_ENUM_FLAG_HARDWARE` não é confiável, então a capacidade de
+> hardware é verificada empiricamente (NV12) antes de qualquer medição.
 
 #### Áudio — microfone virtual
 
 - O media core decodifica Opus para PCM 16 bits 48 kHz e renderiza continuamente via WASAPI no endpoint de reprodução do dispositivo virtual instalado (ex.: "CABLE Input"); os aplicativos capturam do endpoint de gravação correspondente ("CABLE Output").
 - Mono é duplicado para estéreo quando o dispositivo exige; silence é renderizado quando o microfone está mudo ou a rede oscila — o stream nunca é interrompido, evitando renegociação nos apps consumidores.
 - Buffer de 20–40 ms; correção de deriva por ajuste fino de taxa (reamostragem adaptativa) para manter o consumo estável ao longo de horas.
+- O renderer é **paceado pelos timestamps RTP**; a reamostragem adaptativa corrige deriva, mas não substitui o pacing. O resampler sozinho coloca FR-014 em risco (D-24).
 - Detecção do dispositivo por nome/características, verificação de assinatura do driver e teste de tom audível antes de liberar a sessão ("testar microfone virtual").
+
+> **Emenda F0 (finding 6 — D-24).** O pacing vem dos timestamps RTP; o resampler é
+> apenas correção de deriva.
 
 #### Dependências de driver e experiência de instalação
 
 | Dispositivo | V1 | Verificação | Se ausente |
 | --- | --- | --- | --- |
-| Câmera virtual | Filtro próprio (user-mode) instalado junto com o app | Enumeração + frame de teste | Instalação automática no setup (por usuário) |
-| Microfone virtual | Driver de áudio virtual de terceiro (ex.: VB-Cable), instalado pelo usuário (licenciamento a definir) | Enumeração dos endpoints + teste de tom | Wizard com link oficial, checagem de assinatura e bloqueio do modo áudio |
+| Câmera virtual | Media source MF próprio, user-mode, instalado por usuário via **MSI** | Enumeração + frame de teste | Instalação do MSI no setup (por usuário) |
+| Microfone virtual | **VB-CABLE** (link-only), instalado pelo usuário; o app não redistribui o driver | Enumeração dos endpoints + verificação de assinatura + teste de tom | Wizard com link oficial e modo **somente vídeo** |
 
-O app **não redistribui** driver de áudio de terceiros sem licença de redistribuição; a V1 detecta, verifica e orienta a instalação pelo site oficial. O modo "somente vídeo" permanece funcional se o driver de áudio não estiver disponível, com aviso claro.
+O app **não redistribui** driver de áudio de terceiros. A V1 detecta, verifica a assinatura e orienta a instalação pelo site oficial da VB-Audio. O modo "somente vídeo" é o **plano B aprovado** e permanece funcional se o driver de áudio não estiver disponível, com aviso claro (D-audio-licensing).
 
 ### 5.7 Sincronização, latência e qualidade
 
@@ -376,7 +403,16 @@ Orçamento de latência (p95, rede local 5 GHz sem congestionamento):
 | Conversão + buffer compartilhado | 3 ms |
 | Filtro/consumidor | 17 ms |
 | **Total vídeo (vidro a vidro)** | **≈ 100 ms (meta ≤ 150 ms)** |
-| **Áudio (microfone → dispositivo virtual)** | **≤ 120 ms** |
+| **Áudio (microfone → dispositivo virtual)** | **≤ 120 ms — meta de F2/F3, não gate de F0** |
+
+> **Emenda F0 (finding 7 — D-20, D-29).** O gate de latência julga o **p95 bruto
+> captura-até-consumidor**; o harness floor medido e o valor corrigido pelo floor são
+> publicados ao lado, nunca no lugar do bruto. Uma falha causada pelo procedimento de
+> captura é distinguida de uma regressão do produto na atribuição de latência.
+
+> **Emenda F0 (finding 10 — D-31).** A meta de ≤ 120 ms de áudio não é gateável em F0:
+> ela exige o caminho real de captura do celular e é carregada para F2/F3 como meta de
+> produto. F0 mede latência de vídeo apenas.
 
 Sincronização: timestamps RTP (clock comum) guiam a apresentação; áudio é o relógio mestre do desktop. Deriva-alvo de até 20 ms entre áudio e vídeo ao longo de 1 h; 100 ms é o limite rígido que encerra a sessão com `media_failure`. Áudio e vídeo nunca são misturados em um único buffer.
 
@@ -387,6 +423,11 @@ Adaptação: controle de bitrate por perda/RTT; redução de resolução antes d
 - **Nenhum estado de sessão é persistido** em nenhum dos lados: sem banco, sem arquivo, sem preferências de pareamento, sem Keystore, sem registro de dispositivo, sem histórico, sem retomada.
 - Chaves privadas, tokens e fingerprints vivem apenas em memória e são destruídos ao encerrar a sessão.
 - O desktop grava no registro apenas o necessário para o **registro COM do dispositivo virtual** (artefato de instalação, não de sessão).
+- A prova de ausência de resíduo cobre **dois casos com o mesmo método**: depois do encerramento normal da sessão e depois do reinício do aplicativo. O segundo caso é onde um bug de persistência se esconde (D-33).
+
+> **Emenda F0 (finding 13 — D-33).** Provar ausência de resíduo só depois do fim normal
+> não prova nada sobre o reinício. As duas inspeções usam o mesmo método e o relatório
+> declara o que foi varrido em cada uma.
 - Preferências puramente visuais (ex.: resolução preferida, manter tela ligada) podem existir, mas não contêm identificadores, IPs ou histórico de conexões.
 - Diagnóstico é local e opcional: métricas agregadas, sem conteúdo de mídia, com retenção de 24 h e exportação manual. Nenhum dado sai do dispositivo.
 
@@ -411,7 +452,11 @@ Adaptação: controle de bitrate por perda/RTT; redução de resolução antes d
 ### 5.10 Distribuição, assinatura e desenvolvimento
 
 - **Android**: APK/AAB assinado, canal interno para beta, `minSdk` 29 (Android 10) e `targetSdk` 36.
-- **Windows**: MSIX assinado (Authenticode), instalação por usuário, x64; regra de firewall apenas para perfil de rede privada; atualização via App Installer.
+- **Windows**: **MSI** assinado (Authenticode), instalação por usuário, x64; regra de firewall apenas para perfil de rede privada. O registro de câmera virtual do Windows 11 **não é suportado em MSIX**, então o pacote é MSI.
+
+> **Emenda F0 (finding 3 — D-10).** O formato de instalação muda de MSIX para MSI: o
+> registro de virtual camera em MSIX não é suportado e o pedido de suporte no WinAppSDK
+> foi encerrado. A atualização deixa de depender do App Installer.
 - **Desenvolvimento no Linux**: o workspace Rust (sinalização, mídia, protocolo e UI Slint) e o app Kotlin compilam e rodam no Linux. As partes Windows (Media Foundation, WASAPI, injeção) ficam atrás de traits, com backends alternativos no Linux (OpenH264 e sinks nulos/arquivo), o que permite testar o pipeline completo em CI sem Windows. Injeção real, drivers e compatibilidade com apps consumidores exigem um runner Windows 11 com dispositivo de áudio, além da matriz física de celulares.
 - **Versionamento de protocolo**: `version` no QR e nas mensagens; um app rejeita versões maiores que a suportada, sem tentativa de compatibilidade implícita.
 
@@ -425,7 +470,7 @@ Adaptação: controle de bitrate por perda/RTT; redução de resolução antes d
 | Câmera virtual não aparecer em algum app relevante | Alto — quebra o critério de aceite na prática | Média | Matriz de compatibilidade como gate; backend alternativo com a API de câmera virtual do Windows 11; backend selecionável no diagnóstico |
 | Pipeline de recepção próprio em Rust (jitter buffer, decode, sincronização) | Alto — áudio cortado ou vídeo instável sob perda/jitter | Média | Spike F0 com perda e jitter emulados e gates de qualidade; decode por hardware; fallback para GStreamer (`gstreamer-rs`) mantendo o app em Rust |
 | Latência ou uso de CPU acima do orçamento (conversão CameraX + pipeline de decode) | Médio — experiência pior que webcam física | Média | Spike com medição antes do desenvolvimento pleno; H.264 por hardware; limite de 720p30 por padrão; fallback para capturer Camera2 |
-| Filtro de câmera virtual em C++ (exceção à stack Rust) | Baixo — componente isolado, sem lógica de produto | Baixa | Decisão fechada: filtro MIT vendorizado + produtor em Rust; reescrita em Rust apenas na V2; assinatura e matriz de compatibilidade como gate |
+| Filtro DirectShow de fallback em C++ (exceção à stack Rust) | Baixo — componente isolado, sem lógica de produto | Baixa | O backend primário é o media source MF; o filtro DirectShow é fallback construído apenas quando uma célula da matriz falha; assinatura e matriz de compatibilidade como gate |
 | Handshake ou pinning implementado incorretamente | Alto — MITM ou sessão não autenticada | Baixa | TLS 1.3 sem fallback, pinning exato, testes de replay/MITM, revisão de segurança dedicada, sem armazenamento de chaves |
 | Substituição de sessão usada para sequestro (foto do QR) | Médio — sessão alheia assume o desktop | Média | TTL de 120 s, token de uso único, rede local, aviso visível/sonoro na substituição, encerramento imediato no celular anterior |
 | Firewall/antivírus bloquear listener ou injeção | Médio — falha de conexão difícil de diagnosticar | Média | Regra de firewall no instalador, mensagens acionáveis, diagnóstico de porta/interface, teste em máquinas com antivírus comum |
@@ -444,7 +489,7 @@ Adaptação: controle de bitrate por perda/RTT; redução de resolução antes d
 | **F1 — Núcleo de sessão e protocolo** | Modelo de mensagens, máquina de estados, epoch/substituição, validação, QR, harness headless, testes de invariantes | Native + QA | 20 dias-dev | Handshake e substituição passando no harness Linux; zero persistência comprovado |
 | **F2 — App Android** | UI, permissões, serviço em primeiro plano, câmera, áudio, QR, estados de erro, térmica/bateria | Android | 30 dias-dev | Sessão estável de 30 min em 3 aparelhos; captura somente microfone |
 | **F3 — Mídia e injeção no Windows** | Media core receive-only em Rust, jitter buffer, decode MF/OpenH264, sincronização, ponte NV12, filtro, ponte WASAPI, detecção de drivers | Native | 40 dias-dev | Câmera e microfone virtuais funcionando na matriz de apps; RTP de mídia de saída = 0; qualidade sob perda dentro do gate |
-| **F4 — App Windows** | Shell Slint, QR, bandeja, diagnóstico, wizard de drivers, firewall, MSIX assinado, updater | Desktop | 20 dias-dev | Instalação limpa em máquina sem drivers, com orientação correta |
+| **F4 — App Windows** | Shell Slint, QR, bandeja, diagnóstico, wizard de drivers, firewall, MSI assinado, updater | Desktop | 20 dias-dev | Instalação limpa em máquina sem drivers, com orientação correta |
 | **F5 — Endurecimento** | Testes de segurança, fuzzing de sinalização, performance, soak 2 h, matriz de dispositivos, acessibilidade, documentação | Todos + Segurança | 25 dias-dev | Todos os critérios de aceite verificados; zero achados críticos |
 | **F6 — Beta e correções** | Beta fechado, coleta local de problemas, correções, release candidate | Todos | 15 dias-dev | Sem incidentes críticos por 2 semanas de beta |
 
@@ -452,7 +497,14 @@ Adaptação: controle de bitrate por perda/RTT; redução de resolução antes d
 
 **Dependências e sequência**:
 
-- F0 bloqueia F1/F2/F3 (decisões de captura, injeção e licenciamento).
+> **Status de F0 (2026-10-23).** F0 foi encerrada com exceções: dois gates ficaram
+> `no_go` (injeção de câmera e pipeline, ambos por ambiente fora de referência) e três
+> ficaram `conditional` (pairing, codec e áudio). O gate de saída **não** foi atingido.
+> F1/F2/F3 seguem `conditional`, com waivers e prazos registrados em
+> `docs/spike/gate-report-f0.md`. A única evidência de matriz é uma célula Google Chrome
+> de 33,2845 s; nenhuma evidência nova foi coletada no encerramento.
+
+- F0 bloqueia F1/F2/F3 (decisões de captura, injeção e licenciamento); após o encerramento com exceções, F1/F2/F3 podem andar sob os waivers C-02/C-04/C-05.
 - F1 bloqueia F2 e F3 (contrato de protocolo).
 - F3 bloqueia F4 (a UI depende dos status de injeção).
 - Revisão de segurança bloqueia F5 → F6.
@@ -531,9 +583,9 @@ Fora do modelo de ameaças: sistema operacional comprometido, aplicativo malicio
 - Desktop envia zero pacotes RTP de mídia durante 30 min (RTCP permitido; asserção contínua).
 - Celular nunca envia áudio de reprodução (tráfego de áudio contém apenas o microfone; teste com música tocando no aparelho).
 - Rede sem internet: sessão funciona; com VPN ativa: sessão recusada com mensagem clara.
-- Perda de pacotes 3%, latência adicional 30 ms: áudio contínuo, vídeo degrada sem congelar > 2 s.
+- Perfil nominal único: 3% de perda uniforme, 30 ms de latência adicional e ±10 ms de jitter, apenas mídia; áudio contínuo, vídeo degrada sem congelar > 2 s.
 - Reinício de qualquer um dos apps: nenhuma sessão é retomada; novo QR necessário.
-- Inspeção do diretório de dados antes/depois: nenhum artefato de sessão.
+- Inspeção de resíduo antes/depois em **dois casos com o mesmo método**: após o encerramento normal e após o reinício do aplicativo; nenhum artefato de sessão em nenhum dos dois.
 
 **Dados de teste**: gerador determinístico de QR/token; vídeo sintético com marcação temporal para medir latência; tom e fala sintética para validar áudio; nenhuma mídia real de usuários em CI.
 
@@ -571,7 +623,7 @@ Não há backend a reverter; o rollback é de **release** e de **configuração 
 **Estratégia de liberação**
 
 - Android: faixas internas → beta fechado → produção com rollout escalonado (5% → 25% → 50% → 100%).
-- Windows: canal beta do MSIX → canal estável; atualização assinada e reversível para a versão anterior (MSIX mantém o pacote anterior disponível para downgrade assistido).
+- Windows: canal beta do MSI → canal estável; atualização assinada e reversível para a versão anterior (o instalador mantém o pacote anterior disponível para downgrade assistido).
 - Protocolo versionado: apps antigos e novos não precisam coexistir por muito tempo, mas versões incompatíveis falham de forma explícita e segura.
 
 **Gatilhos de rollback**
@@ -603,7 +655,7 @@ Não há backend a reverter; o rollback é de **release** e de **configuração 
 | --- | --- | --- | --- |
 | Tempo de pareamento (scan → primeiro frame) | — | ≤ 5 s (p95) | Instrumentação local no harness/beta |
 | Latência vídeo vidro a vidro | — | ≤ 150 ms (p95) | Vídeo sintético com marcação temporal |
-| Latência de áudio | — | ≤ 120 ms (p95) | Loopback com marcação |
+| Latência de áudio | — | ≤ 120 ms (p95) — meta de F2/F3, não gate de F0 | Loopback com marcação |
 | Drift A/V em 1 h | — | ≤ 20 ms | Teste de soak |
 | Sessão contínua sem falha | — | ≥ 95% das sessões de 30 min | Beta |
 | Sucesso de pareamento na primeira tentativa | — | ≥ 95% | Beta |
@@ -702,7 +754,7 @@ Não aplicável: projeto greenfield, sem sistema legado, dados ou usuários a mi
 | # | Questão | Contexto | Dono | Status |
 | --- | --- | --- | --- | --- |
 | 1 | Qual driver de áudio usar e sob qual licença? | Redistribuição pode ser proibida; sem driver não há microfone virtual | Produto/Jurídico | 🔴 Aberto — bloqueador |
-| 2 | O filtro DirectShow é visível em todos os apps-alvo? | Se não, adotar backend alternativo do Windows 11 | Native | 🔴 Aberto — gate do spike |
+| 2 | A câmera virtual (media source MF, com fallback DirectShow) é visível em todos os apps-alvo? | O backend primário é o media source MF; o fallback DirectShow é avaliado por célula | Native | 🔴 Aberto — gate do spike (carregado para F3) |
 | 3 | 720p30 é suficiente como padrão de qualidade? | Impacta banda, CPU e percepção | Produto | 🟡 Em discussão |
 | 4 | Front camera por padrão ou traseira? | Uso típico é apontar para o usuário ou para o ambiente | Produto/UX | 🟡 Em discussão |
 | 5 | Áudio mono é aceitável? | Microfone virtual em apps de reunião geralmente é mono | Produto | 🟡 Em discussão |
@@ -724,7 +776,7 @@ Não aplicável: projeto greenfield, sem sistema legado, dados ou usuários a mi
 | F1 | Núcleo de protocolo, máquina de estados, harness | 2 semanas | 2026-11-20 | ⏳ Pendente |
 | F2 | App Android (captura, QR, sessão) | 3 semanas | 2026-12-18 | ⏳ Pendente |
 | F3 | Media core + injeção no Windows | 3 semanas | 2026-12-18 | ⏳ Pendente |
-| F4 | App Windows, drivers, MSIX, firewall | 2 semanas | 2027-01-15 | ⏳ Pendente |
+| F4 | App Windows, drivers, MSI, firewall | 2 semanas | 2027-01-15 | ⏳ Pendente |
 | F5 | Segurança, performance, matriz, soak | 2 semanas | 2027-02-05 | ⏳ Pendente |
 | F6 | Beta fechado e release candidate | 2 semanas | 2027-02-26 | ⏳ Pendente |
 
