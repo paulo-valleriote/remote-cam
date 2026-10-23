@@ -8,7 +8,7 @@
 | `chosen_option` | `mf_virtual_camera` (recommended; not yet `accepted`) |
 | `approver` | Technical lead — **not yet signed**; the record cannot be `accepted` before the matrix exists |
 | `decided_at` | — |
-| `evidence_refs` | `desktop/crates/injection/src/mf_virtual_camera.rs`, `desktop/crates/injection/src/registration.rs`, `spikes/tools/analysis/injection.py`, `spikes/f0-camera-injection/run_matrix.py`, `spikes/evidence/injection/injection_matrix.json` (**not yet produced**) |
+| `evidence_refs` | `desktop/crates/injection/src/mf_virtual_camera.rs`, `desktop/crates/injection/src/registration.rs`, `spikes/tools/analysis/injection.py`, `spikes/f0-camera-injection/run_matrix.py`, `spikes/evidence/injection/runs/mf_virtual_camera/chrome/run.json` (**partial run**), `spikes/evidence/injection/injection_matrix.json` (**not yet produced**) |
 | `downstream_impact` | The media and injection phase: fixes the frame handoff contract, the installer, and the bitness support obligation |
 
 ## Status note
@@ -24,6 +24,14 @@ from this host would be fabricating gate evidence.
 What *is* settled and recorded here: the option set, the selection rule, the
 implementation status of each option, the licensing impact, and the exact
 procedure that turns this draft into an accepted record.
+
+**Partial evidence recorded at F0 closure (2026-10-23).** One matrix cell was
+collected with Google Chrome 124.0.6367.208 (64-bit, 1280×720@30) under
+`spikes/evidence/injection/runs/mf_virtual_camera/chrome/`: 974 observations
+over 33.2845 s. It proves the media source was visible to one consumer for a
+short window; it does not satisfy the 1800 s per-cell, five-category, 32-bit
+criterion, so it does not select a backend. No further matrix evidence was
+collected at closure.
 
 ## Options considered
 
@@ -93,6 +101,7 @@ for **every** application, so the two backends are compared like with like.
 | 9 matrix tests | `spikes/f0-camera-injection/tests/test_matrix_schema.py` | full coverage per evaluated backend, a reason on every `not_tested` cell, a derivable decision |
 | 15 marker-decoder tests | `spikes/tools/tests/test_marker.py` | the Python decoder agrees with the Rust producer |
 | Windows typecheck | `cargo clippy -p remotecam-injection --target x86_64-pc-windows-msvc -D warnings` | the media source, the registration and the driver example are free of compile and lint errors for the target |
+| Google Chrome partial run | `spikes/evidence/injection/runs/mf_virtual_camera/chrome/` | the media source was visible to one 64-bit consumer (Chrome 124) for 33.2845 s at 1280×720@30; not a gate cell |
 
 None of that is gate evidence. It is the apparatus the gate will use, and it is
 tested so that the 30-minute run measures the camera rather than the harness.
@@ -101,7 +110,7 @@ tested so that the 30-minute run measures the camera rather than the harness.
 
 | Missing | Why | Consequence |
 | --- | --- | --- |
-| `spikes/evidence/injection/injection_matrix.json` | requires the Windows 11 reference machine | the backend cannot be *selected*, only recommended |
+| `spikes/evidence/injection/injection_matrix.json` | requires the remaining five application cells and 30-minute runs on the reference machine; the Chrome cell is partial evidence only | the backend cannot be *selected*, only recommended |
 | Per-application cells for both bitnesses | requires Chrome, a 32-bit Chromium build, the conferencing client, OBS, Windows Camera, the screen recorder | the coverage rule cannot be satisfied |
 | The multi-consumer observation | requires two consumers opening the camera at once | `multi_consumer_observation.outcome` stays `not_tested` |
 | Q-1 answer | requires a real `HKCU` write to be accepted or refused | the installer decision stays open |
@@ -165,8 +174,9 @@ No frame rate above 30 fps is claimed at any size.
    record must be rewritten as the fallback decision — not patched.
 
 Until step 6, the honest statement is: **Media Foundation is the recommended
-primary backend; the DirectShow filter is the recommended fallback; neither has
-been observed delivering a frame to any application.**
+primary backend; the DirectShow filter is the recommended fallback. Only Google
+Chrome has been observed receiving frames, for 33.3 s; no backend has completed
+the matrix.**
 
 ## Reusable findings
 
