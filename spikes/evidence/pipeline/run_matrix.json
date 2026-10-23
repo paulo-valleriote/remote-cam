@@ -1,0 +1,42 @@
+{
+  "generated_at": "2026-10-22T21:48:56+00:00",
+  "note": "Windows 11 reference (WSL2 access) — Rust/MSVC/FFmpeg/Python installed, pipeline executes, preflight detects hardware_accelerated=true but output_format=other (NV12 verification pending via probe_hardware_decode.ps1). Gate blocked until PC-1 satisfied.",
+  "reason": "PC-1 failed: hardware_accelerated=true, output_format=other",
+  "required": "Windows 11 x64 with a verified hardware H.264 decoder, FFmpeg >= 8.1 and a consumer application",
+  "scenarios": [
+    {
+      "criterion": "raw p95 <= 150 ms",
+      "duration_s_each": 600,
+      "runs": 3,
+      "scenario": "latency"
+    },
+    {
+      "criterion": "zero dropouts >= 50 ms",
+      "duration_s": 600,
+      "profile": "nominal-3pct-30ms-10ms",
+      "scenario": "loss"
+    },
+    {
+      "duration_s": 600,
+      "loss_pct": 0,
+      "scenario": "loss-control"
+    },
+    {
+      "criterion": "cpu p95 <= 15 %, private max <= 400 MB",
+      "duration_s": 1800,
+      "scenario": "resources"
+    },
+    {
+      "criterion": "<= 20 ms/h with a certifying interval",
+      "duration_s": 1800,
+      "marker_period_s": 2,
+      "scenario": "drift"
+    },
+    {
+      "criterion": "recovery <= 2 s, bounded buffer",
+      "scenario": "stall",
+      "stall_s": 5
+    }
+  ],
+  "status": "blocked_by_environment"
+}

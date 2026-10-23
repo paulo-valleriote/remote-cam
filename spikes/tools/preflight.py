@@ -57,6 +57,8 @@ def _run(command: list[str], *, timeout: float = 5.0) -> str | None:
             command,
             capture_output=True,
             text=True,
+            encoding="latin-1",
+            errors="replace",
             timeout=timeout,
             check=False,
         )
@@ -463,6 +465,8 @@ def _windows_hardware_verification() -> dict[str, Any]:
             ],
             capture_output=True,
             text=True,
+            encoding="latin-1",
+            errors="replace",
             timeout=120,
             check=False,
         )

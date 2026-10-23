@@ -1,0 +1,42 @@
+[package]
+name = "f0-pipeline"
+version = "0.1.0"
+edition = "2024"
+license = "Proprietary"
+publish = false
+default-run = "f0-pipeline"
+
+# NON-PRODUCTION — F0 risk-reduction spike (FR-039). Nothing here merges into
+# `desktop/` or `mobile/`.
+
+[dependencies]
+openh264 = "0.9.9"
+qrcode = "0.14.1"
+rand = "0.10.3"
+remotecam-injection = { path = "../../desktop/crates/injection" }
+remotecam-media-core = { path = "../../desktop/crates/media-core" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", features = [
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }
+
+[[bin]]
+name = "f0-pipeline"
+path = "src/main.rs"
+
+[[bin]]
+name = "synthetic-source"
+path = "src/bin/synthetic_source.rs"

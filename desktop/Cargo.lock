@@ -4477,8 +4477,11 @@ dependencies = [
 name = "remotecam-media-core"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "criterion",
  "openh264",
+ "remotecam-injection",
+ "rtc",
  "sha2",
  "tokio",
  "webrtc",

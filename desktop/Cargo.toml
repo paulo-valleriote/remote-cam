@@ -18,6 +18,12 @@ publish = false
 
 [workspace.dependencies]
 webrtc = "=0.21.1"
+# `webrtc` 0.21 does not re-export several of its own configuration types (the
+# media engine, transceiver direction and receiver-report selector). Adding its
+# exact core crate keeps a single version in the workspace and avoids vendoring
+# type wrappers for a non-production spike.
+rtc = "=0.21.1"
+async-trait = "=0.1.92"
 rustls = "=0.23.46"
 rcgen = "=0.14.10"
 tokio = "=1.54.1"
