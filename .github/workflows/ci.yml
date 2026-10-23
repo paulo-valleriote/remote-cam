@@ -9,6 +9,40 @@ permissions:
   contents: read
 
 jobs:
+  format:
+    name: Rust formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.99.1"
+          components: rustfmt
+
+      - name: Check Rust formatting
+        run: |
+          set -euo pipefail
+          manifests=(
+            desktop/Cargo.toml
+            spikes/f0-handshake/Cargo.toml
+            spikes/f0-pipeline/Cargo.toml
+          )
+          # The virtual-audio harness lands in its own change; check it when present.
+          if [ -f spikes/f0-virtual-audio/Cargo.toml ]; then
+            manifests+=(spikes/f0-virtual-audio/Cargo.toml)
+          fi
+          status=0
+          for manifest in "${manifests[@]}"; do
+            echo "::group::cargo fmt --manifest-path $manifest --all -- --check"
+            if ! cargo fmt --manifest-path "$manifest" --all -- --check; then
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$status"
+
   rust:
     name: Rust
     runs-on: ubuntu-latest
@@ -22,7 +56,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.99.1"
-          components: rustfmt, clippy
+          components: clippy
 
       - name: Cache Cargo artifacts
         uses: Swatinem/rust-cache@v2
@@ -34,9 +68,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libfontconfig1-dev
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -46,14 +77,12 @@ jobs:
       - name: Test and lint the pairing harness
         working-directory: .
         run: |
-          cargo fmt --manifest-path spikes/f0-handshake/Cargo.toml -- --check
           cargo clippy --manifest-path spikes/f0-handshake/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path spikes/f0-handshake/Cargo.toml
 
       - name: Test and lint the pipeline harness
         working-directory: .
         run: |
-          cargo fmt --manifest-path spikes/f0-pipeline/Cargo.toml -- --check
           cargo clippy --manifest-path spikes/f0-pipeline/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path spikes/f0-pipeline/Cargo.toml
 
