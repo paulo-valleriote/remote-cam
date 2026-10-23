@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -25,7 +26,17 @@ android {
 dependencies {
     implementation(project(":protocol"))
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.lifecycle.runtime)
+    implementation(libs.webrtc.android)
+    implementation(libs.zxing.core)
+    implementation(libs.okhttp)
+    implementation(libs.okio)
+    implementation(libs.coroutines.android)
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotlin.test.junit5)
+    testImplementation(libs.robolectric)
 }
