@@ -1,0 +1,30 @@
+{
+  "application_id": "chrome",
+  "capture_method": "getusermedia_mediarecorder",
+  "capture_file": "capture.webm",
+  "product_name": "Google Chrome",
+  "version": "124.0.6367.208",
+  "bitness": "64_bit",
+  "requested": {
+    "width": 1280,
+    "height": 720,
+    "frame_rate": 30
+  },
+  "recorded_duration_s": 33284.5,
+  "discarded_frames": 0,
+  "captured_at": "2026-10-23T17:42:56.520Z",
+  "observed": {
+    "observations_source": "browser_request_video_frame_callback",
+    "cameras": [
+      "Redmi Note 14 Pro 5G (Câmera Virtual do Windows)",
+      "OBS Virtual Camera"
+    ],
+    "negotiated": {
+      "width": 1280,
+      "height": 720,
+      "frame_rate": 30
+    },
+    "mime_type": "video/webm;codecs=vp9",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+  }
+}
