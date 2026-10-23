@@ -202,7 +202,12 @@ pub mod windows_sampler {
             let mut idle = FILETIME::default();
             let mut system_kernel = FILETIME::default();
             let mut system_user = FILETIME::default();
-            GetSystemTimes(Some(&mut idle), Some(&mut system_kernel), Some(&mut system_user)).ok()?;
+            GetSystemTimes(
+                Some(&mut idle),
+                Some(&mut system_kernel),
+                Some(&mut system_user),
+            )
+            .ok()?;
             let system_ticks = filetime_ticks(system_kernel) + filetime_ticks(system_user);
 
             let (previous_process, previous_system, previous_wall) = previous.unwrap_or((0, 0, 0));
