@@ -130,6 +130,12 @@ jobs:
       - name: Validate the recorded evidence
         run: python spikes/tools/validation/validate_evidence.py --evidence-root spikes/evidence
 
+      - name: Run redaction audit across all spike artefacts
+        run: python spikes/tools/redaction_audit.py
+
+      - name: Check README/Makefile docs consistency
+        run: bash scripts/check-docs-consistency.sh
+
   android:
     name: Android contract module
     runs-on: ubuntu-latest
