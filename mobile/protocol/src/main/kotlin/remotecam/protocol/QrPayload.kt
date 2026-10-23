@@ -187,6 +187,9 @@ class QrPayload(
             )
         }
 
+        /** Convenience decode without timestamp validation (for testing). */
+        fun decode(input: ByteArray): QrDecodeResult = decode(input, System.currentTimeMillis() / 1000)
+
         private class EndpointFailure(val reason: ReasonCode) : Exception()
 
         private fun decodeEndpoint(input: ByteArray, offset: Int): QrEndpoint {
@@ -245,4 +248,31 @@ class QrPayload(
             }
         }
     }
+
+    /** Check if payload is structurally valid (no timestamp check). */
+    fun isValid(): Boolean {
+        return try {
+            val result = QrPayload.decode(encode())
+            result is QrDecodeResult.Accepted
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Check if payload is expired. */
+    fun isExpired(): Boolean {
+        return expiresAt <= System.currentTimeMillis() / 1000
+    }
+
+    /** Check if payload has at least one private endpoint. */
+    fun hasPrivateEndpoints(): Boolean = endpoints.isNotEmpty()
+
+    /** TLS fingerprint as hex string. */
+    val tlsFingerprintHex: String = tlsFingerprint.joinToString("") { "%02x".format(it) }
+
+    /** Pairing token as hex string. */
+    val pairingTokenHex: String = pairingToken.joinToString("") { "%02x".format(it) }
+
+    /** Session ID as hex string. */
+    val sessionIdHex: String = sessionId.joinToString("") { "%02x".format(it) }
 }

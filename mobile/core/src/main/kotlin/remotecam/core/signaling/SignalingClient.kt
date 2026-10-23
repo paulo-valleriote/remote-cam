@@ -1,27 +1,18 @@
 package remotecam.core.signaling
 
 import android.content.Context
-import android.util.Base64
 import android.util.Log
-import com.google.zxing.BinaryBitmap
-import com.google.zxing.MultiFormatReader
-import com.google.zxing.Result
-import com.google.zxing.common.HybridBinarizer
-import com.google.zxing.client.j2se.BufferedImageLuminanceSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import remotecam.core.transport.PeerConnectionFactoryProvider
 import remotecam.protocol.QrPayload
-import remotecam.protocol.ReasonCode
 import remotecam.protocol.SignalingMessage
 import java.net.URL
 import java.security.MessageDigest
@@ -50,7 +41,6 @@ class SignalingClient(
     private var webSocket: WebSocket? = null
     private var okHttpClient: OkHttpClient? = null
     private val scope = CoroutineScope(Dispatchers.IO + Job())
-    private val messageChannel = Channel<SignalingMessage>(100)
     private var isConnected = false
     private var pairingCallback: ((QrPayload) -> Unit)? = null
     private var sessionId: String? = null
@@ -97,38 +87,48 @@ class SignalingClient(
     fun scanQrCode(rawBytes: ByteArray): Boolean {
         return try {
             // Parse QR payload using the protocol library
-            val payload = QrPayload.decode(rawBytes)
+            val result = QrPayload.decode(rawBytes)
 
-            // Validate the payload
-            if (!payload.isValid()) {
-                Log.e(TAG, "QR payload validation failed")
-                return false
+            when (result) {
+                is remotecam.protocol.QrDecodeResult.Accepted -> {
+                    val payload = result.payload
+
+                    // Validate the payload
+                    if (!payload.isValid()) {
+                        Log.e(TAG, "QR payload validation failed")
+                        return false
+                    }
+
+                    // Check expiry
+                    if (payload.isExpired()) {
+                        Log.e(TAG, "QR code expired")
+                        return false
+                    }
+
+                    // Check private endpoints
+                    if (!payload.hasPrivateEndpoints()) {
+                        Log.e(TAG, "No private endpoints in QR payload")
+                        return false
+                    }
+
+                    // Extract fingerprint and token
+                    this.pinnedFingerprint = payload.tlsFingerprintHex
+                    this.pairingToken = payload.pairingTokenHex
+                    this.sessionId = payload.sessionIdHex
+
+                    Log.d(TAG, "QR validated: session=${payload.sessionIdHex}, endpoints=${payload.endpoints.size}")
+
+                    // Connect to the first private endpoint
+                    val endpoint = payload.endpoints.first()
+                    connectToEndpoint(endpoint.addressString() ?: return false)
+
+                    true
+                }
+                is remotecam.protocol.QrDecodeResult.Rejected -> {
+                    Log.e(TAG, "QR decode rejected: ${result.reason}")
+                    false
+                }
             }
-
-            // Check expiry
-            if (payload.isExpired()) {
-                Log.e(TAG, "QR code expired")
-                return false
-            }
-
-            // Check private endpoints
-            if (!payload.hasPrivateEndpoints()) {
-                Log.e(TAG, "No private endpoints in QR payload")
-                return false
-            }
-
-            // Extract fingerprint and token
-            this.pinnedFingerprint = payload.tlsFingerprintHex
-            this.pairingToken = payload.pairingTokenHex
-            this.sessionId = payload.sessionIdHex
-
-            Log.d(TAG, "QR validated: session=${payload.sessionIdHex}, endpoints=${payload.endpoints.size}")
-
-            // Connect to the first private endpoint
-            val endpoint = payload.endpoints.first()
-            connectToEndpoint(endpoint)
-
-            true
         } catch (e: Exception) {
             Log.e(TAG, "QR decode failed", e)
             false
@@ -219,11 +219,11 @@ class SignalingClient(
                     handleIceCandidate(message)
                 }
                 is SignalingMessage.Close -> {
-                    Log.d(TAG, "Received close: ${message.reasonCode}")
+                    Log.d(TAG, "Received close: ${message.code}")
                     close()
                 }
                 is SignalingMessage.Error -> {
-                    Log.e(TAG, "Received error: ${message.reasonCode}")
+                    Log.e(TAG, "Received error: ${message.code}")
                     close()
                 }
                 else -> {
@@ -289,7 +289,7 @@ class SignalingClient(
             override fun onCreateSuccess(sessionDescription: org.webrtc.SessionDescription) {}
             override fun onSetSuccess() {
                 // Create answer
-                val answer = pc.createAnswer(MediaConstraints()).get()
+                val answer = pc.createAnswer(org.webrtc.MediaConstraints()).get()
                 pc.setLocalDescription(object : org.webrtc.PeerConnection.SdpObserver {
                     override fun onCreateSuccess(sessionDescription: org.webrtc.SessionDescription) {}
                     override fun onSetSuccess() {
@@ -340,19 +340,5 @@ class SignalingClient(
         pinnedFingerprint = null
         pairingToken = null
         factoryProvider.release()
-    }
-}
-
-/**
- * Extension to decode QR from raw bytes using ZXing Result.getBytes().
- * This ensures we never use getText() which assumes UTF-8.
- */
-fun decodeQrFromBytes(rawBytes: ByteArray): QrPayload? {
-    return try {
-        // The rawBytes are already the decoded QR payload
-        // In a real implementation, this would come from Result.getBytes()
-        QrPayload.decode(rawBytes)
-    } catch (e: Exception) {
-        null
     }
 }

@@ -1,11 +1,9 @@
 package remotecam.core.transport
 
 import android.content.Context
-import android.net.NetworkCapabilities
 import android.util.Log
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
-import org.webrtc.CameraVideoCapturer
 import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.EglBase
@@ -14,11 +12,9 @@ import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpTransceiver
-import org.webrtc.SdpSemantics
 import org.webrtc.VideoCapturer
 import org.webrtc.VideoEncoderFactory
 import org.webrtc.VideoTrack
-import org.webrtc.audio.JavaAudioDeviceModule
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -28,7 +24,6 @@ import java.util.concurrent.Executors
  * Creates a WebRTC PeerConnectionFactory configured for:
  * - SEND_ONLY transceivers for audio and video with "remotecam" stream id
  * - Empty iceServers (host candidates only, no STUN/TURN)
- * - networkIgnoreMask for cellular/VPN
  * - H.264 preferred / VP8 fallback negotiation
  *
  * This is a spike harness, not production code.
@@ -70,18 +65,17 @@ class PeerConnectionFactoryProvider(
             return
         }
 
-        // Initialize WebRTC with custom audio device module
+        // Initialize WebRTC
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context)
                 .setEnableInternalTracer(true)
-                .setFieldTrials("WebRTC-H264HighProfile/Enabled/")
                 .createInitializationOptions()
         )
 
         // Create EGL base for video encoding
         eglBase = EglBase.create()
 
-        // Create encoder/decoder factories with H.264 support
+        // Create encoder/decoder factories
         videoEncoderFactory = DefaultVideoEncoderFactory(
             eglBase!!.eglBaseContext,
             true,  // enable H.264 high profile
@@ -90,7 +84,7 @@ class PeerConnectionFactoryProvider(
         videoDecoderFactory = DefaultVideoDecoderFactory(eglBase!!.eglBaseContext)
 
         // Create audio device module
-        val audioDeviceModule = JavaAudioDeviceModule.builder(context).createAudioDeviceModule()
+        val audioDeviceModule = org.webrtc.audio.JavaAudioDeviceModule.builder(context).createAudioDeviceModule()
 
         // Create PeerConnectionFactory
         peerConnectionFactory = PeerConnectionFactory.builder()
@@ -115,60 +109,15 @@ class PeerConnectionFactoryProvider(
         // Configuration: host candidates only, no STUN/TURN
         val config = PeerConnection.RTCConfiguration().apply {
             iceServers = emptyList() // No STUN/TURN - host candidates only
-            iceTransportPolicy = PeerConnection.IceTransportPolicy.ALL
-            bundlePolicy = PeerConnection.BundlePolicy.MAX_BUNDLE
-            rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
-            // Ignore cellular and VPN interfaces
-            networkIgnoreMask = NetworkCapabilities.TRANSPORT_CELLULAR or NetworkCapabilities.TRANSPORT_VPN
-            // Disable ICE candidate pooling to reduce memory
-            iceCandidatePoolSize = 0
-            // Disable continual gathering
-            continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
-            // SDP semantics
-            sdpSemantics = SdpSemantics.UNIFIED_PLAN
         }
 
         // Media constraints
         val constraints = MediaConstraints()
-        constraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
-        constraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
 
         peerConnection = factory.createPeerConnection(config, constraints, observer)
 
-        // Set codec preferences: H.264 preferred over VP8
-        setCodecPreferences()
-
         Log.d(TAG, "PeerConnection created with host-only ICE")
         return peerConnection!!
-    }
-
-    /**
-     * Configure codec preferences: H.264 before VP8.
-     * This must be called after creating the PeerConnection.
-     */
-    private fun setCodecPreferences() {
-        val pc = peerConnection ?: return
-
-        // Get the video transceiver
-        val transceivers = pc.transceivers
-        for (transceiver in transceivers) {
-            if (transceiver.receiver.track() is VideoTrack) {
-                // Set H.264 as preferred codec
-                val capabilities = transceiver.receiver.getCapabilities(org.webrtc.RtpTransceiver.MediaType.VIDEO)
-                val h264Codecs = capabilities.codecs.filter { it.name.equals("H264", ignoreCase = true) }
-                val vp8Codecs = capabilities.codecs.filter { it.name.equals("VP8", ignoreCase = true) }
-
-                // Reorder: H.264 first, then VP8
-                val preferredCodecs = mutableListOf<org.webrtc.RtpCodecCapability>()
-                preferredCodecs.addAll(h264Codecs)
-                preferredCodecs.addAll(vp8Codecs)
-                preferredCodecs.addAll(capabilities.codecs.filter { !it.name.equals("H264", ignoreCase = true) && !it.name.equals("VP8", ignoreCase = true) })
-
-                transceiver.setCodecPreferences(preferredCodecs)
-                Log.d(TAG, "Codec preferences set: H.264 preferred over VP8")
-                break
-            }
-        }
     }
 
     /**
@@ -236,8 +185,6 @@ class PeerConnectionFactoryProvider(
     fun createOffer(): org.webrtc.SessionDescription {
         val pc = peerConnection ?: throw IllegalStateException("No PeerConnection")
         val constraints = MediaConstraints()
-        constraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
-        constraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
         return pc.createOffer(constraints).get()
     }
 
