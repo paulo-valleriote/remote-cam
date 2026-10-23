@@ -1,7 +1,7 @@
 # Gate 3 — Desktop receive pipeline
 
 **Gate**: desktop receive pipeline · **Wave**: 2 · **Depends on**: virtual camera injection (gate 1),
-pairing handshake (gate 2) · **Accountable role**: technical lead · **Target review**: 2026-11-06
+pairing handshake (gate 2) · **Accountable role**: technical lead · **Review**: 2026-10-23 — F0 closed with exceptions (gate `no_go`, carried to F3)
 
 **Preconditions**: PC-1 (verified hardware H.264 decode), PC-2 (raw p95 is the gated statistic and
 the floor is published), PC-3 (audio continuity is measured by dropout analysis **and** a scripted
@@ -193,7 +193,7 @@ The pipeline crate and its deterministic units are complete and tested on Linux 
   sampler, drift and stall analysis, run matrix;
 * `spikes/tools`: latency/floor/stage analysers and the pipeline metric tests.
 
-**Current status (2026-10-22)**: The pipeline crate is complete and tested on Linux CI. The reference Windows 11 host (accessed via WSL2) has the full toolchain verified: rustup/MSVC, Python 3.15 (`py`), FFmpeg 9.0.1, and the `f0-pipeline` binary executes correctly. `run_matrix.json` still records `blocked_by_environment` because `preflight` detects `hardware_accelerated=true` but `output_format=other`: the `probe_hardware_decode.ps1` PowerShell probe must confirm NV12 output before the gate can proceed. `D-quality-default.md` remains `draft`.
+**Current status (2026-10-23)**: The pipeline crate is complete and tested on Linux CI. The reference Windows 11 host (accessed via WSL2) has the full toolchain verified, but `environment.json` records `hardware_accelerated=false`, `decoder_found=false` and `output_format=other`: the `probe_hardware_decode.ps1` probe failed with an `MFTEnumEx` cast error, so NV12 output was never demonstrated. `run_matrix.json` remains `blocked_by_environment`, the gate is `no_go` and its obligations are carried to F3. `D-quality-default.md` remains `draft`.
 
 To close the gate: run this procedure on the Windows 11 reference machine, record the five evidence
 groups above, then complete `D-quality-default.md` and issue the verdict at the phase review.

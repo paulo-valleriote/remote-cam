@@ -13,7 +13,7 @@
 
 ## Status note
 
-This record is **`draft`**, deliberately. The reference Windows 11 host is accessible via WSL2; Rust (rustup), MSVC (`link.exe`), Python 3.15 (`py`), FFmpeg 9.0.1, and the pipeline binary (`f0-pipeline.exe`) are installed and verified. The pipeline executes and writes evidence, but `run_matrix.json` remains `blocked_by_environment` because the hardware-decode verification (`probe_hardware_decode.ps1`) has not yet confirmed NV12 output (`output_format=other`). A named approver and measured `latency_summary.json`/`resource_summary.json` are still required for `accepted`.
+This record is **`draft`**, deliberately. The reference Windows 11 host is accessible via WSL2; Rust (rustup), MSVC (`link.exe`), Python 3.15 (`py`), FFmpeg 9.0.1, and the pipeline binary (`f0-pipeline.exe`) are installed and verified. The pipeline executes and writes evidence, but `run_matrix.json` remains `blocked_by_environment` because the hardware-decode verification (`probe_hardware_decode.ps1`) has not confirmed NV12 output (`output_format=other`, `hardware_accelerated=false`). A named approver and measured `latency_summary.json`/`resource_summary.json` are still required for `accepted`.
 
 What is settled here: the option set, the criterion that selects between them, the exact procedure,
 and the evidence that has been produced (pipeline executes, MSVC/link active, preflight detects decoder,
@@ -73,7 +73,7 @@ which enumerates `MFT_CATEGORY_VIDEO_DECODER` with `SYNCMFT|SORTANDFILTER`, enum
 run by `make preflight` and by the pipeline harness before any measurement; the result is recorded in
 `environment.json.hardware_decode_verification` and `run_matrix.json`.
 
-**Current answer: partial verification.** The reference Windows 11 host (WSL2 access) has Rust/MSVC/FFmpeg installed, pipeline binary executes, and `preflight` detects `hardware_accelerated=true` but `output_format=other`. NV12 verification (`probe_hardware_decode.ps1`) is still pending. The Linux CI cannot fully verify PC-1.
+**Current answer: not verified.** The reference Windows 11 host (WSL2 access) has Rust/MSVC/FFmpeg installed and the pipeline binary executes, but `environment.json` records `hardware_accelerated=false`, `decoder_found=false` and `output_format=other`; the `probe_hardware_decode.ps1` probe failed with an `MFTEnumEx` cast error, so NV12 output was never demonstrated. The Linux CI cannot verify PC-1.
 
 ## Evidence that exists today
 

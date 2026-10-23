@@ -54,6 +54,7 @@ Thumbs.db
 spikes/evidence/**/*.wav
 spikes/evidence/**/*.mp4
 spikes/evidence/**/*.mkv
+spikes/evidence/**/*.webm
 spikes/evidence/**/*.trace
 spikes/evidence/**/*.etl
 

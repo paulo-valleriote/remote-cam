@@ -1,0 +1,84 @@
+{
+  "generated_at": "2026-10-23T17:20:00-03:00",
+  "feature": "001-f0-technical-spikes",
+  "notes": "Every evidence_ref MUST exist. Every missing_evidence path MUST NOT exist; it names evidence the decision is still waiting for. A decision may only be accepted with a named approver and a date.",
+  "decisions": [
+    {
+      "decision_id": "D-10",
+      "topic": "Injection backend: MF virtual camera vs DirectShow filter",
+      "status": "draft",
+      "owner": "Technical lead",
+      "approver": null,
+      "date": "2026-10-22",
+      "path": "spikes/evidence/decisions/D-10-injection-backend.md",
+      "fallback": "dshow_filter (DirectShow capture filter)",
+      "evidence_refs": [
+        "desktop/crates/injection/src/mf_virtual_camera.rs",
+        "desktop/crates/injection/src/registration.rs",
+        "spikes/f0-camera-injection/run_matrix.py",
+        "spikes/evidence/injection/runs/mf_virtual_camera/chrome/run.json"
+      ],
+      "missing_evidence": [
+        "spikes/evidence/injection/injection_matrix.json"
+      ]
+    },
+    {
+      "decision_id": "D-codec-baseline",
+      "topic": "Video codec baseline for F1: H.264 vs VP8",
+      "status": "draft",
+      "owner": "Technical lead",
+      "approver": null,
+      "date": "2026-10-22",
+      "path": "spikes/evidence/decisions/D-codec-baseline.md",
+      "fallback": "VP8 software fallback",
+      "evidence_refs": [
+        "specs/001-f0-technical-spikes/research.md",
+        "docs/tdd-remotecam-v1.md",
+        "desktop/crates/media-core/src/adapters/software_decoder.rs"
+      ],
+      "missing_evidence": [
+        "spikes/evidence/interop/interop_record.json",
+        "spikes/evidence/interop/codec_comparison.json"
+      ]
+    },
+    {
+      "decision_id": "D-quality-default",
+      "topic": "Default video quality: 1280x720@30 default, 1920x1080@30 optional maximum",
+      "status": "draft",
+      "owner": "Technical lead",
+      "approver": null,
+      "date": "2026-10-22",
+      "path": "spikes/evidence/decisions/D-quality-default.md",
+      "fallback": "1280x720@30 only (Option C)",
+      "evidence_refs": [
+        "desktop/crates/media-core/src/receiver.rs",
+        "desktop/crates/media-core/src/adapters/mf_decoder.rs",
+        "desktop/crates/media-core/src/jitter_policy.rs",
+        "desktop/crates/media-core/tests/jitter_policy.rs"
+      ],
+      "missing_evidence": [
+        "spikes/evidence/pipeline/latency_summary.json",
+        "spikes/evidence/pipeline/resource_summary.json"
+      ]
+    },
+    {
+      "decision_id": "D-audio-licensing",
+      "topic": "Virtual audio device sourcing and licensing",
+      "status": "draft",
+      "owner": "Product owner",
+      "approver": null,
+      "date": "2026-10-23",
+      "path": "spikes/evidence/decisions/D-audio-licensing.md",
+      "fallback": "Video-only V1 (plan B)",
+      "evidence_refs": [
+        "spikes/tools/analysis/licensing.py",
+        "spikes/tools/tests/test_licensing.py",
+        "spikes/f0-virtual-audio/signature_probe.ps1",
+        "spikes/evidence/audio/run_matrix.json"
+      ],
+      "missing_evidence": [
+        "spikes/evidence/licensing/licensing_bundle.json"
+      ]
+    }
+  ]
+}

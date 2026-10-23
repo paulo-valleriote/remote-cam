@@ -1,7 +1,7 @@
 {
   "generated_at": "2026-10-22T21:48:56+00:00",
-  "note": "Windows 11 reference (WSL2 access) — Rust/MSVC/FFmpeg/Python installed, pipeline executes, preflight detects hardware_accelerated=true but output_format=other (NV12 verification pending via probe_hardware_decode.ps1). Gate blocked until PC-1 satisfied.",
-  "reason": "PC-1 failed: hardware_accelerated=true, output_format=other",
+  "note": "Windows 11 reference (WSL2 access) — Rust/MSVC/FFmpeg/Python installed, pipeline executes, but preflight records hardware_accelerated=false, decoder_found=false and output_format=other; the probe_hardware_decode.ps1 probe failed with an MFTEnumEx cast error. Gate blocked until PC-1 is satisfied.",
+  "reason": "PC-1 failed: hardware_accelerated=false, decoder_found=false, output_format=other",
   "required": "Windows 11 x64 with a verified hardware H.264 decoder, FFmpeg >= 8.1 and a consumer application",
   "scenarios": [
     {

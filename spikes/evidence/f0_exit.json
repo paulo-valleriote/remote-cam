@@ -1,0 +1,119 @@
+{
+  "phase": "F0",
+  "feature": "001-f0-technical-spikes",
+  "closed_at": "2026-10-23T17:20:00-03:00",
+  "closure_mode": "closed_with_exceptions",
+  "exit_gate": "not_met",
+  "statement": "F0 is closed with recorded exceptions. All five gate verdicts were issued as measured: two no_go (camera injection and the desktop receive pipeline) and three conditional (pairing handshake, codec interoperability, virtual audio and licensing). The phase exit gate is not met. The only matrix evidence recorded is one Google Chrome injection cell of 33.2845 s; it does not satisfy the 1800 s per-cell and five-category matrix criterion, so the injection gate remains no_go. No new matrix evidence was collected at closure. Conditions C-02, C-04 and C-05 are waived with resolution deadlines, and the environmental no_go obligations are carried to F3.",
+  "sign_offs": [
+    {
+      "role": { "role_type": "technical_lead", "person_name": "Paulo Valleriote" },
+      "signed_at": "2026-10-23T17:20:00-03:00"
+    },
+    {
+      "role": { "role_type": "security_reviewer", "person_name": "Paulo Valleriote" },
+      "signed_at": "2026-10-23T17:20:00-03:00"
+    },
+    {
+      "role": { "role_type": "product_owner", "person_name": "Paulo Valleriote" },
+      "signed_at": "2026-10-23T17:20:00-03:00"
+    }
+  ],
+  "gate_dispositions": [
+    {
+      "gate_id": "camera_injection",
+      "verdict": "no_go",
+      "disposition": "carried",
+      "target_phase": "F3",
+      "owner": { "role_type": "technical_lead", "person_name": "Paulo Valleriote" },
+      "deadline": "2027-02-15",
+      "rationale": "The only matrix evidence collected is one Google Chrome cell: 974 observations over 33.2845 s (the raw duration fields are milliseconds and the observation timestamps are microseconds). The gate requires 1800 s per cell, five application categories and a 32-bit consumer, so the gate stays no_go. The remaining cells are carried to the media and injection phase; no new evidence was collected at closure."
+    },
+    {
+      "gate_id": "desktop_receive_pipeline",
+      "verdict": "no_go",
+      "disposition": "carried",
+      "target_phase": "F3",
+      "owner": { "role_type": "technical_lead", "person_name": "Paulo Valleriote" },
+      "deadline": "2027-02-15",
+      "rationale": "PC-1 failed on the F0 host: environment.json records hardware_accelerated=false and output_format_supported=other. The latency, resource and drift runs require the verified Windows 11 reference host."
+    },
+    {
+      "gate_id": "pairing_handshake",
+      "verdict": "conditional",
+      "disposition": "waived",
+      "target_phase": "F1",
+      "owner": { "role_type": "security_reviewer", "person_name": "Paulo Valleriote" },
+      "deadline": "2026-11-20",
+      "rationale": "C-02 remains open because the residue-restart inspection needs two named reference devices. The condition is waived for the F1 protocol core with a deadline before the F1 exit gate."
+    },
+    {
+      "gate_id": "codec_interoperability",
+      "verdict": "conditional",
+      "disposition": "waived",
+      "target_phase": "F2",
+      "owner": { "role_type": "technical_lead", "person_name": "Paulo Valleriote" },
+      "deadline": "2026-12-20",
+      "rationale": "C-04 remains open because no live codec interop run was recorded. The documented baseline remains a draft recommendation, not an accepted decision; the live run is due before the F2 exit gate."
+    },
+    {
+      "gate_id": "virtual_audio_and_licensing",
+      "verdict": "conditional",
+      "disposition": "waived",
+      "target_phase": "F3",
+      "owner": { "role_type": "product_owner", "person_name": "Paulo Valleriote" },
+      "deadline": "2027-01-15",
+      "rationale": "C-05 remains open because no licensing decision was signed and no live audio run was recorded. The TDD scopes audio licensing to the F3 audio scope, not to the start of F1/F2, so the condition is re-scoped to F2/F3 and waived with a deadline."
+    }
+  ],
+  "waivers": [
+    {
+      "condition_id": "C-02-residue-restart",
+      "description": "Residue inspection after application restart must be empty using the same method as the session-end inspection, on two named reference devices.",
+      "conditioned_phases": ["F1"],
+      "waived_by": { "role_type": "security_reviewer", "person_name": "Paulo Valleriote" },
+      "waived_at": "2026-10-23T17:20:00-03:00",
+      "waiver_conditions": "F1 may build the protocol core without the restart inspection, but the inspection must be recorded with the same method before the F1 exit gate.",
+      "resolution_deadline": "2026-11-20"
+    },
+    {
+      "condition_id": "C-04-interop-live-run",
+      "description": "10-minute live codec interop run on the reference Android device with zero visible corruption.",
+      "conditioned_phases": ["F1", "F2"],
+      "waived_by": { "role_type": "technical_lead", "person_name": "Paulo Valleriote" },
+      "waived_at": "2026-10-23T17:20:00-03:00",
+      "waiver_conditions": "The F1 contract may use the documented H.264 High Profile Level 3.1 baseline with VP8 fallback while the live run is pending; the run must be recorded before the F2 exit gate.",
+      "resolution_deadline": "2026-12-20"
+    },
+    {
+      "condition_id": "C-05-licensing-decision",
+      "description": "A named product owner and approver must sign the licensing decision (VB-CABLE link-only with video-only plan B).",
+      "conditioned_phases": ["F2", "F3"],
+      "waived_by": { "role_type": "product_owner", "person_name": "Paulo Valleriote" },
+      "waived_at": "2026-10-23T17:20:00-03:00",
+      "waiver_conditions": "Licensing does not block the start of F1 or F2; the decision must be signed, or video-only selected, before the F3 audio scope begins.",
+      "resolution_deadline": "2027-01-15"
+    }
+  ],
+  "amendments": {
+    "total": 13,
+    "applied": 12,
+    "no_op": 1,
+    "waived": 0,
+    "record": "docs/spike/tdd-amendments.md"
+  },
+  "deviations": {
+    "approved": ["D1", "D2", "D3", "D4", "D5"],
+    "record": "docs/spike/deviations.md"
+  },
+  "known_issues": [
+    "FR-039: F0 harness implementations remain under desktop/crates/{signaling,media-core,injection,audio-bridge,app} and mobile/core; quarantine is carried to F1/F3 under D4.",
+    "The injection matrix is incomplete: only one Google Chrome cell exists, for 33.2845 s, against a 1800 s per-cell and five-category criterion.",
+    "docs/tdd-remotecam-v1.md remains in Portuguese under D5; a full translation is required before the V1 release."
+  ],
+  "corrections": [
+    "D-codec-baseline no longer claims completed 10-minute interop runs or unmeasured CPU, latency and PSNR values.",
+    "Q-5 and D-quality-default now record hardware_accelerated=false, matching environment.json.",
+    "The gate report records the duration unit discrepancy: run.json and capture.json carry milliseconds while observations.csv timestamps are microseconds."
+  ]
+}

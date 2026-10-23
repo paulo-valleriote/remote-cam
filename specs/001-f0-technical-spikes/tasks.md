@@ -274,7 +274,7 @@ description: "Task list for F0 — Risk-Reduction Spikes and Technical Decisions
 - [X] T118 Add `scripts/check-docs-consistency.sh` and wire it into CI: every command documented in a README exists as a Makefile target and vice versa
 - [X] T119 Perform the quickstart reproduction rehearsal: a second engineer executes `quickstart.md` Phase A–H within one working day using only the recorded procedure and environment, recording the outcome in `spikes/evidence/reproduction_rehearsal.md`; fix deviations and re-run
 - [X] T120 Final validation in `spikes/evidence/gate_report.json`: `make test`, `make coverage`, `make lint`, `make validate-evidence` all pass; `make gate-report` emits a schema-valid report; every referenced evidence file exists; no `outside-reference-environment` or `profile-deviation` run is cited for a `go` — **passes on this host**: `validate-evidence` reports 0 errors (2 expected environment warnings), `gate-report` emits a schema-valid report, desktop workspace + 3 spike-crate cargo tests, Rust protocol conformance, 231 Python tool tests and the full `lint` target pass; the Rust protocol coverage gate passes at 90.31 % (≥ 90); the mobile (gradle/Android SDK) portions of `make test` and `make coverage` are CI-only on this Linux host; every cited `evidence_refs` file exists and no run outside the reference environment is cited for a `go` (no gate is `go`)
-- [X] T121 Hold the single phase review on or before 2026-11-06 and record all five verdicts in `spikes/evidence/gate_report.json` and `docs/spike/gate-report-f0.md` with the accountable roles named; verify SC-001…SC-014 before declaring F0 complete — **review held at `phase_review_at` 2026-11-06** in both artefacts with named accountable roles; SC-001, SC-011, SC-012, SC-013, SC-014 recorded as met; SC-007 and SC-010 carried by draft decisions (D-audio-licensing, D-10/D-quality-default) with explicit conditions C-05 and the D-10 acceptance pending; SC-002, SC-003, SC-004, SC-005, SC-006, SC-008 (restart residue, C-02) and SC-009 (live reproduction) can only verify on the reference Windows 11 + Android host — F0 is **not** declared complete; the no_go/conditional verdicts and the pending maintainer approval of D1–D3 (`docs/spike/deviations.md`) block the merge
+- [X] T121 Hold the single phase review on or before 2026-11-06 and record all five verdicts in `spikes/evidence/gate_report.json` and `docs/spike/gate-report-f0.md` with the accountable roles named; verify SC-001…SC-014 before declaring F0 complete — **review held at `phase_review_at` 2026-10-23 after the closure recorded in Phase 9** in both artefacts with named accountable roles; SC-001, SC-011, SC-012, SC-013, SC-014 recorded as met; SC-007 and SC-010 carried by draft decisions (D-audio-licensing, D-10/D-quality-default) with explicit conditions C-05 and the D-10 acceptance pending; SC-002, SC-003, SC-004, SC-005, SC-006, SC-008 (restart residue, C-02) and SC-009 (live reproduction) can only verify on the reference Windows 11 + Android host — F0 is **not** declared complete; the no_go/conditional verdicts and the pending maintainer approval of D1–D3 (`docs/spike/deviations.md`) block the merge
 
 ---
 
@@ -394,3 +394,18 @@ The plan allows ≈ 20 dev-days and the quickstart schedules ≈ 9.5 h of execut
 - A `no_go` is isolated: it blocks only the gates that depend on it, and those still receive a recorded verdict naming the blocking dependency.
 - Every conditional verdict needs a waiver from the gate's named accountable role with a resolution deadline, or an explicit block.
 - Commit after each task or logical group; never commit raw captures, secrets, personal data or real user media.
+
+---
+
+## Phase 9: Closure (2026-10-23)
+
+**Goal**: close F0 with the verdicts exactly as measured, carrying every exception with an owner and a deadline.
+
+- [X] T122 Record the phase exit decision in `spikes/evidence/f0_exit.json` and `spikes/evidence/decisions/D-EXIT-f0.md`, with the three role sign-offs and the C-02/C-04/C-05 waivers
+- [X] T123 Apply the 13 TDD amendments to `docs/tdd-remotecam-v1.md` and dispose all 13 in `docs/spike/tdd-amendments.md` (12 applied, 1 no-op)
+- [X] T124 Approve deviations D1–D5 in `docs/spike/deviations.md`
+- [X] T125 Record the only collected matrix evidence (Google Chrome, 33.2845 s) as a partial run; collect no new matrix evidence and produce no `injection_matrix.json`
+- [X] T126 Correct the unverified claims in `D-codec-baseline`, `D-quality-default`, `D-10` and `open_questions.json`; record the duration unit discrepancy
+- [X] T127 Regenerate the gate report with `report_version = 2`, the exit record and the waiver-aware downstream status; guard the closure with the schema and `test_f0_exit.py`
+
+**Closure status**: F0 is closed with exceptions and the exit gate is **not met**. The checkpoints for camera injection and the desktop receive pipeline were not achieved; they are carried to F3 with a 2027-02-15 deadline. Pairing, codec and audio remain conditional under C-02/C-04/C-05. F1 is not started.

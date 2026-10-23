@@ -2,6 +2,8 @@
 
 **Branch**: `main` (git; the speckit identifier `001-f0-technical-spikes` is a derived directory label, not a git branch — no branch hook is configured) | **Date**: 2026-10-22 | **Spec**: [spec.md](./spec.md)
 
+**Phase status**: Closed with exceptions on 2026-10-23 — exit gate not met; two gates `no_go` (environmental) and three `conditional`, all with recorded dispositions in [`docs/spike/gate-report-f0.md`](../../docs/spike/gate-report-f0.md).
+
 **Input**: Feature specification from `/specs/001-f0-technical-spikes/spec.md`
 
 **Note**: This plan covers **Phase 0 (research) and Phase 1 (design + contracts)**. It does not contain the task breakdown; that belongs to `/speckit.tasks` (`tasks.md`).

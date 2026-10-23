@@ -1,0 +1,37 @@
+{
+  "backend": "mf_virtual_camera",
+  "application_id": "chrome",
+  "category": "chromium_browser",
+  "bitness": "64_bit",
+  "planned_bitness": "64_bit",
+  "capture_method": "getusermedia_mediarecorder",
+  "capture_file": "capture.webm",
+  "product_name": "Google Chrome",
+  "version": "124.0.6367.208",
+  "requested": {
+    "width": 1280,
+    "height": 720,
+    "frame_rate": 30
+  },
+  "recorded_duration_s": 1799975.8,
+  "observations_source": "harness_observation",
+  "decoded_frames": 16666,
+  "decoded_markers": 27,
+  "discarded_frames": 0,
+  "environment_id": "windows-amd64-8fd38fab",
+  "completed_at": "2026-10-23T17:31:34+00:00",
+  "observed": {
+    "observations_source": "browser_request_video_frame_callback",
+    "cameras": [
+      "Redmi Note 14 Pro 5G (C\u00e2mera Virtual do\u00a0Windows)",
+      "OBS Virtual Camera"
+    ],
+    "negotiated": {
+      "width": 1280,
+      "height": 720,
+      "frame_rate": 30
+    },
+    "mime_type": "video/webm;codecs=vp9",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+  }
+}

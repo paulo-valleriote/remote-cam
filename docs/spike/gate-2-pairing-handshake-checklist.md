@@ -2,7 +2,7 @@
 
 **Gate**: pairing handshake · **Wave**: 1 · **Accountable role**: security reviewer
 **Procedure**: [gate-2-pairing-handshake.md](./gate-2-pairing-handshake.md)
-**Target review**: 2026-11-06
+**Review**: 2026-10-23 — F0 closed with exceptions (gate `conditional`, C-02 waived)
 
 The reviewer completes this sheet against the evidence produced by the procedure. Every "no" or
 "not verified" needs a finding with a severity (`blocker`, `major`, `minor`), an owner and a

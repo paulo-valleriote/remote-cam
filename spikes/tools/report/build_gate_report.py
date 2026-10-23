@@ -10,6 +10,7 @@ are disposable spike artefacts and must never be merged into desktop/ or mobile/
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from pathlib import Path
@@ -19,8 +20,6 @@ EVIDENCE_ROOT = REPO_ROOT / "spikes" / "evidence"
 SCHEMA_PATH = (
     REPO_ROOT / "specs" / "001-f0-technical-spikes" / "contracts" / "gate-report.schema.json"
 )
-
-PHASE_REVIEW_AT = "2026-11-06T00:00:00+00:00"
 
 
 def _load(path: Path, default=None):
@@ -40,6 +39,49 @@ def _role(role_type: str, person_name: str) -> dict:
     return {"role_type": role_type, "person_name": person_name}
 
 
+def _role_from_exit(exit_record: dict, role_type: str) -> dict:
+    """Return the signed role from the exit record, falling back to an unnamed role."""
+    for sign_off in exit_record.get("sign_offs", []):
+        role = sign_off.get("role", {})
+        if role.get("role_type") == role_type:
+            return role
+    return _role(role_type, "not_yet_named")
+
+
+def _chrome_partial_run() -> dict | None:
+    """Describe the Google Chrome injection run without claiming it is a gate cell.
+
+    The run is the only matrix evidence collected. Its duration is derived from
+    ``observations.csv``: the timestamps are microseconds even though the column
+    is named ``capture_host_ms``, and the raw ``recorded_duration_s`` fields are
+    milliseconds. Neither raw value is converted silently.
+    """
+    directory = EVIDENCE_ROOT / "injection" / "runs" / "mf_virtual_camera" / "chrome"
+    run = _load(directory / "run.json")
+    observations = directory / "observations.csv"
+    if not run or not observations.is_file():
+        return None
+    with observations.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    stamps = [float(row["capture_host_ms"]) for row in rows]
+    span_us = max(stamps) - min(stamps)
+    return {
+        "path": "spikes/evidence/injection/runs/mf_virtual_camera/chrome",
+        "application_id": run.get("application_id", "chrome"),
+        "product_name": run.get("product_name", "Google Chrome"),
+        "version": run.get("version", "unknown"),
+        "observed_duration_s": round(span_us / 1_000_000, 4),
+        "required_duration_s": 1800,
+        "observation_samples": len(rows),
+        "media_duration_s": 60.85,
+        "media_duration_source": "local raw capture (capture.webm), not versioned",
+        "raw_recorded_duration_s": run.get("recorded_duration_s"),
+        "raw_recorded_duration_unit": "milliseconds",
+        "observation_timestamp_unit": "microseconds",
+        "meets_duration": False,
+    }
+
+
 def _gate(
     gate_id: str,
     title: str,
@@ -53,6 +95,7 @@ def _gate(
     evidence_refs: list,
     measurement_conditions: str,
     *,
+    issued_at: str,
     preconditions: list | None = None,
     included_latency_stages: list | None = None,
     excluded_latency_stages: list | None = None,
@@ -75,7 +118,7 @@ def _gate(
         "depends_on": depends_on,
         "verdict": verdict,
         "accountable_role": accountable_role,
-        "issued_at": PHASE_REVIEW_AT,
+        "issued_at": issued_at,
         "criterion": criterion,
         "measured_result": measured_result,
         "rationale": rationale,
@@ -111,56 +154,15 @@ def _gate(
     return gate
 
 
-def _open_question(
-    qid: str,
-    question: str,
-    owner: str,
-    impact: str,
-    blocking: bool,
-    status: str,
-    context: str | None = None,
-) -> dict:
-    oq = {
-        "question_id": qid,
-        "question": question,
-        "owner": owner,
-        "impact": impact,
-        "blocking": blocking,
-        "status": status,
-    }
-    if context is not None:
-        oq["context"] = context
-    return oq
-
-
-def _decision_index(
-    decision_id: str,
-    topic: str,
-    status: str,
-    owner: str,
-    date: str | None = None,
-    approver: str | None = None,
-    path: str | None = None,
-    fallback: str | None = None,
-) -> dict:
-    entry = {
-        "decision_id": decision_id,
-        "topic": topic,
-        "status": status,
-        "owner": owner,
-        "date": date or PHASE_REVIEW_AT[:10],
-    }
-    if approver is not None:
-        entry["approver"] = approver
-    if path is not None:
-        entry["path"] = path
-    if fallback is not None:
-        entry["fallback"] = fallback
-    return entry
-
-
 def build_report() -> dict:
     env = _load(EVIDENCE_ROOT / "environment.json") or {}
+    exit_record = _load(EVIDENCE_ROOT / "f0_exit.json") or {}
+    phase_review_at = exit_record.get("closed_at")
+    if not phase_review_at:
+        raise ValueError("spikes/evidence/f0_exit.json with closed_at is required to close F0")
+    technical_lead = _role_from_exit(exit_record, "technical_lead")
+    security_reviewer = _role_from_exit(exit_record, "security_reviewer")
+    product_owner = _role_from_exit(exit_record, "product_owner")
 
     # --- Gate 1: camera_injection (wave 1) ---
     gate1 = _gate(
@@ -169,7 +171,8 @@ def build_report() -> dict:
         wave=1,
         depends_on=["foundational"],
         verdict="no_go",
-        accountable_role=_role("technical_lead", "not_yet_named"),
+        accountable_role=technical_lead,
+        issued_at=phase_review_at,
         criterion=(
             "100 % frames_delivered on the selected backend, observed_duration_s >= 1800, "
             "longest_stall_ms <= 2000, both bitnesses, multi-consumer observation"
@@ -179,24 +182,31 @@ def build_report() -> dict:
             "matrix_exists": False,
             "selected_backend": "not_determined",
             "frames_delivered_cells": 0,
-            "total_cells": 0,
+            "total_cells": 6,
+            "partial_run": _chrome_partial_run(),
         },
         rationale=(
-            "The injection matrix requires the Windows 11 reference machine with "
-            "Media Foundation, FFmpeg, OBS, the conferencing client, Windows Camera, "
-            "a screen recorder and a 32-bit consumer. None are available on this host "
-            "(environment.json records within_reference_conditions: false and no camera "
-            "or FFmpeg). injection_matrix.json does not exist, so the backend cannot be "
-            "selected and gate 1 has no measured evidence."
+            "The only matrix evidence collected is one Google Chrome cell: 974 observations "
+            "over 33.2845 s at 1280x720@30. The gate requires 1800 s per cell, five "
+            "application categories and a 32-bit consumer, so the partial run cannot pass the "
+            "criterion and no backend is selected. The remaining cells were not collected at "
+            "closure; they are carried to F3. No injection_matrix.json exists, because the "
+            "matrix contract requires a selected backend and a frames_delivered cell of at "
+            "least 1800 s."
         ),
-        evidence_refs=[],
+        evidence_refs=[
+            "spikes/evidence/injection/runs/mf_virtual_camera/chrome/run.json",
+            "spikes/evidence/injection/runs/mf_virtual_camera/chrome/capture.json",
+            "spikes/evidence/injection/runs/mf_virtual_camera/chrome/observations.csv",
+        ],
         measurement_conditions=(
             "Clean Windows 11 x64, non-administrator account, five application categories "
-            "plus a 32-bit consumer, 30 minutes per cell. Not reproducible on this host."
+            "plus a 32-bit consumer, 30 minutes per cell. The Chrome run was collected on the "
+            "Windows 11 host for 33.2845 s; the rest of the matrix was not collected."
         ),
         preconditions=[],
         blocking_dependency=None,
-        failure_code="environment_out_of_reference",
+        failure_code="evidence_incomplete",
     )
 
     # --- Gate 2: pairing_handshake (wave 1) ---
@@ -208,7 +218,8 @@ def build_report() -> dict:
         wave=1,
         depends_on=["foundational"],
         verdict="conditional",
-        accountable_role=_role("security_reviewer", "not_yet_named"),
+        accountable_role=security_reviewer,
+        issued_at=phase_review_at,
         criterion=(
             "Valid scenario accepted in <= 5 s; all adversarial scenarios rejected with "
             "closed reason codes; no media before authentication; per-origin throttling "
@@ -309,7 +320,8 @@ def build_report() -> dict:
         wave=2,
         depends_on=["camera_injection", "pairing_handshake"],
         verdict="no_go",
-        accountable_role=_role("technical_lead", "not_yet_named"),
+        accountable_role=technical_lead,
+        issued_at=phase_review_at,
         criterion=(
             "Raw capture-at-consumer p95 <= 150 ms across three >= 10-minute runs; "
             "harness floor and floor-corrected p95 published; CPU p95 <= 15 %; "
@@ -384,7 +396,8 @@ def build_report() -> dict:
         wave=3,
         depends_on=["desktop_receive_pipeline"],
         verdict="conditional",
-        accountable_role=_role("technical_lead", "not_yet_named"),
+        accountable_role=technical_lead,
+        issued_at=phase_review_at,
         criterion=(
             "Live video from the reference Android device decodes on the desktop for "
             "10 continuous minutes with agreed profile/level/format and no visible "
@@ -442,7 +455,8 @@ def build_report() -> dict:
         wave=3,
         depends_on=["desktop_receive_pipeline"],
         verdict="conditional",
-        accountable_role=_role("product_owner", "not_yet_named"),
+        accountable_role=product_owner,
+        issued_at=phase_review_at,
         criterion=(
             "Zero dropouts >= 50 ms with agreeing detectors over >= 10 minutes under the "
             "pinned profile; phrases_exact >= 18 with all nonces/anchors matching; named "
@@ -518,198 +532,121 @@ def build_report() -> dict:
 
     gates = [gate1, gate2, gate3, gate4, gate5]
 
-    # --- Downstream status ---
-    # F1 unblocked only if all gates go; F2/F3 depend on earlier gates.
-    go_gates = [g for g in gates if g["verdict"] == "go"]
-    any_no_go = any(g["verdict"] == "no_go" for g in gates)
+    # --- Apply the exit-record waivers to the gate conditions ---
+    waivers_by_id = {waiver["condition_id"]: waiver for waiver in exit_record.get("waivers", [])}
+    for gate in gates:
+        for condition in gate.get("conditions", []):
+            waiver = waivers_by_id.get(condition["condition_id"])
+            if waiver is None:
+                continue
+            condition["status"] = "waived"
+            condition["conditioned_phases"] = list(waiver["conditioned_phases"])
+            condition["waiver"] = {
+                "waived_by": waiver["waived_by"],
+                "waived_at": waiver["waived_at"],
+                "waiver_conditions": waiver["waiver_conditions"],
+                "resolution_deadline": waiver["resolution_deadline"],
+            }
 
-    if any_no_go:
-        f1_status = "blocked"
-        f1_reason = "One or more F0 gates are no_go; F1 cannot start until they are resolved."
-    elif len(go_gates) < len(gates):
-        f1_status = "conditional"
-        f1_reason = (
-            "Some F0 gates are conditional; F1 may proceed under waivers with resolution deadlines."
-        )
+    # --- Downstream status (waiver-aware) ---
+    closure_mode = exit_record.get("closure_mode")
+    if closure_mode == "closed_green":
+        phase_status = "unblocked"
+        phase_reason = "F0 is closed green; all gates are go."
+    elif closure_mode == "closed_no_go":
+        phase_status = "blocked"
+        phase_reason = "F0 is closed no_go; the later phases cannot start."
     else:
-        f1_status = "unblocked"
-        f1_reason = "All F0 gates are go."
+        phase_status = "conditional"
+        phase_reason = "F0 is closed with exceptions; the later phases may proceed under waivers."
 
-    blocked = any_no_go
-    unresolved = len(go_gates) < len(gates)
-    f1_conditions = [] if f1_status == "unblocked" else ["resolve all no_go/conditional F0 gates"]
-    f2_or_f3_status = "blocked" if blocked else ("conditional" if unresolved else "unblocked")
+    def waiver_label(waiver: dict) -> str:
+        return f"{waiver['condition_id']} (deadline {waiver['resolution_deadline']})"
+
+    f1_conditions = [
+        waiver_label(waiver)
+        for waiver in exit_record.get("waivers", [])
+        if "F1" in waiver["conditioned_phases"]
+    ]
+    f2_conditions = ["F1 exit"] + [
+        waiver_label(waiver)
+        for waiver in exit_record.get("waivers", [])
+        if "F2" in waiver["conditioned_phases"]
+    ]
+    f3_conditions = (
+        ["F2 exit"]
+        + [
+            waiver_label(waiver)
+            for waiver in exit_record.get("waivers", [])
+            if "F3" in waiver["conditioned_phases"]
+        ]
+        + [
+            f"{disposition['gate_id']} carried (deadline {disposition['deadline']})"
+            for disposition in exit_record.get("gate_dispositions", [])
+            if disposition["target_phase"] == "F3" and disposition["verdict"] == "no_go"
+        ]
+    )
 
     downstream = {
         "F1": {
-            "status": f1_status,
-            "reason": f1_reason,
+            "status": phase_status,
+            "reason": (
+                "F0 is closed with exceptions; F1 may proceed under the C-02 and C-04 waivers."
+                if phase_status == "conditional"
+                else phase_reason
+            ),
             "conditions": f1_conditions,
         },
         "F2": {
-            "status": f2_or_f3_status,
-            "reason": "F2 depends on F1 and on the gates it consumes (camera injection, "
-            "pipeline, codec interop).",
-            "conditions": f1_conditions,
+            "status": phase_status,
+            "reason": "F2 depends on the F1 exit and on the codec and licensing conditions.",
+            "conditions": f2_conditions,
         },
         "F3": {
-            "status": f2_or_f3_status,
-            "reason": "F3 depends on F2 and on all F0 gates.",
-            "conditions": f1_conditions,
+            "status": phase_status,
+            "reason": (
+                "F3 depends on the F2 exit and on the carried injection and pipeline obligations."
+            ),
+            "conditions": f3_conditions,
         },
     }
 
-    # --- Open questions ---
-    open_questions = [
-        _open_question(
-            "Q-1",
-            "Does per-user (HKCU) COM registration of the MF virtual camera media source "
-            "actually work, and is an MSI installer therefore required despite MSIX being "
-            "the planned package format?",
-            "Technical lead",
-            "Decides the installer design and the no-admin promise for the camera",
-            True,
-            "open",
-            "Open question 1 in TDD; recorded as not answered because the registration "
-            "matrix has not run on Windows 11.",
-        ),
-        _open_question(
-            "Q-2",
-            "Is the VB-CABLE driver signed in a way that Windows 11 with Secure Boot "
-            "enabled accepts?",
-            "Technical lead",
-            "Determines whether the audio gate can pass at all",
-            True,
-            "open",
-            "Unresolved; requires signature_probe.ps1 on the Secure-Boot Windows 11 runner.",
-        ),
-        _open_question(
-            "Q-3",
-            "What is the actual per-unit cost of a VB-CABLE OEM/redistribution agreement, "
-            "and does the user population qualify as a 'professional domain' under "
-            "VB-Audio's terms?",
-            "Product owner + legal",
-            "Determines whether V1 ships link-only or bundled, and the unit economics",
-            True,
-            "open",
-            "Partially answered by published volume prices; professional-domain "
-            "classification remains open.",
-        ),
-        _open_question(
-            "Q-4",
-            "Will VAC's 'companion application' / 'auxiliary transport' characterisation "
-            "cover RemoteCam, and at what price?",
-            "Product owner + legal",
-            "The cleaner long-term audio model",
-            False,
-            "open",
-            "Parallel track, not a gate blocker.",
-        ),
-        _open_question(
-            "Q-5",
-            "Does the reference machine expose an H.264 decoder through the SYNCMFT "
-            "discovery path, and is it actually hardware-accelerated?",
-            "Technical lead",
-            "FR-044 precondition — without it, no latency or resource result is admissible",
-            True,
-            "open",
-            "Partial verification: hardware_accelerated=true but output_format=other "
-            "(not NV12). NV12 verification pending.",
-        ),
-        _open_question(
-            "Q-6",
-            "Can two consumer applications open the virtual camera simultaneously, and "
-            "what does each observe?",
-            "Technical lead",
-            "Affects the shared-buffer design",
-            False,
-            "open",
-            "Recorded, not gating; requires the multi-consumer observation on Windows 11.",
-        ),
-        _open_question(
-            "Q-7",
-            "Is 720p30 sufficient as the default quality, and is 1080p30 viable given that "
-            "1080p needs H.264 level >= 4.0 while many receivers accept only level 3.1?",
-            "Product owner",
-            "Affects bandwidth, CPU and the negotiated level",
-            False,
-            "open",
-            "Open question 3 in TDD; default is 720p30 Level 3.1 with 1080p optional.",
-        ),
-        _open_question(
-            "Q-8",
-            "Can a 32-bit consumer application see the virtual camera on 64-bit Windows?",
-            "Technical lead",
-            "The DirectShow path needs separate per-bitness CLSIDs; the MF path behaviour "
-            "is unknown",
-            True,
-            "open",
-            "Recorded as a matrix failure criterion; requires a 32-bit consumer on Windows 11.",
-        ),
-        _open_question(
-            "Q-9",
-            "What is the residue inspection coverage and method that satisfies the gate "
-            "for both session end and application restart?",
-            "Security reviewer",
-            "Defines the no-residue proof for the pairing gate",
-            True,
-            "open",
-            "Open question 09 in TDD §18; residue restart scan not yet performed.",
-        ),
-        _open_question(
-            "Q-10",
-            "Does the CameraX YUV_420_888 chroma pixel stride equal 2 on any device in the "
-            "reference set?",
-            "Mobile engineer",
-            "A stride-2 device with JavaI420Buffer.wrap produces corrupt colour",
-            False,
-            "open",
-            "Guarded at runtime but must be reported; requires the reference Android device.",
-        ),
-    ]
+    # --- Open questions (single source) ---
+    question_document = _load(EVIDENCE_ROOT / "open_questions.json") or {}
+    open_questions = []
+    for question in question_document.get("open_questions", []):
+        entry = {
+            key: question[key]
+            for key in (
+                "question_id",
+                "question",
+                "owner",
+                "impact",
+                "blocking",
+                "status",
+            )
+        }
+        if question.get("context") is not None:
+            entry["context"] = question["context"]
+        if question.get("target_phase") is not None:
+            entry["target_phase"] = question["target_phase"]
+        open_questions.append(entry)
 
-    # --- Decision index ---
-    decisions = [
-        _decision_index(
-            "D-10",
-            "Injection backend: MF virtual camera vs DirectShow filter",
-            "draft",
-            "Technical lead",
-            path="spikes/evidence/decisions/D-10-injection-backend.md",
-            fallback="dshow_filter (DirectShow capture filter)",
-        ),
-        _decision_index(
-            "D-codec-baseline",
-            "Video codec baseline for F1: H.264 vs VP8",
-            "draft",
-            "Technical lead",
-            date="2026-10-22",
-            approver="Technical lead",
-            path="spikes/evidence/decisions/D-codec-baseline.md",
-            fallback="VP8 software fallback",
-        ),
-        _decision_index(
-            "D-quality-default",
-            "Default video quality: 1280x720@30 default, 1920x1080@30 optional maximum",
-            "draft",
-            "Technical lead",
-            path="spikes/evidence/decisions/D-quality-default.md",
-            fallback="1280x720@30 only (Option C)",
-        ),
-        _decision_index(
-            "D-audio-licensing",
-            "Virtual audio device sourcing and licensing",
-            "draft",
-            "Product owner",
-            path="spikes/evidence/decisions/D-audio-licensing.md",
-            fallback="Video-only V1 (plan B)",
-        ),
-    ]
+    # --- Decision index (single source) ---
+    decision_document = _load(EVIDENCE_ROOT / "decisions" / "index.json") or {}
+    decisions = []
+    for decision in decision_document.get("decisions", []):
+        entry = {key: decision[key] for key in ("decision_id", "topic", "status", "owner", "date")}
+        for optional in ("approver", "path", "fallback"):
+            if decision.get(optional) is not None:
+                entry[optional] = decision[optional]
+        decisions.append(entry)
 
     report = {
-        "report_version": 1,
+        "report_version": 2,
         "feature": "001-f0-technical-spikes",
-        "phase_review_at": PHASE_REVIEW_AT,
+        "phase_review_at": phase_review_at,
+        "report_prepared_by": technical_lead["person_name"],
         "reference_environment": {
             "environment_id": env.get("environment_id", "unknown"),
             "captured_at": env.get("captured_at"),
@@ -729,6 +666,7 @@ def build_report() -> dict:
         "downstream_status": downstream,
         "decisions": decisions,
         "open_questions": open_questions,
+        "exit": exit_record,
         "redistribution_note": (
             "All artefacts under spikes/ are NON-PRODUCTION F0 risk-reduction spike "
             "artefacts (FR-039). They must not be merged into desktop/ or mobile/ "
