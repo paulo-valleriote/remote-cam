@@ -16,7 +16,6 @@ import numpy as np
 import cv2
 import argparse
 from pathlib import Path
-from typing import Tuple, List, Optional
 import sys
 
 
@@ -133,7 +132,7 @@ class CorruptionDetector:
         mean_val = np.mean(frame)
         return mean_val < self.black_threshold
 
-    def _check_chroma_swap(self, frame: np.ndarray) -> Tuple[bool, bool]:
+    def _check_chroma_swap(self, frame: np.ndarray) -> tuple[bool, bool]:
         """
         Check for green/magenta tint indicating swapped chroma (U/V planes).
         This happens when NV21 is incorrectly de-interleaved as I420.
