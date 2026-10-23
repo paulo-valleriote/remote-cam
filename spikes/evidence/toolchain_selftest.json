@@ -3,12 +3,15 @@
   "checks": [
     {
       "expected": {
-        "below_threshold_gap_ms": 40,
+        "below_threshold_durations_ms": [
+          40
+        ],
         "dropout_count": 2,
         "dropout_durations_ms": [
           60,
           120
-        ]
+        ],
+        "tolerance_ms": 10
       },
       "name": "silence_fixture",
       "observed": {
@@ -46,12 +49,12 @@
       },
       "name": "sampler_agreement",
       "observed": {
-        "delta_p95_cpu_pct": 0.158,
+        "delta_p95_cpu_pct": 0.224,
         "note": "typeperf is Windows-only; the cross-check used two independent Linux counter paths",
         "sampler_a": "getrusage+procstat",
-        "sampler_a_p95": 6.943,
+        "sampler_a_p95": 6.534,
         "sampler_b": "procfs",
-        "sampler_b_p95": 7.101
+        "sampler_b_p95": 6.758
       },
       "passed": true
     },
@@ -62,7 +65,7 @@
       "name": "harness_floor",
       "observed": {
         "basis": "local-software-only",
-        "floor_ms": 14.82,
+        "floor_ms": 10.98,
         "method": "software QR render and decode",
         "note": "This host has no display-capture apparatus. The value measures the QR render/decode path only and MUST be replaced by the documented capture floor on the reference Windows machine before any latency-gate result is cited.",
         "reference_measurement_required": true,
@@ -72,5 +75,5 @@
       "passed": true
     }
   ],
-  "run_at": "2026-10-22T17:34:15+00:00"
+  "run_at": "2026-10-23T13:10:11+00:00"
 }

@@ -87,7 +87,7 @@ def main() -> None:
                 "segment_s": SEGMENT_S,
                 "gaps_ms": list(GAPS_MS),
                 "expected_dropouts": 2,
-                "below_threshold_gap_ms": 40,
+                "below_threshold_durations_ms": [40],
             },
             indent=2,
         )
