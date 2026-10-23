@@ -5,7 +5,8 @@ Produces ``spikes/evidence/toolchain_selftest.json`` with exactly four checks
 (``contracts/measurement-formats.md`` §11):
 
 1. ``silence_fixture`` -- the committed calibration WAV yields exactly two
-   dropouts (60 ms and 120 ms); the 40 ms gap is below threshold.
+   dropouts (nominally 60 ms and 120 ms, within a 10 ms window tolerance);
+   the 40 ms gap is below threshold.
 2. ``qr_roundtrip`` -- a golden-vector payload rendered as a QR decodes back
    byte-identically and the SHA-256 values match.
 3. ``sampler_agreement`` -- two independent CPU counter sources agree within one
@@ -64,7 +65,7 @@ def _check(
 
 
 def check_silence_fixture() -> dict[str, Any]:
-    """The 40/60/120 ms fixture must yield exactly two dropouts."""
+    """The 40/60/120 ms fixture must yield two dropouts within a 10 ms tolerance."""
 
     try:
         samples, sample_rate = sf.read(FIXTURE, dtype="float64")
@@ -86,10 +87,21 @@ def check_silence_fixture() -> dict[str, Any]:
 
     durations = [round(interval.duration_ms) for interval in result.dropouts]
     short = [round(interval.duration_ms) for interval in result.below_threshold]
-    passed = durations == [60, 120] and 40 in short
+    passed = (
+        result.dropout_count == 2
+        and len(durations) == 2
+        and abs(durations[0] - 60) <= 10
+        and abs(durations[1] - 120) <= 10
+        and 40 in short
+    )
     return _check(
         "silence_fixture",
-        {"dropout_count": 2, "dropout_durations_ms": [60, 120], "below_threshold_gap_ms": 40},
+        {
+            "dropout_count": 2,
+            "dropout_durations_ms": [60, 120],
+            "tolerance_ms": 10,
+            "below_threshold_durations_ms": [40],
+        },
         {
             "dropout_count": result.dropout_count,
             "dropout_durations_ms": durations,

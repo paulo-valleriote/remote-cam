@@ -282,7 +282,10 @@ impl MfH264Decoder {
                 pEvents: ManuallyDrop::new(None),
             };
             let mut status = 0_u32;
-            match self.transform.ProcessOutput(0, std::slice::from_mut(&mut output), &mut status) {
+            match self
+                .transform
+                .ProcessOutput(0, std::slice::from_mut(&mut output), &mut status)
+            {
                 Ok(()) => {}
                 Err(error) if error.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => {
                     // The normal answer when an access unit does not complete a

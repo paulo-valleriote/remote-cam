@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-10-23T00:00:00+00:00",
+  "note": "The apparatus is complete and tested on Linux CI. The live measurement requires a Windows 11 reference host with Secure Boot, VB-CABLE driver pack 45, FFmpeg >= 8.1 and a consumer application; none are available here, so no capture, dropout analysis, intelligibility result or signed licensing bundle exists.",
+  "reason": "Host is Linux: f0-virtual-audio render is #[cfg(windows)], signature_probe.ps1 needs the reference runner, and no named licensing signatories are available",
+  "required": "Windows 11 x64 build 22000+ with Secure Boot enabled, VB-CABLE driver pack 45, FFmpeg >= 8.1, a consumer application (OBS or equivalent), signtool.exe and a named product owner plus approver for the licensing decision",
+  "scenarios": [
+    {
+      "criterion": "zero dropouts >= 50 ms with detectors_agree = true",
+      "duration_s": 600,
+      "profile": "nominal-3pct-30ms-10ms",
+      "scenario": "audio-continuity"
+    },
+    {
+      "criterion": "phrases_exact >= 18 of 18 non-anchor, corpus_wer <= 0.05, all nonces and anchors matched",
+      "duration_s": 600,
+      "observer": "named observer required",
+      "scenario": "intelligibility"
+    },
+    {
+      "criterion": "signature_verified = true on Secure Boot",
+      "scenario": "device-signature"
+    },
+    {
+      "criterion": "actionable state and video-only session usable",
+      "scenario": "degraded-operation",
+      "variants": ["missing", "unsigned", "unexpected-identity"]
+    },
+    {
+      "criterion": "consumer_renegotiations = 0",
+      "scenario": "consumer-stability"
+    },
+    {
+      "criterion": "signed decision with named owner, approver and date, or conditional/no_go with plan B",
+      "scenario": "licensing-decision"
+    }
+  ],
+  "status": "blocked_by_environment"
+}

@@ -5,10 +5,13 @@ from pathlib import Path
 
 import pytest
 
+from analysis.licensing import MEASUREMENT_OPTION, build_bundle
 from validation.validate_evidence import (
+    AUDIO_RUN_CAPTURE,
     ENVIRONMENT,
     INJECTION_MATRIX,
     LATENCY_SUMMARY,
+    LICENSING_BUNDLE,
     PAIRING_RESIDUE,
     PAIRING_SCENARIOS,
     REPO_ROOT,
@@ -453,3 +456,111 @@ def test_known_names_are_discovered(tmp_path: Path, filename: str) -> None:
 
     assert str(root / filename) in result.files
     assert result.ok is False
+
+
+def audio_run(**overrides: object) -> dict[str, object]:
+    document: dict[str, object] = {
+        "capture_id": "aud-01",
+        "run_id": "aud-01",
+        "capture_file": "spikes/evidence/audio/aud-01/consumer_capture.wav",
+        "capture_format": "wav",
+        "sample_rate_hz": 48_000,
+        "channels": 1,
+        "duration_s": 610.4,
+        "device_name": "CABLE Output (VB-Audio Virtual Cable)",
+        "device_pin": "VB-CABLE",
+        "device_version": "driver pack 45",
+        "signature_verified": True,
+        "consumer_app": "obs",
+        "consumer_renegotiations": 0,
+        "dropout_analysis_ref": "spikes/evidence/audio/aud-01/dropouts.json",
+        "intelligibility_ref": "spikes/evidence/audio/aud-01/intelligibility.json",
+        "intelligibility_observer": "Observer A",
+        "phrase_script_ref": "spikes/fixtures/phrases-v1.csv",
+        "analyser_version": "1.0.0",
+    }
+    document.update(overrides)
+    return document
+
+
+def test_a_clean_audio_run_index_has_no_errors() -> None:
+    findings = validate_document(audio_run(), AUDIO_RUN_CAPTURE, repo_root=REPO_ROOT)
+
+    assert [finding for finding in findings if finding.level == "error"] == []
+
+
+def test_an_audio_run_shorter_than_ten_minutes_is_refused() -> None:
+    findings = validate_document(
+        audio_run(duration_s=599.0), AUDIO_RUN_CAPTURE, repo_root=REPO_ROOT
+    )
+
+    assert "audio_run.duration" in codes(findings)
+
+
+def test_an_audio_run_with_renegotiations_is_refused() -> None:
+    findings = validate_document(
+        audio_run(consumer_renegotiations=1), AUDIO_RUN_CAPTURE, repo_root=REPO_ROOT
+    )
+
+    assert "audio_run.renegotiations_nonzero" in codes(findings)
+
+
+def test_an_audio_run_with_an_unverified_signature_is_refused() -> None:
+    findings = validate_document(
+        audio_run(signature_verified=False), AUDIO_RUN_CAPTURE, repo_root=REPO_ROOT
+    )
+
+    assert "audio_run.signature" in codes(findings)
+
+
+def test_a_final_licensing_bundle_is_clean() -> None:
+    bundle = build_bundle(
+        selected_option=MEASUREMENT_OPTION,
+        decision_owner="Owner A",
+        approver="Approver B",
+        decided_at="2026-11-05",
+        require_final=True,
+    )
+
+    findings = validate_document(bundle, LICENSING_BUNDLE)
+
+    assert [finding for finding in findings if finding.level == "error"] == []
+
+
+def test_a_draft_licensing_bundle_cannot_report_go() -> None:
+    bundle = build_bundle()
+    bundle["gate_verdict"] = "go"
+
+    findings = validate_document(bundle, LICENSING_BUNDLE)
+
+    assert "licensing.draft_go" in codes(findings)
+
+
+def test_selecting_another_device_without_remeasurement_is_refused() -> None:
+    bundle = build_bundle(
+        selected_option="vac-oem",
+        decision_owner="Owner A",
+        approver="Approver B",
+        decided_at="2026-11-05",
+        require_final=True,
+    )
+    bundle["remeasurement_required"] = False
+
+    findings = validate_document(bundle, LICENSING_BUNDLE)
+
+    assert "licensing.remeasurement_rule" in codes(findings)
+
+
+def test_an_unverified_redistribution_position_must_be_explicit() -> None:
+    bundle = build_bundle()
+    sonar = next(
+        option
+        for option in bundle["candidate_options"]
+        if option["option_id"] == "steelseries-sonar"
+    )
+    sonar["redistribution_allowed"] = "no"
+
+    findings = validate_document(bundle, LICENSING_BUNDLE)
+
+    assert "licensing.redistribution" not in codes(findings)
+    assert sonar["redistribution_allowed"] == "no"
