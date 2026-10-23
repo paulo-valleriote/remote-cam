@@ -29,7 +29,7 @@ jobs:
             spikes/f0-handshake/Cargo.toml
             spikes/f0-pipeline/Cargo.toml
           )
-          # The virtual-audio harness lands in its own change; check it when present.
+          # Check the virtual-audio harness when its manifest is present.
           if [ -f spikes/f0-virtual-audio/Cargo.toml ]; then
             manifests+=(spikes/f0-virtual-audio/Cargo.toml)
           fi
@@ -89,7 +89,6 @@ jobs:
       - name: Test and lint the virtual audio harness
         working-directory: .
         run: |
-          cargo fmt --manifest-path spikes/f0-virtual-audio/Cargo.toml -- --check
           cargo clippy --manifest-path spikes/f0-virtual-audio/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path spikes/f0-virtual-audio/Cargo.toml
 
