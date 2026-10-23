@@ -1,8 +1,5 @@
 # RemoteCam — AGENTS.md (General)
 
-> Worktree: `remotecam-investigation` (from `main`, commit `cd5865b`).
-> Full context: F0 risk-reduction phase; `spikes/` are non-production harnesses.
-
 ## Absolute rule (non-negotiable)
 
 - `spikes/` is **non-production**. Nothing under `spikes/` may be merged into `desktop/` or `mobile/` (FR-039).
