@@ -57,6 +57,13 @@ jobs:
           cargo clippy --manifest-path spikes/f0-pipeline/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path spikes/f0-pipeline/Cargo.toml
 
+      - name: Test and lint the virtual audio harness
+        working-directory: .
+        run: |
+          cargo fmt --manifest-path spikes/f0-virtual-audio/Cargo.toml -- --check
+          cargo clippy --manifest-path spikes/f0-virtual-audio/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path spikes/f0-virtual-audio/Cargo.toml
+
       - name: Install coverage tooling
         uses: taiki-e/install-action@cargo-llvm-cov
 
@@ -80,11 +87,11 @@ jobs:
 
       - name: Lint
         run: |
-          python -m ruff check spikes/tools spikes/f0-camera-injection spikes/f0-handshake
-          python -m ruff format --check spikes/tools spikes/f0-camera-injection spikes/f0-handshake
+          python -m ruff check spikes/tools spikes/f0-camera-injection spikes/f0-handshake spikes/f0-virtual-audio
+          python -m ruff format --check spikes/tools spikes/f0-camera-injection spikes/f0-handshake spikes/f0-virtual-audio
 
       - name: Run tests
-        run: python -m pytest spikes/tools spikes/f0-camera-injection spikes/f0-handshake
+        run: python -m pytest spikes/tools spikes/f0-camera-injection spikes/f0-handshake spikes/f0-virtual-audio
 
       - name: Record the preflight environment
         run: python spikes/tools/preflight.py --no-network-probe

@@ -69,6 +69,20 @@ ALLOWED_STAGES = {
 ALLOWED_PAIRING_CATEGORIES = {"valid", "adversarial"}
 RESIDUE_CASES = {"after_session_end", "after_application_restart"}
 ARTEFACT_KINDS = {"session_key", "pairing_token", "fingerprint", "pairing_record"}
+ALLOWED_LICENSE_MODELS = {
+    "donationware",
+    "proprietary_paid",
+    "permissive_open_source",
+    "own_driver",
+    "plan_b_video_only",
+}
+ALLOWED_REDISTRIBUTION = {"yes_with_conditions", "no", "unverified"}
+ALLOWED_SUPPORT_BURDEN = {"low", "medium", "high"}
+REQUIRED_LICENSE_OPTIONS = {
+    "redistribution_licensing",
+    "user_installed_official_driver",
+    "plan_b_video_only",
+}
 
 ENVIRONMENT = "environment"
 TOOLCHAIN_SELFTEST = "toolchain_selftest"
@@ -80,6 +94,7 @@ RESOURCE_SUMMARY = "resource_summary"
 DRIFT_SUMMARY = "drift_summary"
 DROPOUTS = "dropouts"
 INTELLIGIBILITY = "intelligibility"
+AUDIO_RUN_CAPTURE = "audio_run_capture"
 PAIRING_SCENARIOS = "pairing_scenarios"
 PAIRING_THROTTLING = "pairing_throttling"
 PAIRING_RESIDUE = "pairing_residue"
@@ -102,6 +117,7 @@ KNOWN_NAMES = {
     "drift_summary.json": DRIFT_SUMMARY,
     "dropouts.json": DROPOUTS,
     "intelligibility.json": INTELLIGIBILITY,
+    "audio_run_capture.json": AUDIO_RUN_CAPTURE,
     "pairing_scenarios.json": PAIRING_SCENARIOS,
     "pairing_throttling.json": PAIRING_THROTTLING,
     "pairing_residue.json": PAIRING_RESIDUE,
@@ -903,14 +919,34 @@ def _rule_dropouts(document: Any, report: _Report) -> None:
         )
 
 
-def _rule_intelligibility(document: Any, report: _Report) -> None:
+def _rule_intelligibility(document: Any, report: _Report, repo_root: Path) -> None:
     if not isinstance(document, dict):
         report.error("intelligibility.invalid", "the intelligibility check MUST be a JSON object")
         return
     if not str(document.get("observer", "")).strip():
         report.error("intelligibility.observer", "observer MUST name the person who listened")
-    if not str(document.get("manifest", "")).strip():
+    manifest = str(document.get("manifest", "")).strip()
+    if not manifest:
         report.error("intelligibility.manifest", "manifest MUST reference the phrase script")
+    else:
+        path = Path(manifest)
+        if not path.is_absolute():
+            path = repo_root / path
+        if not path.exists():
+            report.warning(
+                "intelligibility.manifest_not_found",
+                f"the referenced phrase script does not exist: {manifest}",
+            )
+    if document.get("phrase_count") != 20:
+        report.error(
+            "intelligibility.phrase_count",
+            "the committed phrase manifest carries exactly 20 phrases",
+        )
+    if not _is_int(document.get("non_anchor_count")) or document["non_anchor_count"] < 18:
+        report.error(
+            "intelligibility.non_anchor_count",
+            "the manifest MUST carry at least 18 non-anchor phrases",
+        )
 
     phrases_exact = document.get("phrases_exact")
     nonces_matched = document.get("nonces_matched")
@@ -936,6 +972,71 @@ def _rule_intelligibility(document: Any, report: _Report) -> None:
             report.error("intelligibility.phrases", "a pass requires at least 18 exact phrases")
         if not _is_number(corpus_wer) or corpus_wer > 0.05:
             report.error("intelligibility.wer", "a pass requires corpus_wer <= 0.05")
+
+
+def _rule_audio_run_capture(document: Any, report: _Report, repo_root: Path) -> None:
+    if not isinstance(document, dict):
+        report.error("audio_run.invalid", "audio_run_capture.json MUST be a JSON object")
+        return
+
+    for field in (
+        "capture_id",
+        "run_id",
+        "capture_file",
+        "device_name",
+        "consumer_app",
+        "dropout_analysis_ref",
+        "intelligibility_ref",
+        "intelligibility_observer",
+        "phrase_script_ref",
+    ):
+        if not str(document.get(field, "")).strip():
+            report.error("audio_run.field", f"{field} MUST be a non-empty string")
+
+    if document.get("capture_format") != "wav":
+        report.error("audio_run.format", "capture_format MUST be 'wav'")
+    if document.get("sample_rate_hz") != 48_000:
+        report.error("audio_run.sample_rate", "sample_rate_hz MUST be 48000")
+    if document.get("channels") != 1:
+        report.error("audio_run.channels", "channels MUST be 1 (mono)")
+    if document.get("device_pin") != "VB-CABLE":
+        report.error("audio_run.device_pin", "device_pin MUST be 'VB-CABLE'")
+    if document.get("device_version") != "driver pack 45":
+        report.error("audio_run.device_version", "device_version MUST be 'driver pack 45'")
+    if document.get("signature_verified") is not True:
+        report.error(
+            "audio_run.signature",
+            "signature_verified MUST be true on an admissible run",
+        )
+
+    duration = document.get("duration_s")
+    if not _is_number(duration) or duration < 600.0:
+        report.error("audio_run.duration", "duration_s MUST be at least 600 s")
+
+    renegotiations = document.get("consumer_renegotiations")
+    if not _is_int(renegotiations) or renegotiations < 0:
+        report.error(
+            "audio_run.renegotiations",
+            "consumer_renegotiations MUST be a non-negative integer",
+        )
+    elif renegotiations > 0:
+        report.error(
+            "audio_run.renegotiations_nonzero",
+            "the gate requires zero consumer renegotiations",
+        )
+
+    for field in ("dropout_analysis_ref", "intelligibility_ref", "phrase_script_ref"):
+        reference = str(document.get(field, "")).strip()
+        if not reference:
+            continue
+        path = Path(reference)
+        if not path.is_absolute():
+            path = repo_root / path
+        if not path.exists():
+            report.warning(
+                "audio_run.reference_not_found",
+                f"{field} does not exist yet: {reference}",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1176,7 +1277,9 @@ def _rule_licensing_bundle(document: Any, report: _Report) -> None:
                 "licensing.named_role",
                 f"{role_key} MUST name an individual, not a role title",
             )
+
     options = document.get("candidate_options")
+    option_ids: set[str] = set()
     if not isinstance(options, list) or not options:
         report.error(
             "licensing.candidates", "candidate_options MUST include every device considered"
@@ -1186,20 +1289,83 @@ def _rule_licensing_bundle(document: Any, report: _Report) -> None:
             if not isinstance(option, dict):
                 report.error("licensing.option_invalid", "every candidate option MUST be an object")
                 continue
+            option_id = str(option.get("option_id", "<unnamed>"))
+            option_ids.add(option_id)
             if not str(option.get("terms_captured_text", "")).strip():
                 report.error(
                     "licensing.terms",
-                    f"{option.get('option_id', '<unnamed>')}: terms_captured_text is required",
+                    f"{option_id}: terms_captured_text is required",
                 )
+            if not str(option.get("terms_url", "")).startswith("https://"):
+                report.error(
+                    "licensing.terms_url",
+                    f"{option_id}: terms_url MUST be an official https URL",
+                )
+            if option.get("license_model") not in ALLOWED_LICENSE_MODELS:
+                report.error("licensing.model", f"{option_id}: unknown license_model")
+            if option.get("redistribution_allowed") not in ALLOWED_REDISTRIBUTION:
+                report.error(
+                    "licensing.redistribution",
+                    f"{option_id}: redistribution_allowed MUST be yes_with_conditions, no or "
+                    "unverified",
+                )
+            if option.get("support_burden") not in ALLOWED_SUPPORT_BURDEN:
+                report.error("licensing.support", f"{option_id}: unknown support_burden")
+            if not _is_number(option.get("unit_cost")) or option["unit_cost"] < 0:
+                report.error("licensing.unit_cost", f"{option_id}: unit_cost MUST be non-negative")
+            if not isinstance(option.get("commercial_use_allowed"), bool):
+                report.error(
+                    "licensing.commercial",
+                    f"{option_id}: commercial_use_allowed MUST be a boolean",
+                )
+            if not isinstance(option.get("signature_verified"), bool):
+                report.error(
+                    "licensing.signature",
+                    f"{option_id}: signature_verified MUST be a boolean",
+                )
+
+    measurement = document.get("measurement_device")
+    measurement_id = measurement.get("option_id") if isinstance(measurement, dict) else None
+    if not measurement_id:
+        report.error("licensing.measurement_device", "measurement_device MUST carry an option_id")
+    elif option_ids and measurement_id not in option_ids:
+        report.error(
+            "licensing.measurement_candidate",
+            "the measurement device MUST also appear in candidate_options",
+        )
+
     compared = document.get("options_compared")
-    if not isinstance(compared, list) or len(compared) < 3:
+    if not isinstance(compared, list) or not REQUIRED_LICENSE_OPTIONS.issubset(set(compared)):
         report.error(
             "licensing.coverage",
             "options_compared MUST cover redistribution licensing, a user-installed official "
             "driver and a plan B alternative",
         )
-    if not isinstance(document.get("remeasurement_required"), bool):
+
+    selected = document.get("selected_option")
+    remeasurement = document.get("remeasurement_required")
+    if not isinstance(remeasurement, bool):
         report.error("licensing.remeasurement", "remeasurement_required MUST be a boolean")
+    elif selected is not None:
+        if selected not in option_ids:
+            report.error("licensing.selected", f"selected_option {selected!r} is not a candidate")
+        elif (selected != measurement_id) is not remeasurement:
+            report.error(
+                "licensing.remeasurement_rule",
+                "remeasurement_required MUST be true exactly when the selected device is not "
+                "the measurement device",
+            )
+
+    if document.get("bundle_status") == "final":
+        if not document.get("selected_option"):
+            report.error("licensing.final_selection", "a final bundle MUST select an option")
+        if not document.get("decided_at"):
+            report.error("licensing.final_date", "a final bundle MUST record decided_at")
+    elif document.get("bundle_status") == "draft" and document.get("gate_verdict") == "go":
+        report.error(
+            "licensing.draft_go",
+            "an unsigned draft MUST NOT report a go verdict",
+        )
 
 
 def _rule_open_questions(document: Any, report: _Report) -> None:
@@ -1396,7 +1562,9 @@ def validate_document(
     elif kind == DROPOUTS:
         _rule_dropouts(document, report)
     elif kind == INTELLIGIBILITY:
-        _rule_intelligibility(document, report)
+        _rule_intelligibility(document, report, repo_root)
+    elif kind == AUDIO_RUN_CAPTURE:
+        _rule_audio_run_capture(document, report, repo_root)
     elif kind == PAIRING_SCENARIOS:
         _rule_pairing_scenarios(document, report, repo_root)
     elif kind == PAIRING_THROTTLING:

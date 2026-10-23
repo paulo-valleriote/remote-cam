@@ -4,8 +4,9 @@ test: ## Run the desktop, mobile and measurement-tooling tests
 	$(CARGO) test --manifest-path desktop/Cargo.toml --workspace
 	$(CARGO) test --manifest-path spikes/f0-handshake/Cargo.toml
 	$(CARGO) test --manifest-path spikes/f0-pipeline/Cargo.toml
+	$(CARGO) test --manifest-path spikes/f0-virtual-audio/Cargo.toml
 	$(GRADLE) -p mobile :protocol:testDebugUnitTest :core:testDebugUnitTest
-	cd spikes/tools && $(PYTHON_BIN) -m pytest tests ../f0-camera-injection ../f0-handshake
+	cd spikes/tools && $(PYTHON_BIN) -m pytest tests ../f0-camera-injection ../f0-handshake ../f0-virtual-audio
 	bash protocol/vectors/run_conformance.sh
 
 coverage: ## Report coverage for the delivered contract packages
@@ -20,9 +21,13 @@ lint: ## Check formatting and run the linters
 	$(CARGO) clippy --manifest-path spikes/f0-handshake/Cargo.toml --all-targets -- -D warnings
 	$(CARGO) fmt --manifest-path spikes/f0-pipeline/Cargo.toml -- --check
 	$(CARGO) clippy --manifest-path spikes/f0-pipeline/Cargo.toml --all-targets -- -D warnings
+	$(CARGO) fmt --manifest-path spikes/f0-virtual-audio/Cargo.toml -- --check
+	$(CARGO) clippy --manifest-path spikes/f0-virtual-audio/Cargo.toml --all-targets -- -D warnings
 	cd spikes/tools && $(PYTHON_BIN) -m ruff check .
 	cd spikes/tools && $(PYTHON_BIN) -m ruff format --check .
 	cd spikes/f0-camera-injection && $(PYTHON_BIN) -m ruff check .
 	cd spikes/f0-camera-injection && $(PYTHON_BIN) -m ruff format --check .
 	cd spikes/f0-handshake && $(PYTHON_BIN) -m ruff check .
 	cd spikes/f0-handshake && $(PYTHON_BIN) -m ruff format --check .
+	cd spikes/f0-virtual-audio && $(PYTHON_BIN) -m ruff check .
+	cd spikes/f0-virtual-audio && $(PYTHON_BIN) -m ruff format --check .

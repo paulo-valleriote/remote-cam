@@ -1,0 +1,18 @@
+[package]
+name = "f0-virtual-audio"
+version = "0.1.0"
+edition = "2024"
+description = "F0 virtual audio run harness - NON-PRODUCTION"
+license = "Proprietary"
+publish = false
+
+# NON-PRODUCTION — F0 risk-reduction spike (FR-039). Nothing here merges into
+# `desktop/` or `mobile/`.
+
+[dependencies]
+remotecam-audio-bridge = { path = "../../desktop/crates/audio-bridge" }
+serde_json = "=1.0.154"
+
+[profile.release]
+lto = true
+opt-level = 3
