@@ -12,8 +12,10 @@ import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpTransceiver
-import org.webrtc.VideoCapturer
+import org.webrtc.SdpObserver
+import org.webrtc.VideoDecoderFactory
 import org.webrtc.VideoEncoderFactory
+import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -34,6 +36,16 @@ class PeerConnectionFactoryProvider(
 
     private val TAG = "PeerConnectionFactoryProvider"
 
+    companion object {
+        const val STREAM_ID = "remotecam"
+        const val AUDIO_TRACK_ID = "audio"
+        const val VIDEO_TRACK_ID = "video"
+
+        /** Host-candidates-only configuration (no STUN/TURN). */
+        internal fun rtcConfiguration(): PeerConnection.RTCConfiguration =
+            PeerConnection.RTCConfiguration(emptyList())
+    }
+
     private var peerConnectionFactory: PeerConnectionFactory? = null
     private var eglBase: EglBase? = null
     private var executor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -50,6 +62,9 @@ class PeerConnectionFactoryProvider(
 
     // Audio source
     private var audioSource: AudioSource? = null
+
+    // Video source fed by the capture source
+    private var videoSource: VideoSource? = null
 
     // Encoder/Decoder factories
     private var videoEncoderFactory: VideoEncoderFactory? = null
@@ -107,9 +122,7 @@ class PeerConnectionFactoryProvider(
         val factory = peerConnectionFactory ?: throw IllegalStateException("Not initialized. Call initialize() first.")
 
         // Configuration: host candidates only, no STUN/TURN
-        val config = PeerConnection.RTCConfiguration().apply {
-            iceServers = emptyList() // No STUN/TURN - host candidates only
-        }
+        val config = rtcConfiguration()
 
         // Media constraints
         val constraints = MediaConstraints()
@@ -128,14 +141,14 @@ class PeerConnectionFactoryProvider(
 
         val audioConstraints = MediaConstraints()
         audioSource = factory.createAudioSource(audioConstraints)
-        audioTrack = factory.createAudioTrack("audio", audioSource!!)
+        audioTrack = factory.createAudioTrack(AUDIO_TRACK_ID, audioSource!!)
 
         localStream!!.addTrack(audioTrack!!)
 
         // Add transceiver with SEND_ONLY direction
         val init = RtpTransceiver.RtpTransceiverInit(
-            RtpTransceiverDirection.SEND_ONLY,
-            listOf("remotecam")
+            RtpTransceiver.RtpTransceiverDirection.SEND_ONLY,
+            listOf(STREAM_ID)
         )
         peerConnection!!.addTransceiver(audioTrack!!, init)
 
@@ -144,20 +157,30 @@ class PeerConnectionFactoryProvider(
     }
 
     /**
-     * Create and add video track to the local stream and peer connection.
-     * The video capturer is provided by the capture source.
+     * Create the video source that the capture source feeds frames into.
+     * Call [addVideoTrack] with it once the PeerConnection exists.
      */
-    fun addVideoTrack(capturer: VideoCapturer): VideoTrack {
+    fun createVideoSource(): VideoSource {
+        val factory = peerConnectionFactory ?: throw IllegalStateException("Not initialized")
+        val source = factory.createVideoSource(false)
+        videoSource = source
+        return source
+    }
+
+    /**
+     * Create and add a video track to the local stream and peer connection.
+     */
+    fun addVideoTrack(source: VideoSource): VideoTrack {
         val factory = peerConnectionFactory ?: throw IllegalStateException("Not initialized")
 
-        videoTrack = factory.createVideoTrack("video", capturer)
+        videoTrack = factory.createVideoTrack(VIDEO_TRACK_ID, source)
 
         localStream!!.addTrack(videoTrack!!)
 
         // Add transceiver with SEND_ONLY direction and "remotecam" stream id
         val init = RtpTransceiver.RtpTransceiverInit(
-            RtpTransceiverDirection.SEND_ONLY,
-            listOf("remotecam")
+            RtpTransceiver.RtpTransceiverDirection.SEND_ONLY,
+            listOf(STREAM_ID)
         )
         peerConnection!!.addTransceiver(videoTrack!!, init)
 
@@ -182,10 +205,9 @@ class PeerConnectionFactoryProvider(
     /**
      * Create an offer for the signaling handshake.
      */
-    fun createOffer(): org.webrtc.SessionDescription {
+    fun createOffer(observer: SdpObserver) {
         val pc = peerConnection ?: throw IllegalStateException("No PeerConnection")
-        val constraints = MediaConstraints()
-        return pc.createOffer(constraints).get()
+        pc.createOffer(observer, MediaConstraints())
     }
 
     /**
@@ -193,9 +215,9 @@ class PeerConnectionFactoryProvider(
      */
     fun setLocalDescription(description: org.webrtc.SessionDescription) {
         val pc = peerConnection ?: throw IllegalStateException("No PeerConnection")
-        pc.setLocalDescription(object : PeerConnection.SdpObserver {
+        pc.setLocalDescription(object : SdpObserver {
             override fun onCreateSuccess(sessionDescription: org.webrtc.SessionDescription) {}
-            override fun onSetSuccess() { Log.d(TAG, "Local description set: ${sessionDescription.type}") }
+            override fun onSetSuccess() { Log.d(TAG, "Local description set: ${description.type}") }
             override fun onCreateFailure(error: String) { Log.e(TAG, "Create local description failed: $error") }
             override fun onSetFailure(error: String) { Log.e(TAG, "Set local description failed: $error") }
         }, description)
@@ -206,9 +228,9 @@ class PeerConnectionFactoryProvider(
      */
     fun setRemoteDescription(description: org.webrtc.SessionDescription) {
         val pc = peerConnection ?: throw IllegalStateException("No PeerConnection")
-        pc.setRemoteDescription(object : PeerConnection.SdpObserver {
+        pc.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(sessionDescription: org.webrtc.SessionDescription) {}
-            override fun onSetSuccess() { Log.d(TAG, "Remote description set: ${sessionDescription.type}") }
+            override fun onSetSuccess() { Log.d(TAG, "Remote description set: ${description.type}") }
             override fun onCreateFailure(error: String) { Log.e(TAG, "Create remote description failed: $error") }
             override fun onSetFailure(error: String) { Log.e(TAG, "Set remote description failed: $error") }
         }, description)
@@ -237,6 +259,9 @@ class PeerConnectionFactoryProvider(
 
         audioSource?.dispose()
         audioSource = null
+
+        videoSource?.dispose()
+        videoSource = null
 
         localStream?.dispose()
         localStream = null

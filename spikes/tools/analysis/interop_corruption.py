@@ -11,12 +11,12 @@ Detects:
 A negotiation success with visible corruption is a failure.
 """
 
-import json
-import numpy as np
-import cv2
 import argparse
-from pathlib import Path
+import json
 import sys
+
+import cv2
+import numpy as np
 
 
 class CorruptionDetector:
@@ -27,7 +27,7 @@ class CorruptionDetector:
         black_threshold: float = 1.0,
         green_magenta_threshold: float = 50.0,
         freeze_threshold: float = 0.995,
-        min_freeze_frames: int = 3
+        min_freeze_frames: int = 3,
     ):
         self.black_threshold = black_threshold
         self.green_magenta_threshold = green_magenta_threshold
@@ -195,12 +195,12 @@ def main():
 
     # Write output if requested
     if args.output:
-        with open(args.output, 'w') as f:
+        with open(args.output, "w") as f:
             json.dump(result, f, indent=2)
         print(f"\nResults written to {args.output}")
 
     # Exit with error code if corruption detected
-    if result['corruption_detected']:
+    if result["corruption_detected"]:
         print("\n❌ CORRUPTION DETECTED - Interop FAILED")
         sys.exit(1)
     else:

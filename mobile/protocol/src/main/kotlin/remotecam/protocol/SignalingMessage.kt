@@ -7,8 +7,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.serializer
 
 /** Requested capture limits. Every field is optional; supplied values are range-checked. */
 data class Limits(
@@ -28,7 +26,6 @@ data class Candidate(
 )
 
 /** Optional client metrics. Carries no identifiers. */
-@Serializable
 data class Stats(
     val fps: Double? = null,
     val videoBitrateKbps: Double? = null,
@@ -39,83 +36,43 @@ data class Stats(
 
 /** A validated signaling message. */
 sealed class SignalingMessage {
-    // Simplified API for the F0 spike
-    @Serializable
     data class Pair(
-        val token: String,
-        val clientFingerprint: String,
+        val token: ByteArray,
+        val dtlsFingerprint: ByteArray,
+        val limits: Limits,
     ) : SignalingMessage() {
-        override val type = "pair"
+        override fun equals(other: Any?): Boolean =
+            other is Pair && token.contentEquals(other.token) &&
+                dtlsFingerprint.contentEquals(other.dtlsFingerprint) && limits == other.limits
+
+        override fun hashCode(): Int = 31 * (31 * token.contentHashCode() + dtlsFingerprint.contentHashCode()) + limits.hashCode()
     }
 
-    @Serializable
     data class Paired(
-        val sessionId: String,
+        val sessionId: ByteArray,
+        val epoch: Long,
+        val dtlsFingerprint: ByteArray,
+        val acceptedLimits: Limits,
     ) : SignalingMessage() {
-        override val type = "paired"
+        override fun equals(other: Any?): Boolean =
+            other is Paired && sessionId.contentEquals(other.sessionId) && epoch == other.epoch &&
+                dtlsFingerprint.contentEquals(other.dtlsFingerprint) &&
+                acceptedLimits == other.acceptedLimits
+
+        override fun hashCode(): Int = 31 * (31 * (31 * sessionId.contentHashCode() + epoch.hashCode()) + dtlsFingerprint.contentHashCode()) + acceptedLimits.hashCode()
     }
 
-    @Serializable
-    data class Offer(
-        val sdp: String,
-    ) : SignalingMessage() {
-        override val type = "offer"
-    }
-
-    @Serializable
-    data class Answer(
-        val sdp: String,
-    ) : SignalingMessage() {
-        override val type = "answer"
-    }
-
-    @Serializable
-    data class Ice(
-        val candidate: String,
-        val sdpMid: String,
-        val sdpMLineIndex: Int,
-    ) : SignalingMessage() {
-        override val type = "ice"
-    }
-
-    @Serializable
-    data class StatsMessage(val stats: Stats) : SignalingMessage() {
-        override val type = "stats"
-    }
-
-    @Serializable
-    data class Close(val code: ReasonCode) : SignalingMessage() {
-        override val type = "close"
-    }
-
-    @Serializable
-    data class Error(val code: ReasonCode, val message: String?) : SignalingMessage() {
-        override val type = "error"
-    }
-
-    @Serializable
-    data object Ping : SignalingMessage() {
-        override val type = "ping"
-    }
-
-    @Serializable
-    data object Pong : SignalingMessage() {
-        override val type = "pong"
-    }
-
-    // Abstract property for message type
-    abstract val type: String
-
-    /** Serializes this message as a JSON string. */
-    fun toJson(): String = Json.encodeToString(this)
-
-    /** Parses a JSON string into a SignalingMessage. */
-    companion object {
-        fun parse(json: String): SignalingMessage = Json.decodeFromString(json)
-    }
+    data class Offer(val epoch: Long, val sdp: String) : SignalingMessage()
+    data class Answer(val epoch: Long, val sdp: String) : SignalingMessage()
+    data class Ice(val epoch: Long, val candidates: List<Candidate>) : SignalingMessage()
+    data class StatsMessage(val stats: Stats) : SignalingMessage()
+    data class Close(val code: ReasonCode) : SignalingMessage()
+    data class Error(val code: ReasonCode, val message: String?) : SignalingMessage()
+    data object Ping : SignalingMessage()
+    data object Pong : SignalingMessage()
 }
 
-/** Result of parsing one signaling frame for conformance testing. */
+/** Result of parsing one signaling frame. */
 sealed interface SignalingParseResult {
     data class Accepted(val message: SignalingMessage) : SignalingParseResult
     data class Rejected(val reason: ReasonCode) : SignalingParseResult
@@ -167,34 +124,43 @@ object SignalingParser {
 
         return when (type) {
             "pair" -> {
-                if (!root.keysAllowed("version", "type", "token", "client_fingerprint")) return rejected()
-                val token = root.string("token") ?: return rejected()
-                val fingerprint = root.string("client_fingerprint") ?: return rejected()
-                SignalingParseResult.Accepted(SignalingMessage.Pair(token, fingerprint))
+                if (!root.keysAllowed("version", "type", "token", "dtls_fingerprint", "limits")) return rejected()
+                val token = root.fixedHex("token", 32) ?: return rejected()
+                val fingerprint = root.fixedHex("dtls_fingerprint", 32) ?: return rejected()
+                val limits = parseLimits(root["limits"] ?: return rejected()) ?: return rejected()
+                SignalingParseResult.Accepted(SignalingMessage.Pair(token, fingerprint, limits))
             }
             "paired" -> {
-                if (!root.keysAllowed("version", "type", "session_id")) return rejected()
-                val sessionId = root.string("session_id") ?: return rejected()
-                SignalingParseResult.Accepted(SignalingMessage.Paired(sessionId))
+                if (!root.keysAllowed(
+                        "version", "type", "session_id", "epoch", "dtls_fingerprint", "accepted_limits",
+                    )
+                ) {
+                    return rejected()
+                }
+                val sessionId = root.fixedHex("session_id", 16) ?: return rejected()
+                val epoch = root.requiredEpoch() ?: return rejected()
+                val fingerprint = root.fixedHex("dtls_fingerprint", 32) ?: return rejected()
+                val limits = parseLimits(root["accepted_limits"] ?: return rejected()) ?: return rejected()
+                SignalingParseResult.Accepted(SignalingMessage.Paired(sessionId, epoch, fingerprint, limits))
             }
             "offer", "answer" -> {
-                if (!root.keysAllowed("version", "type", "sdp")) return rejected()
+                if (!root.keysAllowed("version", "type", "epoch", "sdp")) return rejected()
+                val epoch = root.requiredEpoch() ?: return rejected()
                 val sdp = root.string("sdp") ?: return rejected()
                 val length = sdp.codePointCount()
                 if (length !in 1..8192) return rejected()
                 val message = if (type == "offer") {
-                    SignalingMessage.Offer(sdp)
+                    SignalingMessage.Offer(epoch, sdp)
                 } else {
-                    SignalingMessage.Answer(sdp)
+                    SignalingMessage.Answer(epoch, sdp)
                 }
                 SignalingParseResult.Accepted(message)
             }
             "ice" -> {
-                if (!root.keysAllowed("version", "type", "candidate", "sdp_mid", "sdp_mline_index")) return rejected()
-                val candidate = root.string("candidate") ?: return rejected()
-                val sdpMid = root.string("sdp_mid") ?: return rejected()
-                val sdpMLineIndex = root.requiredLong("sdp_mline_index")?.takeIf { it in 0..65535 }?.toInt() ?: return rejected()
-                SignalingParseResult.Accepted(SignalingMessage.Ice(candidate, sdpMid, sdpMLineIndex))
+                if (!root.keysAllowed("version", "type", "epoch", "candidates")) return rejected()
+                val epoch = root.requiredEpoch() ?: return rejected()
+                val candidates = parseCandidates(root["candidates"] ?: return rejected()) ?: return rejected()
+                SignalingParseResult.Accepted(SignalingMessage.Ice(epoch, candidates))
             }
             "stats" -> {
                 if (!root.keysAllowed(
@@ -237,6 +203,48 @@ object SignalingParser {
         }
     }
 
+    private fun parseLimits(element: JsonElement): Limits? {
+        val map = element as? JsonObject ?: return null
+        if (!map.keysAllowed(
+                "max_width", "max_height", "max_frame_rate", "max_video_bitrate_kbps", "max_audio_bitrate_kbps",
+            )
+        ) {
+            return null
+        }
+        return try {
+            Limits(
+                maxWidth = map.optionalInt("max_width", 160, 3840),
+                maxHeight = map.optionalInt("max_height", 120, 2160),
+                maxFrameRate = map.optionalInt("max_frame_rate", 1, 60),
+                maxVideoBitrateKbps = map.optionalInt("max_video_bitrate_kbps", 200, 8000),
+                maxAudioBitrateKbps = map.optionalInt("max_audio_bitrate_kbps", 8, 128),
+            )
+        } catch (_: InvalidField) {
+            null
+        }
+    }
+
+    private fun parseCandidates(element: JsonElement): List<Candidate>? {
+        val array = element as? JsonArray ?: return null
+        if (array.size > 64) return null
+        return array.map { item ->
+            val map = item as? JsonObject ?: return null
+            if (!map.keysAllowed("address", "port", "component", "protocol")) return null
+            val address = map.string("address") ?: return null
+            if (Addresses.parsePrivate(address) == null) return null
+            val port = map.requiredLong("port")?.takeIf { it in 1..65535 }?.toInt() ?: return null
+            val component = map.requiredLong("component")?.takeIf { it in 1..2 }?.toInt() ?: return null
+            val protocol = map["protocol"]?.let { value ->
+                val primitive = value as? JsonPrimitive ?: return null
+                if (!primitive.isString) return null
+                val content = primitive.content
+                if (content != "udp") return null
+                content
+            }
+            Candidate(address, port, component, protocol)
+        }
+    }
+
     private fun parseStats(map: JsonObject): Stats? {
         val thermal = map["thermal_status"]?.let { value ->
             val primitive = value as? JsonPrimitive ?: return null
@@ -272,6 +280,23 @@ object SignalingParser {
         val primitive = this[key] as? JsonPrimitive ?: return null
         if (primitive.isString) return null
         return primitive.longOrNull
+    }
+
+    private fun JsonObject.requiredEpoch(): Long? {
+        val value = requiredLong("epoch") ?: return null
+        return if (value >= 0) value else null
+    }
+
+    private fun JsonObject.fixedHex(key: String, byteLength: Int): ByteArray? {
+        val text = string(key) ?: return null
+        return Hex.decodeExact(text, byteLength)
+    }
+
+    private fun JsonObject.optionalInt(key: String, minimum: Int, maximum: Int): Int? {
+        if (!containsKey(key)) return null
+        val value = requiredLong(key) ?: throw InvalidField()
+        if (value < minimum || value > maximum) throw InvalidField()
+        return value.toInt()
     }
 
     private fun JsonObject.optionalDouble(key: String, minimum: Double, maximum: Double): Double? {

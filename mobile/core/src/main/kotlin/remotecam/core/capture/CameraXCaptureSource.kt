@@ -1,8 +1,10 @@
 package remotecam.core.capture
 
 import android.content.Context
+import android.graphics.ImageFormat
 import android.util.Log
 import android.util.Size
+import android.view.Surface
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -22,8 +24,8 @@ import java.util.concurrent.Executors
  * CameraX capture source for the F0 spike.
  *
  * Binds ONLY ImageAnalysis (no Preview surface) to minimize ISP work, latency and heat.
- * Runtime-guards pixelStride and de-interleaves stride-2 devices into a scratch I420 buffer.
- * Uses JavaI420Buffer.wrap(...) with no copy for planar stride 1.
+ * Copies every plane honouring rowStride and pixelStride, which covers both planar
+ * (pixelStride 1) and semi-planar (pixelStride 2) YUV_420_888 devices.
  *
  * This is a spike harness, not production code.
  */
@@ -39,11 +41,6 @@ class CameraXCaptureSource(
     private var captureExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var capturerObserver: CapturerObserver? = null
     private var isActive = false
-
-    // Scratch buffer for stride-2 de-interleaving
-    private var scratchY: ByteArray? = null
-    private var scratchU: ByteArray? = null
-    private var scratchV: ByteArray? = null
 
     companion object {
         const val TARGET_WIDTH = 1280
@@ -86,10 +83,6 @@ class CameraXCaptureSource(
         captureExecutor.shutdown()
         captureExecutor = Executors.newSingleThreadExecutor()
 
-        scratchY = null
-        scratchU = null
-        scratchV = null
-
         Log.d(TAG, "Capture source released")
     }
 
@@ -100,7 +93,7 @@ class CameraXCaptureSource(
         // Configure ImageAnalysis - NO Preview surface
         val imageAnalysis = ImageAnalysis.Builder()
             .setTargetResolution(Size(TARGET_WIDTH, TARGET_HEIGHT))
-            .setTargetRotation(lifecycleOwner.lifecycle.currentState?.ordinal ?: 0)
+            .setTargetRotation(Surface.ROTATION_0)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
             .build()
@@ -128,7 +121,7 @@ class CameraXCaptureSource(
             }
 
             val format = imageProxy.format
-            if (format != ImageProxy.Format.YUV_420_888) {
+            if (format != ImageFormat.YUV_420_888) {
                 Log.w(TAG, "Unexpected image format: $format")
                 imageProxy.close()
                 return
@@ -141,64 +134,13 @@ class CameraXCaptureSource(
                 return
             }
 
-            val yPlane = planes[0]
-            val uPlane = planes[1]
-            val vPlane = planes[2]
-
             val width = imageProxy.width
             val height = imageProxy.height
 
-            // Check pixel stride for chroma planes
-            val uPixelStride = uPlane.pixelStride
-            val vPixelStride = vPlane.pixelStride
-
-            val yBuffer = yPlane.buffer
-            val uBuffer = uPlane.buffer
-            val vBuffer = vPlane.buffer
-
-            val yStride = yPlane.rowStride
-            val uStride = uPlane.rowStride
-            val vStride = vPlane.rowStride
-
-            val uvWidth = width / 2
-            val uvHeight = height / 2
-            val uvSize = uvWidth * uvHeight
-
-            val i420Buffer: JavaI420Buffer
-
-            if (uPixelStride == 1 && vPixelStride == 1) {
-                // Planar I420 - can wrap directly with no copy
-                // Ensure buffers are positioned correctly
-                yBuffer.rewind()
-                uBuffer.rewind()
-                vBuffer.rewind()
-
-                // Allocate or reuse direct buffers if needed
-                val yData = ByteArray(yBuffer.remaining())
-                val uData = ByteArray(uBuffer.remaining())
-                val vData = ByteArray(vBuffer.remaining())
-
-                yBuffer.get(yData)
-                uBuffer.get(uData)
-                vBuffer.get(vData)
-
-                i420Buffer = JavaI420Buffer.wrap(
-                    width, height,
-                    yData, 0, yStride,
-                    uData, 0, uStride,
-                    vData, 0, vStride,
-                    null
-                )
-            } else if (uPixelStride == 2 && vPixelStride == 2) {
-                // Semi-planar NV21/NV12 - must de-interleave into scratch I420 buffer
-                i420Buffer = deinterleaveStride2(
-                    width, height,
-                    yBuffer, yStride,
-                    uBuffer, uStride,
-                    vBuffer, vStride
-                )
-            } else {
-                Log.e(TAG, "Unsupported pixel stride: U=$uPixelStride, V=$vPixelStride")
+            val i420Buffer = try {
+                toI420(width, height, planes)
+            } catch (failure: Exception) {
+                Log.e(TAG, failure.message ?: "Unsupported image layout")
                 imageProxy.close()
                 return
             }
@@ -210,88 +152,53 @@ class CameraXCaptureSource(
 
             capturerObserver?.onFrameCaptured(frame)
 
-            // Release the buffer reference (WebRTC manages the buffer lifecycle)
-            i420Buffer.release()
+            // Release our reference after delivery; WebRTC retained its own.
+            frame.release()
 
             imageProxy.close()
         }
 
         /**
-         * De-interleave stride-2 (NV21/NV12) chroma planes into planar I420.
-         * This is the critical path for devices where YUV_420_888 is actually NV21.
+         * Copies the three YUV_420_888 planes into a WebRTC I420 buffer,
+         * honouring rowStride/pixelStride. This covers both planar (pixelStride 1)
+         * and semi-planar (pixelStride 2) layouts without swapping U and V.
          */
-        private fun deinterleaveStride2(
-            width: Int,
-            height: Int,
-            yBuffer: ByteBuffer,
-            yStride: Int,
-            uBuffer: ByteBuffer,
-            uStride: Int,
-            vBuffer: ByteBuffer,
-            vStride: Int
-        ): JavaI420Buffer {
-            val ySize = width * height
-            val uvSize = (width / 2) * (height / 2)
+        private fun toI420(width: Int, height: Int, planes: Array<PlaneProxy>): JavaI420Buffer {
+            require(width % 2 == 0 && height % 2 == 0) { "Odd frame size ${width}x$height" }
+            val uvWidth = width / 2
+            val uvHeight = height / 2
 
-            // Allocate or reuse scratch buffers
-            if (scratchY == null || scratchY!!.size != ySize) {
-                scratchY = ByteArray(ySize)
-                scratchU = ByteArray(uvSize)
-                scratchV = ByteArray(uvSize)
+            val buffer = JavaI420Buffer.allocate(width, height)
+            try {
+                copyPlane(planes[0], buffer.dataY, buffer.strideY, width, height)
+                copyPlane(planes[1], buffer.dataU, buffer.strideU, uvWidth, uvHeight)
+                copyPlane(planes[2], buffer.dataV, buffer.strideV, uvWidth, uvHeight)
+            } catch (failure: Exception) {
+                buffer.release()
+                throw failure
             }
-
-            // Copy Y plane (planar, stride may be > width)
-            copyPlane(yBuffer, yStride, width, height, scratchY!!, width)
-
-            // For NV21: the U and V buffers are actually interleaved in a single plane
-            // The pixelStride == 2 means the buffer alternates V, U, V, U...
-            // We need to read the combined buffer and de-interleave
-
-            // Determine which buffer has the interleaved data (typically uBuffer)
-            val combinedBuffer = if (uBuffer.remaining() >= 2 * uvSize) uBuffer else vBuffer
-            val combinedStride = if (uBuffer.remaining() >= 2 * uvSize) uStride else vStride
-
-            combinedBuffer.rewind()
-
-            // Read interleaved VU data
-            val combinedData = ByteArray(2 * uvSize)
-            combinedBuffer.get(combinedData)
-
-            // De-interleave: V0 U0 V1 U1 V2 U2 ...
-            var combinedIndex = 0
-            for (i in 0 until uvSize) {
-                scratchV!![i] = combinedData[combinedIndex]
-                scratchU!![i] = combinedData[combinedIndex + 1]
-                combinedIndex += 2
-            }
-
-            return JavaI420Buffer.wrap(
-                width, height,
-                scratchY!!, 0, width,
-                scratchU!!, 0, uvWidth,
-                scratchV!!, 0, uvWidth,
-                null
-            )
+            return buffer
         }
 
         /**
-         * Copy a plane with row stride to a packed buffer.
+         * Copies one plane into a packed destination, skipping the source padding.
          */
         private fun copyPlane(
-            src: ByteBuffer,
-            srcStride: Int,
+            plane: PlaneProxy,
+            dst: ByteBuffer,
+            dstStride: Int,
             width: Int,
-            height: Int,
-            dst: ByteArray,
-            dstStride: Int
+            height: Int
         ) {
-            src.rewind()
-            for (y in 0 until height) {
-                val srcOffset = y * srcStride
-                val dstOffset = y * dstStride
-                src.position(srcOffset)
-                src.get(dst, dstOffset, width)
-            }
+            YuvPlaneCopier.copyPlane(
+                src = plane.buffer,
+                srcRowStride = plane.rowStride,
+                srcPixelStride = plane.pixelStride,
+                dst = dst,
+                dstRowStride = dstStride,
+                width = width,
+                height = height,
+            )
         }
     }
 }

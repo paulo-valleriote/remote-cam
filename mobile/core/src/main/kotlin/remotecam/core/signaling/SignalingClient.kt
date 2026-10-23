@@ -5,16 +5,30 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import org.webrtc.DataChannel
+import org.webrtc.IceCandidate
+import org.webrtc.MediaConstraints
+import org.webrtc.MediaStream
+import org.webrtc.PeerConnection
+import org.webrtc.RtpReceiver
+import org.webrtc.RtpTransceiver
+import org.webrtc.SdpObserver
+import org.webrtc.SessionDescription
 import remotecam.core.transport.PeerConnectionFactoryProvider
+import remotecam.protocol.Candidate
+import remotecam.protocol.Limits
 import remotecam.protocol.QrPayload
+import remotecam.protocol.SignalingEncoder
 import remotecam.protocol.SignalingMessage
-import java.net.URL
+import remotecam.protocol.SignalingParseResult
+import remotecam.protocol.SignalingParser
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
@@ -43,9 +57,10 @@ class SignalingClient(
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     private var isConnected = false
     private var pairingCallback: ((QrPayload) -> Unit)? = null
-    private var sessionId: String? = null
+    private var sessionId: ByteArray? = null
     private var pinnedFingerprint: String? = null
-    private var pairingToken: String? = null
+    private var pairingToken: ByteArray? = null
+    private var currentEpoch: Long = 0
 
     // TLS 1.3 with custom trust manager for pinning
     private val trustManager = object : X509TrustManager {
@@ -113,8 +128,8 @@ class SignalingClient(
 
                     // Extract fingerprint and token
                     this.pinnedFingerprint = payload.tlsFingerprintHex
-                    this.pairingToken = payload.pairingTokenHex
-                    this.sessionId = payload.sessionIdHex
+                    this.pairingToken = payload.pairingToken
+                    this.sessionId = payload.sessionId
 
                     Log.d(TAG, "QR validated: session=${payload.sessionIdHex}, endpoints=${payload.endpoints.size}")
 
@@ -188,46 +203,55 @@ class SignalingClient(
         pairingToken?.let { token ->
             val message = SignalingMessage.Pair(
                 token = token,
-                clientFingerprint = "" // Mobile doesn't have a certificate in F0
+                dtlsFingerprint = ByteArray(32), // Mobile doesn't have a certificate in F0
+                limits = Limits()
             )
             sendMessage(message)
         }
     }
 
     private fun sendMessage(message: SignalingMessage) {
-        webSocket?.send(message.toJson())
+        webSocket?.send(SignalingEncoder.encode(message))
     }
 
     private fun handleMessage(text: String) {
         try {
-            val message = SignalingMessage.parse(text)
-            when (message) {
-                is SignalingMessage.Paired -> {
-                    Log.d(TAG, "Pairing successful: ${message.sessionId}")
-                    // Start WebRTC negotiation
-                    startWebRtcNegotiation()
+            when (val parsed = SignalingParser.parse(text)) {
+                is SignalingParseResult.Rejected -> {
+                    Log.w(TAG, "Rejected signaling frame: ${parsed.reason.wireName}")
                 }
-                is SignalingMessage.Offer -> {
-                    Log.d(TAG, "Received offer")
-                    handleOffer(message)
-                }
-                is SignalingMessage.Answer -> {
-                    Log.d(TAG, "Received answer")
-                    handleAnswer(message)
-                }
-                is SignalingMessage.Ice -> {
-                    handleIceCandidate(message)
-                }
-                is SignalingMessage.Close -> {
-                    Log.d(TAG, "Received close: ${message.code}")
-                    close()
-                }
-                is SignalingMessage.Error -> {
-                    Log.e(TAG, "Received error: ${message.code}")
-                    close()
-                }
-                else -> {
-                    Log.w(TAG, "Unknown message type: ${message.type}")
+                is SignalingParseResult.Accepted -> when (val message = parsed.message) {
+                    is SignalingMessage.Paired -> {
+                        Log.d(TAG, "Pairing successful: ${message.sessionId.toHex()}")
+                        sessionId = message.sessionId
+                        currentEpoch = message.epoch
+                        // Start WebRTC negotiation
+                        startWebRtcNegotiation()
+                    }
+                    is SignalingMessage.Offer -> {
+                        Log.d(TAG, "Received offer")
+                        currentEpoch = message.epoch
+                        handleOffer(message)
+                    }
+                    is SignalingMessage.Answer -> {
+                        Log.d(TAG, "Received answer")
+                        handleAnswer(message)
+                    }
+                    is SignalingMessage.Ice -> {
+                        currentEpoch = message.epoch
+                        handleIceCandidate(message)
+                    }
+                    is SignalingMessage.Close -> {
+                        Log.d(TAG, "Received close: ${message.code}")
+                        stop()
+                    }
+                    is SignalingMessage.Error -> {
+                        Log.e(TAG, "Received error: ${message.code}")
+                        stop()
+                    }
+                    else -> {
+                        Log.w(TAG, "Unhandled message: ${message::class.simpleName}")
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -242,35 +266,35 @@ class SignalingClient(
 
     private fun startWebRtcNegotiation() {
         // Create PeerConnection and start capture
-        val pc = factoryProvider.createPeerConnection(object : org.webrtc.PeerConnection.Observer {
-            override fun onIceCandidate(candidate: org.webrtc.IceCandidate) {
-                val iceMsg = SignalingMessage.Ice(
-                    candidate = candidate.sdp,
-                    sdpMid = candidate.sdpMid!!,
-                    sdpMLineIndex = candidate.sdpMLineIndex
-                )
-                sendMessage(iceMsg)
+        val pc = factoryProvider.createPeerConnection(object : PeerConnection.Observer {
+            override fun onIceCandidate(candidate: IceCandidate) {
+                val parsed = parseCandidate(candidate.sdp) ?: return
+                sendMessage(SignalingMessage.Ice(currentEpoch, listOf(parsed)))
             }
 
-            override fun onIceConnectionChange(state: org.webrtc.PeerConnection.IceConnectionState) {
+            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
                 Log.d(TAG, "ICE connection state: $state")
             }
 
-            override fun onSignalingChange(state: org.webrtc.PeerConnection.SignalingState) {}
+            override fun onIceConnectionReceivingChange(receiving: Boolean) {}
 
-            override fun onIceCandidatesRemoved(candidates: Array<org.webrtc.IceCandidate>) {}
+            override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState) {}
 
-            override fun onAddStream(stream: org.webrtc.MediaStream) {}
+            override fun onSignalingChange(state: PeerConnection.SignalingState) {}
 
-            override fun onRemoveStream(stream: org.webrtc.MediaStream) {}
+            override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) {}
 
-            override fun onDataChannel(channel: org.webrtc.DataChannel) {}
+            override fun onAddStream(stream: MediaStream) {}
+
+            override fun onRemoveStream(stream: MediaStream) {}
+
+            override fun onDataChannel(channel: DataChannel) {}
 
             override fun onRenegotiationNeeded() {}
 
-            override fun onAddTrack(receiver: org.webrtc.RtpReceiver, streams: Array<org.webrtc.MediaStream>) {}
+            override fun onAddTrack(receiver: RtpReceiver, streams: Array<MediaStream>) {}
 
-            override fun onTrack(transceiver: org.webrtc.RtpTransceiver) {}
+            override fun onTrack(transceiver: RtpTransceiver) {}
         })
 
         // Add audio and video tracks
@@ -281,23 +305,31 @@ class SignalingClient(
     private fun handleOffer(message: SignalingMessage.Offer) {
         val pc = factoryProvider.getPeerConnection() ?: return
 
-        val offer = org.webrtc.SessionDescription(
-            org.webrtc.SessionDescription.Type.OFFER,
-            message.sdp
-        )
-        pc.setRemoteDescription(object : org.webrtc.PeerConnection.SdpObserver {
-            override fun onCreateSuccess(sessionDescription: org.webrtc.SessionDescription) {}
+        val offer = SessionDescription(SessionDescription.Type.OFFER, message.sdp)
+        pc.setRemoteDescription(object : SdpObserver {
+            override fun onCreateSuccess(sessionDescription: SessionDescription) {}
             override fun onSetSuccess() {
                 // Create answer
-                val answer = pc.createAnswer(org.webrtc.MediaConstraints()).get()
-                pc.setLocalDescription(object : org.webrtc.PeerConnection.SdpObserver {
-                    override fun onCreateSuccess(sessionDescription: org.webrtc.SessionDescription) {}
-                    override fun onSetSuccess() {
-                        sendMessage(SignalingMessage.Answer(sessionDescription.sdp))
+                pc.createAnswer(object : SdpObserver {
+                    override fun onCreateSuccess(answer: SessionDescription) {
+                        pc.setLocalDescription(object : SdpObserver {
+                            override fun onCreateSuccess(sessionDescription: SessionDescription) {}
+                            override fun onSetSuccess() {
+                                sendMessage(SignalingMessage.Answer(message.epoch, answer.description))
+                            }
+                            override fun onCreateFailure(error: String) {
+                                Log.e(TAG, "Create answer failed: $error")
+                            }
+                            override fun onSetFailure(error: String) {
+                                Log.e(TAG, "Set local answer failed: $error")
+                            }
+                        }, answer)
                     }
+
+                    override fun onSetSuccess() {}
                     override fun onCreateFailure(error: String) { Log.e(TAG, "Create answer failed: $error") }
-                    override fun onSetFailure(error: String) { Log.e(TAG, "Set local answer failed: $error") }
-                }, answer)
+                    override fun onSetFailure(error: String) {}
+                }, MediaConstraints())
             }
             override fun onCreateFailure(error: String) { Log.e(TAG, "Create offer failed: $error") }
             override fun onSetFailure(error: String) { Log.e(TAG, "Set remote offer failed: $error") }
@@ -307,12 +339,9 @@ class SignalingClient(
     private fun handleAnswer(message: SignalingMessage.Answer) {
         val pc = factoryProvider.getPeerConnection() ?: return
 
-        val answer = org.webrtc.SessionDescription(
-            org.webrtc.SessionDescription.Type.ANSWER,
-            message.sdp
-        )
-        pc.setRemoteDescription(object : org.webrtc.PeerConnection.SdpObserver {
-            override fun onCreateSuccess(sessionDescription: org.webrtc.SessionDescription) {}
+        val answer = SessionDescription(SessionDescription.Type.ANSWER, message.sdp)
+        pc.setRemoteDescription(object : SdpObserver {
+            override fun onCreateSuccess(sessionDescription: SessionDescription) {}
             override fun onSetSuccess() { Log.d(TAG, "Remote answer set") }
             override fun onCreateFailure(error: String) {}
             override fun onSetFailure(error: String) { Log.e(TAG, "Set remote answer failed: $error") }
@@ -321,9 +350,30 @@ class SignalingClient(
 
     private fun handleIceCandidate(message: SignalingMessage.Ice) {
         val pc = factoryProvider.getPeerConnection() ?: return
-        val candidate = org.webrtc.IceCandidate(message.sdpMid, message.sdpMLineIndex, message.candidate)
-        pc.addIceCandidate(candidate)
+        for (candidate in message.candidates) {
+            val sdp = "candidate:${candidate.component} ${candidate.component} " +
+                "${candidate.protocol ?: "udp"} 2130706431 ${candidate.address} ${candidate.port} typ host"
+            pc.addIceCandidate(IceCandidate("0", 0, sdp))
+        }
     }
+
+    /**
+     * Parses a WebRTC candidate SDP line into the contract candidate shape.
+     * Returns null for candidates the contract cannot represent (non-UDP or
+     * components outside 1..2).
+     */
+    private fun parseCandidate(sdp: String): Candidate? {
+        val fields = sdp.removePrefix("candidate:").split(' ')
+        if (fields.size < 6) return null
+        val component = fields[1].toIntOrNull() ?: return null
+        val protocol = fields[2].lowercase()
+        val address = fields[4]
+        val port = fields[5].toIntOrNull() ?: return null
+        if (component !in 1..2 || protocol != "udp") return null
+        return Candidate(address, port, component, protocol)
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     /**
      * Close the signaling connection and clean up.
@@ -332,7 +382,7 @@ class SignalingClient(
         scope.cancel()
         webSocket?.close(1000, "Client closing")
         webSocket = null
-        okHttpClient?.dispatcher.executorService.shutdown()
+        okHttpClient?.dispatcher?.executorService?.shutdown()
         okHttpClient = null
         isConnected = false
         pairingCallback = null
