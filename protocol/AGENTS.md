@@ -3,6 +3,10 @@
 > Worktree: `remotecam-investigation/protocol/` (branch `main`, commit `cd5865b`)
 > Protocol-specific rules. Consumed by `desktop/crates/protocol` (Rust) and `mobile/protocol` (Kotlin). Do NOT apply to `desktop/`, `mobile/`, or `spikes/`.
 
+**Quick start:** Scope = shared versioned contract (v1 only). Hard rules: no `version > 1`, unknown fields rejected (`REJECTED`), lowercase hex only (`0123456789abcdef`), endpoint ordering `(family, hex(address))`, 26 closed reason codes (`reason-codes.json`), `MAX_MESSAGE_BYTES = 16 KiB`. Before edit: update `signaling.schema.json` / `reason-codes.json` + `specs/001-f0-technical-spikes/research.md`; run `make spike-interop` / `run_conformance.sh`.
+
+**Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/contracts/signaling-messages.schema.json`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`.
+
 ## Context
 
 - **Shared, versioned contract:** v1. No contract accepts greater versions; future versions are rejected by strict parsing in Kotlin (`version > 1` → `UNSUPPORTED_VERSION`) and by Rust logic (similar).

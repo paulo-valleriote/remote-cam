@@ -2,6 +2,13 @@
 
 > Desktop-specific rules. Do NOT apply to `mobile/`, `protocol/`, or `spikes/`.
 
+> Worktree: `remotecam-investigation/desktop/` (branch `main`, commit `cd5865b`)
+> Desktop-specific rules. Do NOT apply to `mobile/`, `protocol/`, or `spikes/`.
+
+**Quick start:** Scope = desktop-only (Rust workspace, 6 crates, MSRV 1.92). Hard rules: pinned `=` dependencies (`Cargo.lock` versioned), `cfg(windows)` only on Windows 11 SDK, DirectShow fallback only when matrix fails (`vendor/dshow-vcam-fallback/` not default), token zeroization (`subtle` + `ptr::write_volatile`), TLS 1.3 + SHA-256 pinning. Before edit: read `protocol/AGENTS.md` for contracts; build via `make build-desktop`.
+
+**Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/research.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`.
+
 ## Context and architecture
 
 - **Rust workspace:** `Cargo.toml` resolver 3, edition 2024, MSRV 1.92, version 0.1.0.

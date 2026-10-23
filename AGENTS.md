@@ -1,5 +1,12 @@
 # RemoteCam — AGENTS.md (General)
 
+> Worktree: `remotecam-investigation` (from `main`, commit `cd5865b`).
+> Full context: F0 risk-reduction phase; `spikes/` are non-production harnesses.
+
+**Quick start:** Scope = cross-cutting rules for 4 sub-parts (`desktop/`, `mobile/`, `protocol/`, `spikes/`). Hard rules: FR-039 (spikes non-prod), protocol v1 only (no >1), ≥90% coverage on protocol. Before edit: read sub-part `AGENTS.md`; build via `make build-desktop` / `make build-mobile`; evidence-first for spikes (`spikes/evidence/`).
+
+**Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`. Agent commands: `speckit.plan`, `speckit.implement`, `speckit.checklist` (see `.opencode/`).
+
 ## Absolute rule (non-negotiable)
 
 - `spikes/` is **non-production**. Nothing under `spikes/` may be merged into `desktop/` or `mobile/` (FR-039).

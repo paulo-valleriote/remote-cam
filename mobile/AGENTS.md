@@ -2,6 +2,13 @@
 
 > Mobile-specific rules. Do NOT apply to `desktop/`, `protocol/`, or `spikes/`.
 
+> Worktree: `remotecam-investigation/mobile/` (branch `main`, commit `cd5865b`)
+> Mobile-specific rules. Do NOT apply to `desktop/`, `protocol/`, or `spikes/`.
+
+**Quick start:** Scope = mobile-only (Kotlin, AGP 9.4.1, compileSdk 36, minSdk 29, 3 modules). Hard rules: `kotlinx-serialization-json` (no `.proto`), strict parsing (unknown keys / version >1 rejected), TLS 1.3 cert pinning (`X509TrustManager` + SHA-256, `hostnameVerifier` disabled), `CameraXCaptureSource` only `ImageAnalysis`, `Non-production` in all source. Before edit: read `protocol/AGENTS.md`; build via `make build-mobile`.
+
+**Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`.
+
 ## Context and architecture
 
 - **F0 non-production app:** all modules (`:app`, `:core`, `:protocol`) are spike harnesses, not production.
