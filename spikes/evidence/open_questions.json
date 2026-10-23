@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-11-06T00:00:00+00:00",
+  "generated_at": "2026-10-23T17:20:00-03:00",
   "feature": "001-f0-technical-spikes",
   "source": "research.md §3 (open-questions register), decisions/*.md",
-  "notes": "An `answered` question MUST reference a decision record. Questions marked blocking must be resolved before F1 can proceed.",
+  "notes": "F0 closure dispositions: no question remains open. An `answered` question records the measured answer; a `deferred` question names the phase that must resolve it.",
   "open_questions": [
     {
       "question_id": "Q-1",
@@ -10,9 +10,10 @@
       "owner": "Technical lead",
       "impact": "Decides the installer design and the no-admin promise for the camera",
       "blocking": true,
-      "status": "open",
-      "context": "Open question 1 in TDD; not answered because the registration matrix has not run on Windows 11.",
-      "decision_ref": "spikes/evidence/decisions/D-10-injection-backend.md (draft)"
+      "status": "deferred",
+      "context": "Deferred to F3: the registration matrix has not run on Windows 11. D-10 keeps the MF virtual camera as the recommendation.",
+      "decision_ref": "spikes/evidence/decisions/D-10-injection-backend.md (draft)",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-2",
@@ -20,9 +21,10 @@
       "owner": "Technical lead",
       "impact": "Determines whether the audio gate can pass at all",
       "blocking": true,
-      "status": "open",
-      "context": "Unresolved; requires signature_probe.ps1 on the Secure-Boot Windows 11 runner.",
-      "decision_ref": "spikes/evidence/decisions/D-audio-licensing.md (draft)"
+      "status": "deferred",
+      "context": "Deferred to F3: requires signature_probe.ps1 on the Secure-Boot Windows 11 runner.",
+      "decision_ref": "spikes/evidence/decisions/D-audio-licensing.md (draft)",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-3",
@@ -30,9 +32,10 @@
       "owner": "Product owner + legal",
       "impact": "Determines whether V1 ships link-only or bundled, and the unit economics",
       "blocking": true,
-      "status": "open",
-      "context": "Partially answered by published volume prices; professional-domain classification remains open.",
-      "decision_ref": "spikes/evidence/decisions/D-audio-licensing.md (draft)"
+      "status": "deferred",
+      "context": "Deferred to F3 under C-05: published volume prices exist, but the professional-domain classification and the commercial decision do not.",
+      "decision_ref": "spikes/evidence/decisions/D-audio-licensing.md (draft)",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-4",
@@ -40,9 +43,10 @@
       "owner": "Product owner + legal",
       "impact": "The cleaner long-term audio model",
       "blocking": false,
-      "status": "open",
-      "context": "Parallel track, not a gate blocker.",
-      "decision_ref": null
+      "status": "deferred",
+      "context": "Parallel, non-gating track carried to F3.",
+      "decision_ref": null,
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-5",
@@ -50,9 +54,10 @@
       "owner": "Technical lead",
       "impact": "FR-044 precondition — without it, no latency or resource result is admissible",
       "blocking": true,
-      "status": "open",
-      "context": "Partial verification: hardware_accelerated=true but output_format=other (not NV12). NV12 verification pending via probe_hardware_decode.ps1.",
-      "decision_ref": "spikes/evidence/decisions/D-quality-default.md (draft)"
+      "status": "answered",
+      "context": "Answered by environment.json: decoder_found=false, hardware_accelerated=false, output_format=other; the probe failed with an MFTEnumEx cast error. PC-1 is not satisfied on this host; the reference machine must be replaced or re-verified before F3 measurements.",
+      "decision_ref": "spikes/evidence/decisions/D-quality-default.md (draft)",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-6",
@@ -60,9 +65,10 @@
       "owner": "Technical lead",
       "impact": "Affects the shared-buffer design",
       "blocking": false,
-      "status": "open",
-      "context": "Recorded, not gating; requires the multi-consumer observation on Windows 11.",
-      "decision_ref": "spikes/evidence/decisions/D-10-injection-backend.md (draft)"
+      "status": "deferred",
+      "context": "Deferred to F3: the multi-consumer observation was not run.",
+      "decision_ref": "spikes/evidence/decisions/D-10-injection-backend.md (draft)",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-7",
@@ -70,9 +76,10 @@
       "owner": "Product owner",
       "impact": "Affects bandwidth, CPU and the negotiated level",
       "blocking": false,
-      "status": "open",
-      "context": "Open question 3 in TDD; default is 720p30 Level 3.1 with 1080p optional.",
-      "decision_ref": "spikes/evidence/decisions/D-codec-baseline.md (draft)"
+      "status": "deferred",
+      "context": "Deferred to F2: default remains 720p30 Level 3.1 with 1080p optional, pending the live interop run.",
+      "decision_ref": "spikes/evidence/decisions/D-codec-baseline.md (draft)",
+      "target_phase": "F2"
     },
     {
       "question_id": "Q-8",
@@ -80,9 +87,10 @@
       "owner": "Technical lead",
       "impact": "The DirectShow path needs separate per-bitness CLSIDs; the MF path behaviour is unknown",
       "blocking": true,
-      "status": "open",
-      "context": "Recorded as a matrix failure criterion; requires a 32-bit consumer on Windows 11.",
-      "decision_ref": "spikes/evidence/decisions/D-10-injection-backend.md (draft)"
+      "status": "deferred",
+      "context": "Deferred to F3: the 32-bit matrix cell was not collected.",
+      "decision_ref": "spikes/evidence/decisions/D-10-injection-backend.md (draft)",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-9",
@@ -90,9 +98,10 @@
       "owner": "Security reviewer",
       "impact": "Defines the no-residue proof for the pairing gate",
       "blocking": true,
-      "status": "open",
-      "context": "Open question 09 in TDD §18; residue restart scan not yet performed.",
-      "decision_ref": null
+      "status": "deferred",
+      "context": "Deferred to F1 under C-02: the session-end inspection exists (byte scanner plus named platform probes), but the restart inspection on two reference devices has not run.",
+      "decision_ref": "spikes/evidence/decisions/D-EXIT-f0.md (C-02 waiver)",
+      "target_phase": "F1"
     },
     {
       "question_id": "Q-10",
@@ -100,9 +109,10 @@
       "owner": "Mobile engineer",
       "impact": "A stride-2 device with JavaI420Buffer.wrap produces corrupt colour",
       "blocking": false,
-      "status": "open",
-      "context": "Guarded at runtime but must be reported; requires the reference Android device.",
-      "decision_ref": null
+      "status": "deferred",
+      "context": "Deferred to F2: guarded at runtime, but the reference Android device was not available.",
+      "decision_ref": null,
+      "target_phase": "F2"
     }
   ]
 }

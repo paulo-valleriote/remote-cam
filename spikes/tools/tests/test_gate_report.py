@@ -33,9 +33,10 @@ def test_report_has_required_top_level_fields():
         "gates",
         "downstream_status",
         "open_questions",
+        "exit",
     ):
         assert field in report, f"missing top-level field: {field}"
-    assert report["report_version"] == 1
+    assert report["report_version"] == 2
     assert report["feature"] == "001-f0-technical-spikes"
 
 
@@ -219,3 +220,21 @@ def test_redistribution_note_present():
     report = _load_report()
     assert report.get("redistribution_note"), "missing redistribution_note"
     assert "NON-PRODUCTION" in report["redistribution_note"]
+
+
+def test_report_validates_against_the_published_schema():
+    from jsonschema import Draft202012Validator
+
+    schema_path = (
+        REPO_ROOT
+        / "specs"
+        / "001-f0-technical-spikes"
+        / "contracts"
+        / "gate-report.schema.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    errors = sorted(
+        Draft202012Validator(schema).iter_errors(_load_report()),
+        key=lambda error: list(error.path),
+    )
+    assert not errors, "\n".join(f"{list(error.path)}: {error.message}" for error in errors)

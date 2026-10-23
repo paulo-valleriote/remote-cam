@@ -11,11 +11,12 @@
     "reference_environment",
     "gates",
     "downstream_status",
-    "open_questions"
+    "open_questions",
+    "exit"
   ],
   "additionalProperties": false,
   "properties": {
-    "report_version": { "type": "integer", "const": 1 },
+    "report_version": { "type": "integer", "const": 2 },
     "feature": {
       "description": "The feature identifier.",
       "type": "string",
@@ -48,6 +49,7 @@
       "type": "array",
       "items": { "$ref": "#/$defs/openQuestion" }
     },
+    "exit": { "$ref": "#/$defs/phaseExit" },
     "redistribution_note": {
       "description": "A statement that the spike artefacts are non-production and must not be merged into product modules.",
       "type": "string"
@@ -396,7 +398,106 @@
         "owner": { "type": "string", "minLength": 1 },
         "impact": { "type": "string", "minLength": 1 },
         "blocking": { "type": "boolean" },
-        "status": { "type": "string", "enum": ["open", "answered", "deferred"] }
+        "status": { "type": "string", "enum": ["open", "answered", "deferred"] },
+        "target_phase": { "type": "string", "pattern": "^F[0-9]+$" }
+      }
+    },
+    "phaseExit": {
+      "description": "The phase closure record: how F0 ended, who signed it, what each gate's disposition is and which obligations are carried into later phases.",
+      "type": "object",
+      "required": ["phase", "feature", "closed_at", "closure_mode", "exit_gate", "statement", "sign_offs", "gate_dispositions", "waivers", "amendments", "deviations"],
+      "additionalProperties": false,
+      "properties": {
+        "phase": { "type": "string", "const": "F0" },
+        "feature": { "type": "string", "const": "001-f0-technical-spikes" },
+        "closed_at": { "type": "string", "format": "date-time" },
+        "closure_mode": { "type": "string", "enum": ["closed_green", "closed_with_exceptions", "closed_no_go"] },
+        "exit_gate": { "type": "string", "enum": ["met", "not_met"] },
+        "statement": { "type": "string", "minLength": 1 },
+        "sign_offs": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/signOff" }
+        },
+        "gate_dispositions": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/gateDisposition" }
+        },
+        "waivers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/exitWaiver" }
+        },
+        "amendments": { "$ref": "#/$defs/amendmentStatus" },
+        "deviations": { "$ref": "#/$defs/deviationStatus" },
+        "known_issues": { "type": "array", "items": { "type": "string" } },
+        "corrections": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "signOff": {
+      "type": "object",
+      "required": ["role", "signed_at"],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "$ref": "#/$defs/role" },
+        "signed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "gateDisposition": {
+      "type": "object",
+      "required": ["gate_id", "verdict", "disposition", "target_phase", "owner", "deadline", "rationale"],
+      "additionalProperties": false,
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "enum": ["camera_injection", "desktop_receive_pipeline", "codec_interoperability", "pairing_handshake", "virtual_audio_and_licensing"]
+        },
+        "verdict": { "type": "string", "enum": ["go", "no_go", "conditional"] },
+        "disposition": { "type": "string", "enum": ["resolved", "waived", "carried"] },
+        "target_phase": { "type": "string", "pattern": "^F[0-9]+$" },
+        "owner": { "$ref": "#/$defs/role" },
+        "deadline": { "type": "string", "format": "date" },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "exitWaiver": {
+      "type": "object",
+      "required": ["condition_id", "description", "conditioned_phases", "waived_by", "waived_at", "waiver_conditions", "resolution_deadline"],
+      "additionalProperties": false,
+      "properties": {
+        "condition_id": { "type": "string" },
+        "description": { "type": "string", "minLength": 1 },
+        "conditioned_phases": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^F[0-9]+$" }
+        },
+        "waived_by": { "$ref": "#/$defs/role" },
+        "waived_at": { "type": "string", "format": "date-time" },
+        "waiver_conditions": { "type": "string", "minLength": 1 },
+        "resolution_deadline": { "type": "string", "format": "date" }
+      }
+    },
+    "amendmentStatus": {
+      "type": "object",
+      "required": ["total", "applied", "no_op", "waived", "record"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "applied": { "type": "integer", "minimum": 0 },
+        "no_op": { "type": "integer", "minimum": 0 },
+        "waived": { "type": "integer", "minimum": 0 },
+        "record": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deviationStatus": {
+      "type": "object",
+      "required": ["approved", "record"],
+      "additionalProperties": false,
+      "properties": {
+        "approved": { "type": "array", "items": { "type": "string" } },
+        "record": { "type": "string", "minLength": 1 }
       }
     }
   },
@@ -413,6 +514,7 @@
     "The pairing handshake gate MUST record the per-origin attempt limit, the progressive blocking and the listener shutdown, and MUST show zero pairing artefacts after both a normal session end and an application restart using the same inspection method.",
     "The virtual audio gate MUST record both the automated dropout analysis and the scripted human intelligibility check with a named observer and the phrase script.",
     "The report MUST NOT contain secrets, personal data, production credentials or real user media.",
-    "No verdict may be no_go or conditional without a failure_code."
+    "No verdict may be no_go or conditional without a failure_code.",
+    "A closed phase MUST record one disposition per gate, all three role sign-offs and a resolution deadline for every waiver."
   ]
 }

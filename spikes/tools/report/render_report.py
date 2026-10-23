@@ -34,11 +34,13 @@ def _role(role: dict) -> str:
 def render(report: dict) -> str:
     lines: list[str] = []
 
-    lines.append("# F0 Gate Report — Phase 8 Polish")
+    lines.append("# F0 Gate Report — Phase Closure")
     lines.append("")
     lines.append(f"**Feature:** {report['feature']}")
     lines.append(f"**Phase review at:** {report['phase_review_at']}")
     lines.append(f"**Report version:** {report['report_version']}")
+    if report.get("report_prepared_by"):
+        lines.append(f"**Prepared by:** {report['report_prepared_by']}")
     lines.append("")
 
     env = report.get("reference_environment", {})
@@ -98,6 +100,30 @@ def render(report: dict) -> str:
         if g.get("preconditions"):
             lines.append(f"- **Preconditions:** {', '.join(g['preconditions'])}")
         lines.append("")
+
+        # Camera injection partial run (gate 1)
+        partial = g.get("measured_result", {}).get("partial_run")
+        if partial:
+            lines.append("- **Partial run:**")
+            lines.append(
+                f"  - Application: {partial.get('application_id')} "
+                f"({partial.get('product_name')} {partial.get('version')})"
+            )
+            lines.append(
+                f"  - Observed duration: {partial.get('observed_duration_s')} s "
+                f"(required {partial.get('required_duration_s')} s; "
+                f"meets duration: {partial.get('meets_duration')})"
+            )
+            lines.append(f"  - Observation samples: {partial.get('observation_samples')}")
+            lines.append(
+                f"  - Raw recorded duration: {partial.get('raw_recorded_duration_s')} "
+                f"{partial.get('raw_recorded_duration_unit')}"
+            )
+            lines.append(
+                f"  - Matrix exists: {g['measured_result'].get('matrix_exists')}; "
+                f"selected backend: {g['measured_result'].get('selected_backend')}"
+            )
+            lines.append("")
 
         # Latency-specific fields (gate 3)
         if g["gate_id"] == "desktop_receive_pipeline":
@@ -185,6 +211,96 @@ def render(report: dict) -> str:
                     )
             lines.append("")
 
+    exit_record = report.get("exit")
+    if exit_record:
+        lines.append("## Phase closure")
+        lines.append("")
+        lines.append(f"- **Closure mode:** {exit_record.get('closure_mode', 'unknown')}")
+        lines.append(f"- **Exit gate:** {exit_record.get('exit_gate', 'unknown')}")
+        lines.append(f"- **Closed at:** {exit_record.get('closed_at', 'unknown')}")
+        lines.append(f"- **Statement:** {exit_record.get('statement', '')}")
+        lines.append("")
+
+        lines.append("**Sign-offs**")
+        lines.append("")
+        lines.append("| Role | Name | Signed at |")
+        lines.append("|------|------|-----------|")
+        for sign_off in exit_record.get("sign_offs", []):
+            role = sign_off.get("role", {})
+            lines.append(
+                f"| {role.get('role_type', 'unknown')} | {role.get('person_name', 'not named')} "
+                f"| {sign_off.get('signed_at', 'unknown')} |"
+            )
+        lines.append("")
+
+        lines.append("**Gate dispositions**")
+        lines.append("")
+        lines.append("| Gate | Verdict | Disposition | Target | Owner | Deadline |")
+        lines.append("|------|---------|-------------|--------|-------|----------|")
+        for disposition in exit_record.get("gate_dispositions", []):
+            owner = disposition.get("owner", {})
+            lines.append(
+                f"| {disposition.get('gate_id', '')} | {disposition.get('verdict', '')} "
+                f"| {disposition.get('disposition', '')} | {disposition.get('target_phase', '')} "
+                f"| {owner.get('person_name', 'not named')} | {disposition.get('deadline', '')} |"
+            )
+        lines.append("")
+
+        lines.append("**Waivers**")
+        lines.append("")
+        lines.append("| Condition | Phases | Waived by | Deadline | Resolution conditions |")
+        lines.append("|-----------|--------|-----------|----------|-----------------------|")
+        for waiver in exit_record.get("waivers", []):
+            waived_by = waiver.get("waived_by", {})
+            lines.append(
+                f"| {waiver.get('condition_id', '')} "
+                f"| {', '.join(waiver.get('conditioned_phases', []))} "
+                f"| {waived_by.get('person_name', 'not named')} "
+                f"| {waiver.get('resolution_deadline', '')} "
+                f"| {waiver.get('waiver_conditions', '')} |"
+            )
+        lines.append("")
+
+        lines.append("**Carried obligations**")
+        lines.append("")
+        for disposition in exit_record.get("gate_dispositions", []):
+            if disposition.get("disposition") != "carried":
+                continue
+            lines.append(
+                f"- `{disposition.get('gate_id', '')}` → {disposition.get('target_phase', '')} "
+                f"by {disposition.get('deadline', '')}: {disposition.get('rationale', '')}"
+            )
+        lines.append("")
+
+        amendments = exit_record.get("amendments", {})
+        deviations = exit_record.get("deviations", {})
+        lines.append("**Amendments and deviations**")
+        lines.append("")
+        lines.append(
+            f"- Amendments: {amendments.get('applied', 0)} applied, "
+            f"{amendments.get('no_op', 0)} no-op, {amendments.get('waived', 0)} waived "
+            f"of {amendments.get('total', 0)} ({amendments.get('record', '')})"
+        )
+        lines.append(
+            f"- Deviations approved: {', '.join(deviations.get('approved', []))} "
+            f"({deviations.get('record', '')})"
+        )
+        lines.append("")
+
+        if exit_record.get("known_issues"):
+            lines.append("**Known issues**")
+            lines.append("")
+            for issue in exit_record["known_issues"]:
+                lines.append(f"- {issue}")
+            lines.append("")
+
+        if exit_record.get("corrections"):
+            lines.append("**Corrections recorded at closure**")
+            lines.append("")
+            for correction in exit_record["corrections"]:
+                lines.append(f"- {correction}")
+            lines.append("")
+
     lines.append("## Downstream status (F1 / F2 / F3)")
     lines.append("")
     ds = report.get("downstream_status", {})
@@ -219,16 +335,17 @@ def render(report: dict) -> str:
 
     lines.append("## Open questions")
     lines.append("")
-    lines.append("| Question | Owner | Impact | Blocking | Status |")
-    lines.append("|----------|-------|--------|----------|--------|")
+    lines.append("| Question | Owner | Impact | Blocking | Status | Phase |")
+    lines.append("|----------|-------|--------|----------|--------|-------|")
     for oq in report.get("open_questions", []):
         lines.append(
-            "| {qid} | {owner} | {impact} | {blocking} | {status} |".format(
+            "| {qid} | {owner} | {impact} | {blocking} | {status} | {phase} |".format(
                 qid=oq.get("question_id", ""),
                 owner=oq.get("owner", ""),
                 impact=oq.get("impact", ""),
                 blocking="yes" if oq.get("blocking") else "no",
                 status=oq.get("status", ""),
+                phase=oq.get("target_phase", "—"),
             )
         )
     lines.append("")

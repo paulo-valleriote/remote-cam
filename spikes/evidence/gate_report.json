@@ -1,7 +1,8 @@
 {
-  "report_version": 1,
+  "report_version": 2,
   "feature": "001-f0-technical-spikes",
-  "phase_review_at": "2026-11-06T00:00:00+00:00",
+  "phase_review_at": "2026-10-23T17:20:00-03:00",
+  "report_prepared_by": "Paulo Valleriote",
   "reference_environment": {
     "environment_id": "windows-amd64-8fd38fab",
     "captured_at": "2026-10-22T21:48:36+00:00",
@@ -61,22 +62,41 @@
       "verdict": "no_go",
       "accountable_role": {
         "role_type": "technical_lead",
-        "person_name": "not_yet_named"
+        "person_name": "Paulo Valleriote"
       },
-      "issued_at": "2026-11-06T00:00:00+00:00",
+      "issued_at": "2026-10-23T17:20:00-03:00",
       "criterion": "100 % frames_delivered on the selected backend, observed_duration_s >= 1800, longest_stall_ms <= 2000, both bitnesses, multi-consumer observation",
       "measured_result": {
         "matrix_file": "spikes/evidence/injection/injection_matrix.json",
         "matrix_exists": false,
         "selected_backend": "not_determined",
         "frames_delivered_cells": 0,
-        "total_cells": 0
+        "total_cells": 6,
+        "partial_run": {
+          "path": "spikes/evidence/injection/runs/mf_virtual_camera/chrome",
+          "application_id": "chrome",
+          "product_name": "Google Chrome",
+          "version": "124.0.6367.208",
+          "observed_duration_s": 33.2845,
+          "required_duration_s": 1800,
+          "observation_samples": 974,
+          "media_duration_s": 60.85,
+          "media_duration_source": "local raw capture (capture.webm), not versioned",
+          "raw_recorded_duration_s": 1799975.8,
+          "raw_recorded_duration_unit": "milliseconds",
+          "observation_timestamp_unit": "microseconds",
+          "meets_duration": false
+        }
       },
-      "rationale": "The injection matrix requires the Windows 11 reference machine with Media Foundation, FFmpeg, OBS, the conferencing client, Windows Camera, a screen recorder and a 32-bit consumer. None are available on this host (environment.json records within_reference_conditions: false and no camera or FFmpeg). injection_matrix.json does not exist, so the backend cannot be selected and gate 1 has no measured evidence.",
-      "evidence_refs": [],
-      "measurement_conditions": "Clean Windows 11 x64, non-administrator account, five application categories plus a 32-bit consumer, 30 minutes per cell. Not reproducible on this host.",
+      "rationale": "The only matrix evidence collected is one Google Chrome cell: 974 observations over 33.2845 s at 1280x720@30. The gate requires 1800 s per cell, five application categories and a 32-bit consumer, so the partial run cannot pass the criterion and no backend is selected. The remaining cells were not collected at closure; they are carried to F3. No injection_matrix.json exists, because the matrix contract requires a selected backend and a frames_delivered cell of at least 1800 s.",
+      "evidence_refs": [
+        "spikes/evidence/injection/runs/mf_virtual_camera/chrome/run.json",
+        "spikes/evidence/injection/runs/mf_virtual_camera/chrome/capture.json",
+        "spikes/evidence/injection/runs/mf_virtual_camera/chrome/observations.csv"
+      ],
+      "measurement_conditions": "Clean Windows 11 x64, non-administrator account, five application categories plus a 32-bit consumer, 30 minutes per cell. The Chrome run was collected on the Windows 11 host for 33.2845 s; the rest of the matrix was not collected.",
       "preconditions": [],
-      "failure_code": "environment_out_of_reference"
+      "failure_code": "evidence_incomplete"
     },
     {
       "gate_id": "pairing_handshake",
@@ -88,9 +108,9 @@
       "verdict": "conditional",
       "accountable_role": {
         "role_type": "security_reviewer",
-        "person_name": "not_yet_named"
+        "person_name": "Paulo Valleriote"
       },
-      "issued_at": "2026-11-06T00:00:00+00:00",
+      "issued_at": "2026-10-23T17:20:00-03:00",
       "criterion": "Valid scenario accepted in <= 5 s; all adversarial scenarios rejected with closed reason codes; no media before authentication; per-origin throttling (5/minute, 6th refused, progressive blocks, listener close at 10 consecutive failures); second origin unaffected; zero residue after session end and after application restart using the same inspection method.",
       "measured_result": {
         "scenarios_total": 13,
@@ -145,7 +165,16 @@
           "conditioned_phases": [
             "F1"
           ],
-          "status": "blocking"
+          "status": "waived",
+          "waiver": {
+            "waived_by": {
+              "role_type": "security_reviewer",
+              "person_name": "Paulo Valleriote"
+            },
+            "waived_at": "2026-10-23T17:20:00-03:00",
+            "waiver_conditions": "F1 may build the protocol core without the restart inspection, but the inspection must be recorded with the same method before the F1 exit gate.",
+            "resolution_deadline": "2026-11-20"
+          }
         }
       ],
       "failure_code": "evidence_incomplete"
@@ -161,9 +190,9 @@
       "verdict": "no_go",
       "accountable_role": {
         "role_type": "technical_lead",
-        "person_name": "not_yet_named"
+        "person_name": "Paulo Valleriote"
       },
-      "issued_at": "2026-11-06T00:00:00+00:00",
+      "issued_at": "2026-10-23T17:20:00-03:00",
       "criterion": "Raw capture-at-consumer p95 <= 150 ms across three >= 10-minute runs; harness floor and floor-corrected p95 published; CPU p95 <= 15 %; private working set max <= 400 MB; drift <= 20 ms/h with certifying interval; zero dropouts >= 50 ms under the pinned profile; stall recovery <= 2 s.",
       "measured_result": {
         "run_matrix_file": "spikes/evidence/pipeline/run_matrix.json",
@@ -217,9 +246,9 @@
       "verdict": "conditional",
       "accountable_role": {
         "role_type": "technical_lead",
-        "person_name": "not_yet_named"
+        "person_name": "Paulo Valleriote"
       },
-      "issued_at": "2026-11-06T00:00:00+00:00",
+      "issued_at": "2026-10-23T17:20:00-03:00",
       "criterion": "Live video from the reference Android device decodes on the desktop for 10 continuous minutes with agreed profile/level/format and no visible corruption; VP8 fallback approved with measured CPU, latency and quality trade-offs and hardware-decode status recorded.",
       "measured_result": {
         "negotiated_profile": null,
@@ -247,7 +276,16 @@
             "F1",
             "F2"
           ],
-          "status": "blocking"
+          "status": "waived",
+          "waiver": {
+            "waived_by": {
+              "role_type": "technical_lead",
+              "person_name": "Paulo Valleriote"
+            },
+            "waived_at": "2026-10-23T17:20:00-03:00",
+            "waiver_conditions": "The F1 contract may use the documented H.264 High Profile Level 3.1 baseline with VP8 fallback while the live run is pending; the run must be recorded before the F2 exit gate.",
+            "resolution_deadline": "2026-12-20"
+          }
         }
       ],
       "blocking_dependency": "desktop_receive_pipeline",
@@ -263,9 +301,9 @@
       "verdict": "conditional",
       "accountable_role": {
         "role_type": "product_owner",
-        "person_name": "not_yet_named"
+        "person_name": "Paulo Valleriote"
       },
-      "issued_at": "2026-11-06T00:00:00+00:00",
+      "issued_at": "2026-10-23T17:20:00-03:00",
       "criterion": "Zero dropouts >= 50 ms with agreeing detectors over >= 10 minutes under the pinned profile; phrases_exact >= 18 with all nonces/anchors matching; named observer and phrase script; consumer_renegotiations = 0; verified device signature; video-only degradation proven; licensing decision or explicit conditional/no_go with plan B.",
       "measured_result": {
         "run_matrix_file": "spikes/evidence/audio/run_matrix.json",
@@ -307,9 +345,19 @@
           "condition_id": "C-05-licensing-decision",
           "description": "Named product owner and approver must sign the licensing decision (VB-CABLE link-only with video-only plan B) by the gate date, or the gate is conditional/no_go.",
           "conditioned_phases": [
-            "F1"
+            "F2",
+            "F3"
           ],
-          "status": "blocking"
+          "status": "waived",
+          "waiver": {
+            "waived_by": {
+              "role_type": "product_owner",
+              "person_name": "Paulo Valleriote"
+            },
+            "waived_at": "2026-10-23T17:20:00-03:00",
+            "waiver_conditions": "Licensing does not block the start of F1 or F2; the decision must be signed, or video-only selected, before the F3 audio scope begins.",
+            "resolution_deadline": "2027-01-15"
+          }
         }
       ],
       "blocking_dependency": "desktop_receive_pipeline",
@@ -318,24 +366,30 @@
   ],
   "downstream_status": {
     "F1": {
-      "status": "blocked",
-      "reason": "One or more F0 gates are no_go; F1 cannot start until they are resolved.",
+      "status": "conditional",
+      "reason": "F0 is closed with exceptions; F1 may proceed under the C-02 and C-04 waivers.",
       "conditions": [
-        "resolve all no_go/conditional F0 gates"
+        "C-02-residue-restart (deadline 2026-11-20)",
+        "C-04-interop-live-run (deadline 2026-12-20)"
       ]
     },
     "F2": {
-      "status": "blocked",
-      "reason": "F2 depends on F1 and on the gates it consumes (camera injection, pipeline, codec interop).",
+      "status": "conditional",
+      "reason": "F2 depends on the F1 exit and on the codec and licensing conditions.",
       "conditions": [
-        "resolve all no_go/conditional F0 gates"
+        "F1 exit",
+        "C-04-interop-live-run (deadline 2026-12-20)",
+        "C-05-licensing-decision (deadline 2027-01-15)"
       ]
     },
     "F3": {
-      "status": "blocked",
-      "reason": "F3 depends on F2 and on all F0 gates.",
+      "status": "conditional",
+      "reason": "F3 depends on the F2 exit and on the carried injection and pipeline obligations.",
       "conditions": [
-        "resolve all no_go/conditional F0 gates"
+        "F2 exit",
+        "C-05-licensing-decision (deadline 2027-01-15)",
+        "camera_injection carried (deadline 2027-02-15)",
+        "desktop_receive_pipeline carried (deadline 2027-02-15)"
       ]
     }
   },
@@ -345,7 +399,7 @@
       "topic": "Injection backend: MF virtual camera vs DirectShow filter",
       "status": "draft",
       "owner": "Technical lead",
-      "date": "2026-11-06",
+      "date": "2026-10-22",
       "path": "spikes/evidence/decisions/D-10-injection-backend.md",
       "fallback": "dshow_filter (DirectShow capture filter)"
     },
@@ -355,7 +409,6 @@
       "status": "draft",
       "owner": "Technical lead",
       "date": "2026-10-22",
-      "approver": "Technical lead",
       "path": "spikes/evidence/decisions/D-codec-baseline.md",
       "fallback": "VP8 software fallback"
     },
@@ -364,7 +417,7 @@
       "topic": "Default video quality: 1280x720@30 default, 1920x1080@30 optional maximum",
       "status": "draft",
       "owner": "Technical lead",
-      "date": "2026-11-06",
+      "date": "2026-10-22",
       "path": "spikes/evidence/decisions/D-quality-default.md",
       "fallback": "1280x720@30 only (Option C)"
     },
@@ -373,7 +426,7 @@
       "topic": "Virtual audio device sourcing and licensing",
       "status": "draft",
       "owner": "Product owner",
-      "date": "2026-11-06",
+      "date": "2026-10-23",
       "path": "spikes/evidence/decisions/D-audio-licensing.md",
       "fallback": "Video-only V1 (plan B)"
     }
@@ -385,8 +438,9 @@
       "owner": "Technical lead",
       "impact": "Decides the installer design and the no-admin promise for the camera",
       "blocking": true,
-      "status": "open",
-      "context": "Open question 1 in TDD; recorded as not answered because the registration matrix has not run on Windows 11."
+      "status": "deferred",
+      "context": "Deferred to F3: the registration matrix has not run on Windows 11. D-10 keeps the MF virtual camera as the recommendation.",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-2",
@@ -394,26 +448,29 @@
       "owner": "Technical lead",
       "impact": "Determines whether the audio gate can pass at all",
       "blocking": true,
-      "status": "open",
-      "context": "Unresolved; requires signature_probe.ps1 on the Secure-Boot Windows 11 runner."
+      "status": "deferred",
+      "context": "Deferred to F3: requires signature_probe.ps1 on the Secure-Boot Windows 11 runner.",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-3",
-      "question": "What is the actual per-unit cost of a VB-CABLE OEM/redistribution agreement, and does the user population qualify as a 'professional domain' under VB-Audio's terms?",
+      "question": "What is the actual per-unit cost of a VB-CABLE OEM/redistribution agreement, and does the user population qualify as a \"professional domain\" under VB-Audio's terms?",
       "owner": "Product owner + legal",
       "impact": "Determines whether V1 ships link-only or bundled, and the unit economics",
       "blocking": true,
-      "status": "open",
-      "context": "Partially answered by published volume prices; professional-domain classification remains open."
+      "status": "deferred",
+      "context": "Deferred to F3 under C-05: published volume prices exist, but the professional-domain classification and the commercial decision do not.",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-4",
-      "question": "Will VAC's 'companion application' / 'auxiliary transport' characterisation cover RemoteCam, and at what price?",
+      "question": "Will VAC's \"companion application\" / \"auxiliary transport\" characterisation cover RemoteCam, and at what price?",
       "owner": "Product owner + legal",
       "impact": "The cleaner long-term audio model",
       "blocking": false,
-      "status": "open",
-      "context": "Parallel track, not a gate blocker."
+      "status": "deferred",
+      "context": "Parallel, non-gating track carried to F3.",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-5",
@@ -421,8 +478,9 @@
       "owner": "Technical lead",
       "impact": "FR-044 precondition — without it, no latency or resource result is admissible",
       "blocking": true,
-      "status": "open",
-      "context": "Partial verification: hardware_accelerated=true but output_format=other (not NV12). NV12 verification pending."
+      "status": "answered",
+      "context": "Answered by environment.json: decoder_found=false, hardware_accelerated=false, output_format=other; the probe failed with an MFTEnumEx cast error. PC-1 is not satisfied on this host; the reference machine must be replaced or re-verified before F3 measurements.",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-6",
@@ -430,8 +488,9 @@
       "owner": "Technical lead",
       "impact": "Affects the shared-buffer design",
       "blocking": false,
-      "status": "open",
-      "context": "Recorded, not gating; requires the multi-consumer observation on Windows 11."
+      "status": "deferred",
+      "context": "Deferred to F3: the multi-consumer observation was not run.",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-7",
@@ -439,8 +498,9 @@
       "owner": "Product owner",
       "impact": "Affects bandwidth, CPU and the negotiated level",
       "blocking": false,
-      "status": "open",
-      "context": "Open question 3 in TDD; default is 720p30 Level 3.1 with 1080p optional."
+      "status": "deferred",
+      "context": "Deferred to F2: default remains 720p30 Level 3.1 with 1080p optional, pending the live interop run.",
+      "target_phase": "F2"
     },
     {
       "question_id": "Q-8",
@@ -448,8 +508,9 @@
       "owner": "Technical lead",
       "impact": "The DirectShow path needs separate per-bitness CLSIDs; the MF path behaviour is unknown",
       "blocking": true,
-      "status": "open",
-      "context": "Recorded as a matrix failure criterion; requires a 32-bit consumer on Windows 11."
+      "status": "deferred",
+      "context": "Deferred to F3: the 32-bit matrix cell was not collected.",
+      "target_phase": "F3"
     },
     {
       "question_id": "Q-9",
@@ -457,8 +518,9 @@
       "owner": "Security reviewer",
       "impact": "Defines the no-residue proof for the pairing gate",
       "blocking": true,
-      "status": "open",
-      "context": "Open question 09 in TDD §18; residue restart scan not yet performed."
+      "status": "deferred",
+      "context": "Deferred to F1 under C-02: the session-end inspection exists (byte scanner plus named platform probes), but the restart inspection on two reference devices has not run.",
+      "target_phase": "F1"
     },
     {
       "question_id": "Q-10",
@@ -466,9 +528,176 @@
       "owner": "Mobile engineer",
       "impact": "A stride-2 device with JavaI420Buffer.wrap produces corrupt colour",
       "blocking": false,
-      "status": "open",
-      "context": "Guarded at runtime but must be reported; requires the reference Android device."
+      "status": "deferred",
+      "context": "Deferred to F2: guarded at runtime, but the reference Android device was not available.",
+      "target_phase": "F2"
     }
   ],
+  "exit": {
+    "phase": "F0",
+    "feature": "001-f0-technical-spikes",
+    "closed_at": "2026-10-23T17:20:00-03:00",
+    "closure_mode": "closed_with_exceptions",
+    "exit_gate": "not_met",
+    "statement": "F0 is closed with recorded exceptions. All five gate verdicts were issued as measured: two no_go (camera injection and the desktop receive pipeline) and three conditional (pairing handshake, codec interoperability, virtual audio and licensing). The phase exit gate is not met. The only matrix evidence recorded is one Google Chrome injection cell of 33.2845 s; it does not satisfy the 1800 s per-cell and five-category matrix criterion, so the injection gate remains no_go. No new matrix evidence was collected at closure. Conditions C-02, C-04 and C-05 are waived with resolution deadlines, and the environmental no_go obligations are carried to F3.",
+    "sign_offs": [
+      {
+        "role": {
+          "role_type": "technical_lead",
+          "person_name": "Paulo Valleriote"
+        },
+        "signed_at": "2026-10-23T17:20:00-03:00"
+      },
+      {
+        "role": {
+          "role_type": "security_reviewer",
+          "person_name": "Paulo Valleriote"
+        },
+        "signed_at": "2026-10-23T17:20:00-03:00"
+      },
+      {
+        "role": {
+          "role_type": "product_owner",
+          "person_name": "Paulo Valleriote"
+        },
+        "signed_at": "2026-10-23T17:20:00-03:00"
+      }
+    ],
+    "gate_dispositions": [
+      {
+        "gate_id": "camera_injection",
+        "verdict": "no_go",
+        "disposition": "carried",
+        "target_phase": "F3",
+        "owner": {
+          "role_type": "technical_lead",
+          "person_name": "Paulo Valleriote"
+        },
+        "deadline": "2027-02-15",
+        "rationale": "The only matrix evidence collected is one Google Chrome cell: 974 observations over 33.2845 s (the raw duration fields are milliseconds and the observation timestamps are microseconds). The gate requires 1800 s per cell, five application categories and a 32-bit consumer, so the gate stays no_go. The remaining cells are carried to the media and injection phase; no new evidence was collected at closure."
+      },
+      {
+        "gate_id": "desktop_receive_pipeline",
+        "verdict": "no_go",
+        "disposition": "carried",
+        "target_phase": "F3",
+        "owner": {
+          "role_type": "technical_lead",
+          "person_name": "Paulo Valleriote"
+        },
+        "deadline": "2027-02-15",
+        "rationale": "PC-1 failed on the F0 host: environment.json records hardware_accelerated=false and output_format_supported=other. The latency, resource and drift runs require the verified Windows 11 reference host."
+      },
+      {
+        "gate_id": "pairing_handshake",
+        "verdict": "conditional",
+        "disposition": "waived",
+        "target_phase": "F1",
+        "owner": {
+          "role_type": "security_reviewer",
+          "person_name": "Paulo Valleriote"
+        },
+        "deadline": "2026-11-20",
+        "rationale": "C-02 remains open because the residue-restart inspection needs two named reference devices. The condition is waived for the F1 protocol core with a deadline before the F1 exit gate."
+      },
+      {
+        "gate_id": "codec_interoperability",
+        "verdict": "conditional",
+        "disposition": "waived",
+        "target_phase": "F2",
+        "owner": {
+          "role_type": "technical_lead",
+          "person_name": "Paulo Valleriote"
+        },
+        "deadline": "2026-12-20",
+        "rationale": "C-04 remains open because no live codec interop run was recorded. The documented baseline remains a draft recommendation, not an accepted decision; the live run is due before the F2 exit gate."
+      },
+      {
+        "gate_id": "virtual_audio_and_licensing",
+        "verdict": "conditional",
+        "disposition": "waived",
+        "target_phase": "F3",
+        "owner": {
+          "role_type": "product_owner",
+          "person_name": "Paulo Valleriote"
+        },
+        "deadline": "2027-01-15",
+        "rationale": "C-05 remains open because no licensing decision was signed and no live audio run was recorded. The TDD scopes audio licensing to the F3 audio scope, not to the start of F1/F2, so the condition is re-scoped to F2/F3 and waived with a deadline."
+      }
+    ],
+    "waivers": [
+      {
+        "condition_id": "C-02-residue-restart",
+        "description": "Residue inspection after application restart must be empty using the same method as the session-end inspection, on two named reference devices.",
+        "conditioned_phases": [
+          "F1"
+        ],
+        "waived_by": {
+          "role_type": "security_reviewer",
+          "person_name": "Paulo Valleriote"
+        },
+        "waived_at": "2026-10-23T17:20:00-03:00",
+        "waiver_conditions": "F1 may build the protocol core without the restart inspection, but the inspection must be recorded with the same method before the F1 exit gate.",
+        "resolution_deadline": "2026-11-20"
+      },
+      {
+        "condition_id": "C-04-interop-live-run",
+        "description": "10-minute live codec interop run on the reference Android device with zero visible corruption.",
+        "conditioned_phases": [
+          "F1",
+          "F2"
+        ],
+        "waived_by": {
+          "role_type": "technical_lead",
+          "person_name": "Paulo Valleriote"
+        },
+        "waived_at": "2026-10-23T17:20:00-03:00",
+        "waiver_conditions": "The F1 contract may use the documented H.264 High Profile Level 3.1 baseline with VP8 fallback while the live run is pending; the run must be recorded before the F2 exit gate.",
+        "resolution_deadline": "2026-12-20"
+      },
+      {
+        "condition_id": "C-05-licensing-decision",
+        "description": "A named product owner and approver must sign the licensing decision (VB-CABLE link-only with video-only plan B).",
+        "conditioned_phases": [
+          "F2",
+          "F3"
+        ],
+        "waived_by": {
+          "role_type": "product_owner",
+          "person_name": "Paulo Valleriote"
+        },
+        "waived_at": "2026-10-23T17:20:00-03:00",
+        "waiver_conditions": "Licensing does not block the start of F1 or F2; the decision must be signed, or video-only selected, before the F3 audio scope begins.",
+        "resolution_deadline": "2027-01-15"
+      }
+    ],
+    "amendments": {
+      "total": 13,
+      "applied": 12,
+      "no_op": 1,
+      "waived": 0,
+      "record": "docs/spike/tdd-amendments.md"
+    },
+    "deviations": {
+      "approved": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5"
+      ],
+      "record": "docs/spike/deviations.md"
+    },
+    "known_issues": [
+      "FR-039: F0 harness implementations remain under desktop/crates/{signaling,media-core,injection,audio-bridge,app} and mobile/core; quarantine is carried to F1/F3 under D4.",
+      "The injection matrix is incomplete: only one Google Chrome cell exists, for 33.2845 s, against a 1800 s per-cell and five-category criterion.",
+      "docs/tdd-remotecam-v1.md remains in Portuguese under D5; a full translation is required before the V1 release."
+    ],
+    "corrections": [
+      "D-codec-baseline no longer claims completed 10-minute interop runs or unmeasured CPU, latency and PSNR values.",
+      "Q-5 and D-quality-default now record hardware_accelerated=false, matching environment.json.",
+      "The gate report records the duration unit discrepancy: run.json and capture.json carry milliseconds while observations.csv timestamps are microseconds."
+    ]
+  },
   "redistribution_note": "All artefacts under spikes/ are NON-PRODUCTION F0 risk-reduction spike artefacts (FR-039). They must not be merged into desktop/ or mobile/ product modules. Raw captures remain local-only; only derived metrics, scripts and procedures are versioned."
 }

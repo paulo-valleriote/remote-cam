@@ -42,8 +42,9 @@ for mk in "${MAKEFILES[@]}"; do
         continue
     fi
     while IFS= read -r line; do
-        # Match `target: ## ...` or `target1 target2: ## ...`
-        if [[ "$line" =~ ^([A-Za-z0-9_-]+( [A-Za-z0-9_-]+)*):[[:space:]]*## ]]; then
+        # Match `target: ## ...`, `target1 target2: ## ...` and
+        # `target: prerequisite ## ...` (the description follows the prerequisites).
+        if [[ "$line" =~ ^([A-Za-z0-9_-]+( [A-Za-z0-9_-]+)*):[^#]*## ]]; then
             # Split multi-target lines on whitespace, take each token before ':'
             targets_part="${line%%:*}"
             for t in $targets_part; do
