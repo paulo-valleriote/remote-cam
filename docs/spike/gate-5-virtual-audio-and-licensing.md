@@ -1,7 +1,7 @@
 # Gate 5 — Virtual audio and licensing
 
 **Gate**: virtual audio and licensing · **Wave**: 3 · **Depends on**: desktop receive pipeline (gate 3) ·
-**Accountable role**: product owner · **Target review**: 2026-11-06
+**Accountable role**: product owner · **Review**: 2026-10-23 — F0 closed with exceptions (gate `conditional`, C-05 waived)
 
 **Preconditions**: PC-3 (audio continuity is measured by dropout analysis **and** a scripted human check),
 PC-4 (one pinned impairment profile, media only).

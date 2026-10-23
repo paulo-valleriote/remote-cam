@@ -4,7 +4,7 @@
 **Wave**: 3
 **Depends on**: `gate-3-desktop-receive-pipeline`
 **Accountable Role**: Technical Lead
-**Target Date**: 2026-11-06
+**Review**: 2026-10-23 — F0 closed with exceptions (gate `conditional`, C-04 waived)
 **Preconditions**: PC-1 (hardware decode verified for selected codec)
 
 ---

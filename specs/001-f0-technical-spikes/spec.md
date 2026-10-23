@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-22
 
-**Status**: Draft
+**Status**: Closed — F0 closed with exceptions on 2026-10-23 (exit gate not met; see [`docs/spike/gate-report-f0.md`](../../docs/spike/gate-report-f0.md))
 
 **Input**: User description: "https://paulovalleriotedev.atlassian.net/browse/REC-1"
 

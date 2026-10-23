@@ -1,6 +1,6 @@
 # RemoteCam — AGENTS.md (General)
 
-> Full context: F0 risk-reduction phase; `spikes/` are non-production harnesses.
+> Full context: F0 is closed with exceptions (see `docs/spike/gate-report-f0.md`); F1 has not started; `spikes/` are non-production harnesses.
 
 **Quick start:**
 - **Scope:** cross-cutting rules for the four sub-parts (`desktop/`, `mobile/`, `protocol/`, `spikes/`).

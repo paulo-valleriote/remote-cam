@@ -1,9 +1,9 @@
 # RemoteCam
 
 RemoteCam turns an Android phone into a camera and microphone for a Windows 11
-computer over the local network. This repository currently carries **F0 — the
-risk-reduction phase**: five technical gates, their evidence and the decision
-records that unblock the product phases.
+computer over the local network. This repository carries **F0 — the
+risk-reduction phase**, now closed, plus the evidence and decision records it
+produced. The product phases (F1 onward) have not started.
 
 > **Non-production code.** Everything under `spikes/` is a disposable spike
 > harness. It is clearly marked non-production and MUST NOT be merged into the
@@ -11,13 +11,25 @@ records that unblock the product phases.
 
 ## Status
 
-F0 is organised in the waves defined in
-[`specs/001-f0-technical-spikes/plan.md`](specs/001-f0-technical-spikes/plan.md).
-The current delivery covers **Phase 1 — Setup**: repository skeleton, Rust and
-Android build scaffolds, the root `Makefile`, the measurement-tooling package and
-CI. Gate harnesses, preflight and the toolchain self-test arrive in Phase 2 and
-are listed in
-[`specs/001-f0-technical-spikes/tasks.md`](specs/001-f0-technical-spikes/tasks.md).
+F0 is **closed with exceptions** as of 2026-10-23. The five verdicts, the
+evidence and the carried obligations are recorded in the
+[F0 gate report](docs/spike/gate-report-f0.md) and in
+[`D-EXIT-f0`](spikes/evidence/decisions/D-EXIT-f0.md):
+
+| Gate | Verdict | Disposition |
+| --- | --- | --- |
+| Virtual camera injection | `no_go` | carried to F3 — only one Google Chrome cell was collected (33.2845 s) |
+| Pairing handshake | `conditional` | C-02 waived for F1, deadline 2026-11-20 |
+| Desktop receive pipeline | `no_go` | carried to F3 — PC-1 failed on the F0 host |
+| Codec interoperability | `conditional` | C-04 waived for F1/F2, deadline 2026-12-20 |
+| Virtual audio and licensing | `conditional` | C-05 waived for F2/F3, deadline 2027-01-15 |
+
+F1/F2/F3 are `conditional`, not unblocked. No new matrix evidence was collected
+at closure; the remaining injection cells and the reference-host runs are carried
+obligations. The phase status, the 13 TDD amendments and the approved deviations
+are listed in [`specs/001-f0-technical-spikes/tasks.md`](specs/001-f0-technical-spikes/tasks.md),
+[`docs/spike/tdd-amendments.md`](docs/spike/tdd-amendments.md) and
+[`docs/spike/deviations.md`](docs/spike/deviations.md).
 
 ## Prerequisites
 
@@ -72,6 +84,7 @@ target below is documented here.
 | `make install` | Install the Python measurement package and its development dependencies. |
 | `make build-desktop` | Build the Rust workspace in `desktop/`. |
 | `make build-desktop-win` | Mirror the workspace to the Windows filesystem (`/mnt/c/Users/<user>/remotecam-win`) and build natively from WSL2; avoids the UNC filesystem error (see `docs/windows-build.md`). |
+| `make sync-desktop-win` | Mirror the working tree to the Windows filesystem without building (helper used by `build-desktop-win`). |
 | `make build-mobile` | Assemble the Android debug application (`mobile/app/build/outputs/apk/debug/app-debug.apk`). |
 | `make test` | Run the desktop, mobile and measurement-tooling tests. |
 | `make coverage` | Report coverage for the delivered contract packages. |

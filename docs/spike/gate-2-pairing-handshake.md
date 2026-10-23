@@ -1,7 +1,7 @@
 # Gate 2 — Pairing handshake
 
 **Gate**: authenticated pairing handshake · **Wave**: 1 · **Depends on**: Foundational (protocol
-contract) · **Accountable role**: security reviewer · **Target review**: 2026-11-06
+contract) · **Accountable role**: security reviewer · **Review**: 2026-10-23 — F0 closed with exceptions (gate `conditional`, C-02 waived)
 
 **Preconditions**: PC-5 (per-origin throttling proved, not asserted) and PC-6 (zero pairing
 artefacts after a normal session end **and** after an application restart, same method).

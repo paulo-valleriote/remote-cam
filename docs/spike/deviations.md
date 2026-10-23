@@ -1,8 +1,8 @@
 # F0 Deviations — Phase 8 Polish
 
 **Recorded:** 2026-10-23
-**Gate:** Phase review on or before 2026-11-06
-**Status:** All three deviations require **written maintainer approval before merge** (constitution II / FR-039).
+**Closed:** 2026-10-23
+**Status:** All five deviations are **approved by the maintainer** at F0 closure (constitution II / FR-039).
 
 These are deliberate, recorded deviations from the standard project rules. Each
 carries a justification, a defined scope, and a rollback path. None of them
@@ -29,7 +29,7 @@ are explicitly non-production.
 (≥ 90 %) to `desktop/crates/protocol` and JaCoCo (≥ 90 %) to `mobile/protocol`
 only; `spikes/` remains unmeasured.
 
-**Approval:** Written maintainer approval required before merge.
+**Approval:** Approved by Paulo Valleriote on 2026-10-23.
 
 ---
 
@@ -57,7 +57,7 @@ DirectShow-based capture filter; the fallback DirectShow filter lives in
 `desktop/vendor/dshow-vcam-fallback/` and is only built when a primary backend
 matrix cell fails.
 
-**Approval:** Written maintainer approval required before merge.
+**Approval:** Approved by Paulo Valleriote on 2026-10-23.
 
 ---
 
@@ -83,7 +83,55 @@ merged into product code (FR-039).
 product crates; this would break the shared-contract requirement and is not
 recommended.
 
-**Approval:** Written maintainer approval required before merge.
+**Approval:** Approved by Paulo Valleriote on 2026-10-23.
+
+---
+
+## D4 — F0 harness implementations live under product crates until replaced
+
+**Deviation:** The F0 implementations remain under
+`desktop/crates/{signaling,media-core,injection,audio-bridge,app}` and
+`mobile/core` even though they are marked `NON-PRODUCTION`. FR-039 says spike
+artefacts must not be merged into product modules, and this code was authored
+there for the spikes rather than imported from `spikes/`.
+
+**Justification:** `spikes/f0-handshake`, `spikes/f0-pipeline` and
+`spikes/f0-virtual-audio` consume those crates by path. Moving them into
+`spikes/` now would break the spike builds and the CI lanes, and the product
+phase that owns each crate will replace it anyway. The `NON-PRODUCTION` marker
+and the review rule remain in force in the meantime.
+
+**Scope:**
+- `desktop/crates/signaling`, `desktop/crates/media-core`,
+  `desktop/crates/injection`, `desktop/crates/audio-bridge`,
+  `desktop/crates/app`
+- `mobile/core` spike classes (`SignalingClient`, `PeerConnectionFactoryProvider`,
+  `CameraXCaptureSource`)
+
+**Rollback:** Quarantine each crate/module under `spikes/` when its owning phase
+starts, updating the path dependencies and CI lanes in the same delivery.
+
+**Approval:** Approved by Paulo Valleriote on 2026-10-23.
+
+---
+
+## D5 — The source technical design remains in Portuguese
+
+**Deviation:** `docs/tdd-remotecam-v1.md` is Portuguese. The constitution
+requires documentation in English, and the F0 amendments keep the document's
+language so the corrections read in place.
+
+**Justification:** The TDD is the translated source artifact the F0 spec traces
+to; rewriting it in place during closure would produce a large, risky diff
+unrelated to the phase exit. The amendments index and the gate report are in
+English, so the closure evidence is reviewable without the translation.
+
+**Scope:** `docs/tdd-remotecam-v1.md` only.
+
+**Rollback:** Translate the TDD to English before the V1 release (F5), keeping
+the amendment blocks and their decision references.
+
+**Approval:** Approved by Paulo Valleriote on 2026-10-23.
 
 ---
 
@@ -91,8 +139,7 @@ recommended.
 
 | Deviations | Approver | Date | Decision |
 |------------|----------|------|----------|
-| D1, D2, D3 | — | — | Pending |
+| D1, D2, D3, D4, D5 | Paulo Valleriote | 2026-10-23 | Approved |
 
-This record must be signed by a maintainer before any F0 artefact is merged
-into `main`. Until signed, all three deviations remain **proposed**, not
-**approved**.
+This record is signed. Any new deviation requires a new row, a justification, a
+scope, a rollback path and maintainer approval before merge.
