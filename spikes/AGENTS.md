@@ -22,7 +22,7 @@
 
 ## Context and architecture
 
-- **Active spikes:** `f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/`. `f0-virtual-audio/` is a skeleton (`.gitkeep` only); the others are built harnesses. Live measurement runs require the Windows reference host.
+- **Active spikes:** `f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/`. All five are built harnesses. Live measurement runs require the Windows reference host.
 - **Fixtures:** `fixtures/` (calibration WAV 48kHz mono 16-bit, CSV phrases with nonce).
 - **Tooling:** `tools/` (Python: analysis, metrics, validation, redaction, preflight, selftest, report assembly).
 - **Evidence:** `spikes/evidence/` — derived only; raw captures (`.wav/.mp4/.etl/.webm/.trace`) are `.gitignore`.
@@ -52,11 +52,11 @@
 | `f0-handshake/` | Rust | Pairing + throttling + residue (Gate 2) | `spikes/evidence/pairing/` | `spike-handshake` |
 | `f0-camera-injection/` | Python + PowerShell | Virtual camera injection (Gate 1): per-app matrix, MF vs DirectShow backends | `spikes/evidence/injection/` | `spike-injection` |
 | `f0-codec-interop/` | Rust | Codec interop (Gate 4): H.264/VP8 negotiation, hardware acceleration | `spikes/evidence/` (via `InteropMetrics`) | `spike-interop` |
-| `f0-virtual-audio/` | None (skeleton `.gitkeep`) | Virtual audio (Gate 4, skeleton) | (skeleton `audio/`) | `spike-audio` (references missing manifest) |
+| `f0-virtual-audio/` | Rust + Python + PowerShell | Virtual audio + licensing (Gate 5): two-detector dropouts, scripted intelligibility, device signature, degraded video-only, licence catalogue | `spikes/evidence/audio/`, `spikes/evidence/licensing/` | `spike-audio` |
 
 ### 4. Python tooling (`tools/`)
 
-- `analysis/` — dropouts, floor, injection, interop_corruption, latency, marker, sampler, stages.
+- `analysis/` — dropouts, floor, injection, interop_corruption, intelligibility, latency, licensing, marker, sampler, stages.
 - `metrics/criteria.py` — quality criteria.
 - `validation/` — `validate_evidence.py`, `preflight.py`, `selftest.py`.
 - `redaction.py` — mandatory filter.
