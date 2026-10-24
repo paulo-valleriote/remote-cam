@@ -4,6 +4,14 @@ use remotecam_session_core::{
     TransitionErrorCode,
 };
 
+const HAPPY_PATH: [SessionEvent; 5] = [
+    SessionEvent::StartPairing,
+    SessionEvent::PeerConnected,
+    SessionEvent::PairAuthenticated,
+    SessionEvent::NegotiationCompleted,
+    SessionEvent::EndSession,
+];
+
 fn core_at(
     seed: u64,
     start_millis: u64,
@@ -21,26 +29,11 @@ fn core_in(
     let (mut core, clock) = core_at(seed, 0);
     let events: &[SessionEvent] = match state {
         SessionState::Idle => &[],
-        SessionState::PairingReady => &[SessionEvent::StartPairing],
-        SessionState::Handshaking => &[SessionEvent::StartPairing, SessionEvent::PeerConnected],
-        SessionState::Negotiating => &[
-            SessionEvent::StartPairing,
-            SessionEvent::PeerConnected,
-            SessionEvent::PairAuthenticated,
-        ],
-        SessionState::Connected => &[
-            SessionEvent::StartPairing,
-            SessionEvent::PeerConnected,
-            SessionEvent::PairAuthenticated,
-            SessionEvent::NegotiationCompleted,
-        ],
-        SessionState::Ended => &[
-            SessionEvent::StartPairing,
-            SessionEvent::PeerConnected,
-            SessionEvent::PairAuthenticated,
-            SessionEvent::NegotiationCompleted,
-            SessionEvent::EndSession,
-        ],
+        SessionState::PairingReady => &HAPPY_PATH[..1],
+        SessionState::Handshaking => &HAPPY_PATH[..2],
+        SessionState::Negotiating => &HAPPY_PATH[..3],
+        SessionState::Connected => &HAPPY_PATH[..4],
+        SessionState::Ended => &HAPPY_PATH[..5],
     };
 
     for event in events {
@@ -158,13 +151,7 @@ fn the_happy_path_walks_every_state_in_order() {
     let mut states = vec![core.state()];
     let mut effects = Vec::new();
 
-    for event in [
-        SessionEvent::StartPairing,
-        SessionEvent::PeerConnected,
-        SessionEvent::PairAuthenticated,
-        SessionEvent::NegotiationCompleted,
-        SessionEvent::EndSession,
-    ] {
+    for event in HAPPY_PATH {
         effects.push(core.handle(event).expect("the happy path is valid"));
         states.push(core.state());
     }
@@ -216,7 +203,7 @@ fn an_out_of_order_event_is_rejected_with_a_closed_code_and_keeps_the_state() {
             .expect_err("an out-of-order event is rejected");
 
         assert_eq!(error.code(), TransitionErrorCode::InvalidTransition);
-        assert_eq!(error.from(), state);
+        assert_eq!(error.from_state(), state);
         assert_eq!(error.event(), event);
         assert_eq!(core.state(), state);
         assert_eq!(core.session_id(), session_id);
@@ -224,26 +211,29 @@ fn an_out_of_order_event_is_rejected_with_a_closed_code_and_keeps_the_state() {
     }
 }
 
-type Trace = (Option<SessionId>, Vec<Vec<Effect>>, Vec<Timestamp>);
+#[derive(Debug, PartialEq, Eq)]
+struct Trace {
+    session_id: Option<SessionId>,
+    effects: Vec<Vec<Effect>>,
+    timestamps: Vec<Timestamp>,
+}
 
 fn run_path(seed: u64, start_millis: u64) -> Trace {
     let (mut core, clock) = core_at(seed, start_millis);
     let mut effects = Vec::new();
     let mut timestamps = Vec::new();
 
-    for event in [
-        SessionEvent::StartPairing,
-        SessionEvent::PeerConnected,
-        SessionEvent::PairAuthenticated,
-        SessionEvent::NegotiationCompleted,
-        SessionEvent::EndSession,
-    ] {
+    for event in HAPPY_PATH {
         clock.advance(10);
         effects.push(core.handle(event).expect("the happy path is valid"));
         timestamps.push(core.last_transition_at());
     }
 
-    (core.session_id(), effects, timestamps)
+    Trace {
+        session_id: core.session_id(),
+        effects,
+        timestamps,
+    }
 }
 
 #[test]
@@ -253,19 +243,19 @@ fn the_same_seed_and_clock_produce_the_same_effects_and_timestamps() {
 
 #[test]
 fn a_different_seed_changes_the_session_id_but_not_the_transition_timestamps() {
-    let (first_session, _first_effects, first_timestamps) = run_path(42, 0);
-    let (second_session, _second_effects, second_timestamps) = run_path(43, 0);
+    let first = run_path(42, 0);
+    let other = run_path(43, 0);
 
-    assert_ne!(first_session, second_session);
-    assert_eq!(first_timestamps, second_timestamps);
+    assert_ne!(first.session_id, other.session_id);
+    assert_eq!(first.timestamps, other.timestamps);
 }
 
 #[test]
 fn the_injected_clock_start_shifts_every_transition_timestamp() {
-    let (_session, _effects, timestamps) = run_path(42, 1_000);
+    let trace = run_path(42, 1_000);
 
     assert_eq!(
-        timestamps,
+        trace.timestamps,
         [
             Timestamp::from_millis(1_010),
             Timestamp::from_millis(1_020),

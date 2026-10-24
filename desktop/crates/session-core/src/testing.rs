@@ -10,6 +10,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::{Clock, RandomSource, Timestamp};
 
 /// A clock that only moves when the caller advances it.
+///
+/// Clones share one position, so a handle kept outside the core advances the
+/// clock the core reads.
 #[derive(Debug, Clone, Default)]
 pub struct ManualClock {
     now_millis: Arc<AtomicU64>,

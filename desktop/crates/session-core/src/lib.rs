@@ -140,7 +140,7 @@ impl TransitionError {
     }
 
     /// The state the rejection was observed in.
-    pub const fn from(self) -> SessionState {
+    pub const fn from_state(self) -> SessionState {
         match self {
             Self::InvalidTransition { from, .. } => from,
         }
@@ -166,13 +166,12 @@ pub struct SessionCore<C: Clock, R: RandomSource> {
 impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     /// Creates a core that rests in `Idle` until the first event arrives.
     pub fn new(clock: C, random: R) -> Self {
-        let last_transition_at = clock.now();
         Self {
             state: SessionState::Idle,
             clock,
             random,
             session_id: None,
-            last_transition_at,
+            last_transition_at: Timestamp::ZERO,
         }
     }
 
@@ -193,50 +192,50 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
 
     /// Decides on `event` and returns the effects an adapter must perform.
     pub fn handle(&mut self, event: SessionEvent) -> Result<Vec<Effect>, TransitionError> {
-        let next_state = self
-            .next_state(event)
-            .ok_or(TransitionError::InvalidTransition {
-                from: self.state,
-                event,
-            })?;
+        let (next_state, effects) =
+            self.transition(event)
+                .ok_or(TransitionError::InvalidTransition {
+                    from: self.state,
+                    event,
+                })?;
 
         self.state = next_state;
         self.last_transition_at = self.clock.now();
 
-        Ok(self.effects_for(event))
+        Ok(effects)
     }
 
-    const fn next_state(&self, event: SessionEvent) -> Option<SessionState> {
+    fn transition(&mut self, event: SessionEvent) -> Option<(SessionState, Vec<Effect>)> {
         match (self.state, event) {
-            (SessionState::Idle, SessionEvent::StartPairing) => Some(SessionState::PairingReady),
+            (SessionState::Idle, SessionEvent::StartPairing) => {
+                let session_id = self.assign_session_id();
+                Some((
+                    SessionState::PairingReady,
+                    vec![Effect::PresentPairing { session_id }],
+                ))
+            }
             (SessionState::PairingReady, SessionEvent::PeerConnected) => {
-                Some(SessionState::Handshaking)
+                Some((SessionState::Handshaking, Vec::new()))
             }
             (SessionState::Handshaking, SessionEvent::PairAuthenticated) => {
-                Some(SessionState::Negotiating)
+                Some((SessionState::Negotiating, vec![Effect::SendPaired]))
             }
             (SessionState::Negotiating, SessionEvent::NegotiationCompleted) => {
-                Some(SessionState::Connected)
+                Some((SessionState::Connected, vec![Effect::StartMedia]))
             }
-            (SessionState::Connected, SessionEvent::EndSession) => Some(SessionState::Ended),
+            (SessionState::Connected, SessionEvent::EndSession) => {
+                Some((SessionState::Ended, vec![Effect::End]))
+            }
             _ => None,
         }
     }
 
-    fn effects_for(&mut self, event: SessionEvent) -> Vec<Effect> {
-        match event {
-            SessionEvent::StartPairing => {
-                let mut bytes = [0u8; SessionId::LENGTH];
-                self.random.fill_bytes(&mut bytes);
-                let session_id = SessionId::from_bytes(bytes);
-                self.session_id = Some(session_id);
-                vec![Effect::PresentPairing { session_id }]
-            }
-            SessionEvent::PeerConnected => Vec::new(),
-            SessionEvent::PairAuthenticated => vec![Effect::SendPaired],
-            SessionEvent::NegotiationCompleted => vec![Effect::StartMedia],
-            SessionEvent::EndSession => vec![Effect::End],
-        }
+    fn assign_session_id(&mut self) -> SessionId {
+        let mut bytes = [0u8; SessionId::LENGTH];
+        self.random.fill_bytes(&mut bytes);
+        let session_id = SessionId::from_bytes(bytes);
+        self.session_id = Some(session_id);
+        session_id
     }
 }
 
@@ -287,7 +286,7 @@ mod tests {
         };
 
         assert_eq!(error.code(), TransitionErrorCode::InvalidTransition);
-        assert_eq!(error.from(), SessionState::Idle);
+        assert_eq!(error.from_state(), SessionState::Idle);
         assert_eq!(error.event(), super::SessionEvent::PeerConnected);
     }
 }
