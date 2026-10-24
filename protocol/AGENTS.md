@@ -11,6 +11,7 @@
   - Endpoints are ordered by `(family, hex(address))`.
   - Reason codes are closed (see `reason-codes.json`).
   - `MAX_MESSAGE_BYTES = 16 KiB`.
+  - Emitted frames are canonical (`version`, `type`, then schema order) and never above 16 KiB.
 - **Before editing:** update `signaling.schema.json` / `reason-codes.json` and `specs/001-f0-technical-spikes/research.md`; run `make spike-interop` / `run_conformance.sh`.
 
 **Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/contracts/signaling-messages.schema.json`, `.agents/skills/`.
@@ -48,17 +49,27 @@
 - **Endpoints:** ordered by `(family, hex(address))` for stable wire representation.
 - **Expiry:** `expiresAt > nowUnix` — expired payloads invalid.
 
-### 4. Conformance harness
+### 4. Emission direction
+
+- **Canonical encoder:** each implementation emits frames in one place — Rust `SignalingMessage::encode()` in `desktop/crates/protocol/src/signaling.rs`, Kotlin `SignalingEncoder`. Both mirror the frozen v1 schema; the encoder performs no version negotiation.
+- **Canonical order:** `version`, `type`, then the fields of the message in schema declaration order, with no whitespace. Optional fields that were never supplied are omitted. The order is pinned by `signaling/encoding.json`, not left to a map implementation.
+- **Validated values:** `Limits`, `Sdp`, `Candidates`, `Stats`, `CloseCode`, `ErrorCode` and `ErrorText` reject out-of-contract values at construction. Parsing and application code share those constructors, so a message that exists as a typed value re-parses to itself and no code path can emit an invalid message.
+- **Size:** `encode()` refuses a frame above `MAX_MESSAGE_BYTES = 16 KiB` (`EncodeError::FrameTooLarge`). A validated message can still be refused when JSON escaping grows the frame past the cap.
+- **Parity:** Rust executes the encoding vectors today; the Kotlin encoder joins the same vectors with REC-14.
+- **Wire freeze:** ADR-0002 still applies. Adding a message type, field or ordering rule is a version decision, not an implementation change.
+
+### 5. Conformance harness
 
 - Vectors in `protocol/vectors/`:
   - `qr/` — QR payload vectors (`qr/*.json`).
   - `signaling/scenarios.json` — signaling scenarios.
+  - `signaling/encoding.json` — canonical frames and encode→parse round-trip.
   - `reason-codes/all-codes.json` — reason code verification.
 - `run_conformance.sh` runs Rust binary (`bin/conformance.rs`).
 - `compare_conformance.py` compares Rust vs Kotlin results (ensures platforms do not diverge).
-- Can be run via `make spike-interop` (if `f0-codec-interop` delivered) or directly `cargo run --bin conformance -- ...`.
+- Can be run via `make spike-interop` (if `f0-codec-interop` delivered), `make conformance`, or directly `cargo run --bin conformance -- ...`.
 
-### 5. Code and structure
+### 6. Code and structure
 
 ```
 protocol/
@@ -77,7 +88,7 @@ protocol/
 - `generate_vectors.py` is responsible for producing conformance vectors. Reproducible — tags must be updated when the vectors change version.
 - No automatic code-gen. Both parsings are handmade.
 
-### 6. Contract change control
+### 7. Contract change control
 
 - Never add an unknown field to schema without justification (must come from a decision in `specs/001-f0-technical-spikes/research.md`).
 - Never add a reason code without a decision.

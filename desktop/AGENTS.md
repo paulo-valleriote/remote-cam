@@ -58,7 +58,7 @@ injection and media-core crates by relative path.
 
 ### 5. Tests and coverage
 
-- `protocol/` — gate ≥90%. `tests/contract.rs`, `bin/conformance.rs` (vectors from `protocol/vectors/`).
+- `protocol/` — gate ≥90%. `tests/contract.rs` (vectors from `protocol/vectors/`), `tests/signaling_encoding.rs` (canonical emission and round-trip), `bin/conformance.rs`.
 - `session-core/` — gate ≥90%. Deterministic tests through `handle(event)`. The clock and randomness enter only through the `Clock` and `RandomSource` traits; `testing::{ManualClock, SeededRandomSource}` provide the reproducible implementations used by tests and the harness. A rejected event carries the local closed code `invalid_transition`; it is a state-machine code, not part of the closed wire reason set in `protocol/reason-codes.json`.
 - `app/` — log formatting/redaction tests.
 - No `spikes/` module is imported by any crate here.

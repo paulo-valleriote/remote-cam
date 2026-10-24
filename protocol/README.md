@@ -11,6 +11,7 @@ and vectors only: neither application imports the other's source.
 | `reason-codes.json` | Closed reason-code set with stable spellings, categories and escalation flags. |
 | `vectors/qr/` | QR golden vectors: exact bytes plus the encoder input for valid payloads. |
 | `vectors/signaling/scenarios.json` | Message and handshake scenarios with the expected accept/reject outcome and reason code. |
+| `vectors/signaling/encoding.json` | Canonical frames for the emitting direction, pinned byte for byte, with an encode→parse round-trip. |
 | `vectors/reason-codes/all-codes.json` | Pinned enumeration used by both implementations. |
 | `vectors/run_conformance.sh` | Runs both implementations against every vector and fails on divergence. |
 
