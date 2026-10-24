@@ -35,7 +35,7 @@ are listed in [`specs/001-f0-technical-spikes/tasks.md`](specs/001-f0-technical-
 
 | Tool | Version | Used by |
 | --- | --- | --- |
-| Rust | 1.99.1 (pinned by `desktop/rust-toolchain.toml`, MSRV 1.92) | `desktop/` |
+| Rust | 1.99.1 (pinned by `desktop/rust-toolchain.toml` and `harness/rust-toolchain.toml`, MSRV 1.92) | `desktop/`, `harness/` |
 | JDK | 17 | `mobile/` |
 | Android SDK | compileSdk 36, build-tools 36.0.0 | `mobile/` |
 | Gradle | 9.6.x | `mobile/` |
@@ -83,11 +83,12 @@ target below is documented here.
 | `make help` | List the available targets. |
 | `make install` | Install the Python measurement package and its development dependencies. |
 | `make build-desktop` | Build the Rust workspace in `desktop/`. |
+| `make harness` | Run the headless product harness end to end (one deterministic JSON line on stdout; exit code 0 means every scenario passed). |
 | `make build-desktop-win` | Mirror the workspace to the Windows filesystem (`/mnt/c/Users/<user>/remotecam-win`) and build natively from WSL2; avoids the UNC filesystem error (see `docs/windows-build.md`). |
 | `make sync-desktop-win` | Mirror the working tree to the Windows filesystem without building (helper used by `build-desktop-win`). |
 | `make build-mobile` | Assemble the Android contract library (`mobile/protocol/build/outputs/aar`). |
-| `make test` | Run the Rust, Android and measurement-tooling tests. |
-| `make coverage` | Report coverage for the delivered contract packages. |
+| `make test` | Run the desktop, harness, Android and measurement-tooling tests. |
+| `make coverage` | Report coverage for the delivered product packages. |
 | `make lint` | Check Rust formatting, run Clippy and lint the Python tooling. |
 | `make preflight` | Record the reference environment and verify hardware decode. |
 | `make selftest` | Run the measurement-toolchain self-test. |
@@ -114,7 +115,8 @@ message until their harness lands in the phase named in `tasks.md`.
 ## Repository layout
 
 ```text
-desktop/    Rust receive/inject application (contract and product shell)
+desktop/    Rust receive/inject application (contract, session core and product shell)
+harness/    Product-owned headless harness (own Cargo workspace and toolchain)
 mobile/     Kotlin capture/transmit application (contract module)
 protocol/   Shared, versioned, language-neutral contract and conformance vectors
 spikes/     Non-production F0 harnesses, quarantined F0 code, fixtures, tooling and evidence
@@ -126,18 +128,37 @@ GLOSSARY.md Shared domain vocabulary
 
 ## Testing
 
-`make test` runs four suites:
+`make test` runs five suites:
 
 1. `cargo test` over the `desktop/` workspace;
-2. `cargo test` over each quarantined Rust crate under `spikes/` and each Rust
+2. `cargo test` over the `harness/` workspace;
+3. `cargo test` over each quarantined Rust crate under `spikes/` and each Rust
    spike harness;
-3. the Android contract module's unit tests with JUnit 5;
-4. `pytest` over the spike tooling.
+4. the Android contract module's unit tests with JUnit 5;
+5. `pytest` over the spike tooling.
 
 `make coverage` reports `cargo-llvm-cov` coverage for `remotecam-protocol` and
-the JaCoCo report for `mobile/protocol`. The 90 % threshold applies to the
-delivered contract packages; `spikes/` is exempt as recorded in the plan's
-Complexity Tracking.
+`remotecam-session-core`, and the JaCoCo report for `mobile/protocol`. The 90 %
+threshold applies to those delivered product packages; `spikes/` is exempt as
+recorded in the plan's Complexity Tracking, and the harness is not a shipped
+package (ADR-0008).
+
+## Product harness
+
+`make harness` runs the product-owned headless harness in `harness/`. It is a
+separate Cargo workspace pinned to Rust 1.99.1, so `make build-desktop` never
+compiles it. The harness drives the Session Core from
+`desktop/crates/session-core` through its public API and prints one
+deterministic JSON line per run. Exit code 0 means every scenario passed; exit
+code 1 means at least one failed.
+
+The current scaffold proves the wiring only: one `scaffold` scenario checks that
+a fresh Session Core rests in `idle`. The injected clock and RNG, the full
+report (contract version, commit, seed, injected clock start, environment and
+per-scenario verdicts) and the pairing path arrive with the F1-02 walking
+skeleton. Nothing under `spikes/` is imported (FR-039,
+[ADR-0007](docs/adr/0007-harness-location.md),
+[ADR-0008](docs/adr/0008-harness-dependency-baseline.md)).
 
 ## Debugging
 
@@ -150,6 +171,8 @@ Complexity Tracking.
 - The F0 harnesses are debugged from the evidence they emit under
   `spikes/evidence/`. Each gate procedure in `docs/spike/` names the file to
   inspect when a measurement fails.
+- The product harness prints its JSON report to stdout; when `make harness`
+  exits non-zero, the report names the failing scenario and the observed state.
 - Structured logs are English-only and never contain tokens, full fingerprints,
   secrets or personal data.
 

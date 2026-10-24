@@ -10,12 +10,17 @@ application shell is not part of this phase.
 | Crate | Directory | Responsibility |
 | --- | --- | --- |
 | `remotecam-protocol` | `crates/protocol` | Rust implementation of the shared signaling and QR contract. Delivered package, coverage gate ≥ 90 %. |
+| `remotecam-session-core` | `crates/session-core` | Product session state machine and session vocabulary. No I/O; deterministic and dependency-free. |
 | `remotecam-app` | `crates/app` | Desktop shell, diagnostics and structured logging. |
 
 The F0 crates `remotecam-signaling`, `remotecam-media-core`,
 `remotecam-injection` and `remotecam-audio-bridge` moved to `spikes/f0-*` in
 F1-01. They are non-production, are not workspace members, and must not be
 imported from this tree.
+
+The product harness in `harness/` consumes `crates/session-core` by relative
+path from its own workspace, so `make build-desktop` never compiles the harness.
+`protocol/` remains the contract source of truth (ADR-0008).
 
 ## Prerequisites
 

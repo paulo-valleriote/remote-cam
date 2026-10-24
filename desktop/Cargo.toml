@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/protocol",
     "crates/app",
+    "crates/session-core",
 ]
 
 [workspace.package]
