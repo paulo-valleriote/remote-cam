@@ -138,8 +138,9 @@ class QrPayload(
         const val MAX_PAYLOAD_BYTES: Int = 512
         private const val CAPABILITY_RESERVED_MASK: Int = 0xffc0
 
-        /** Decodes a payload, applying validation rules Q-1…Q-8 in order. */
-        fun decode(input: ByteArray, nowUnix: Long): QrDecodeResult {
+        fun decode(input: ByteArray, nowUnix: Long): QrDecodeResult = decodeInternal(input, nowUnix)
+
+        private fun decodeInternal(input: ByteArray, nowUnix: Long?): QrDecodeResult {
             if (input.size < HEADER_BYTES) return rejected(ReasonCode.INVALID_QR_PAYLOAD)
             for (index in 0 until 4) {
                 if (input[index] != MAGIC[index]) return rejected(ReasonCode.INVALID_QR_PAYLOAD)
@@ -172,7 +173,7 @@ class QrPayload(
             }
 
             val expiresAt = readU64(input, 28)
-            if (expiresAt <= nowUnix) return rejected(ReasonCode.QR_EXPIRED)
+            if (nowUnix != null && expiresAt <= nowUnix) return rejected(ReasonCode.QR_EXPIRED)
 
             return QrDecodeResult.Accepted(
                 QrPayload(
@@ -186,9 +187,6 @@ class QrPayload(
                 ),
             )
         }
-
-        /** Convenience decode without timestamp validation (for testing). */
-        fun decode(input: ByteArray): QrDecodeResult = decode(input, System.currentTimeMillis() / 1000)
 
         private class EndpointFailure(val reason: ReasonCode) : Exception()
 
@@ -249,20 +247,14 @@ class QrPayload(
         }
     }
 
-    /** Check if payload is structurally valid (no timestamp check). */
-    fun isValid(): Boolean {
-        return try {
-            val result = QrPayload.decode(encode())
-            result is QrDecodeResult.Accepted
-        } catch (e: Exception) {
+    fun isStructurallyValid(): Boolean =
+        try {
+            decodeInternal(encode(), null) is QrDecodeResult.Accepted
+        } catch (error: QrEncodeException) {
             false
         }
-    }
 
-    /** Check if payload is expired. */
-    fun isExpired(): Boolean {
-        return expiresAt <= System.currentTimeMillis() / 1000
-    }
+    fun isExpiredAt(nowUnix: Long): Boolean = expiresAt <= nowUnix
 
     /** Check if payload has at least one private endpoint. */
     fun hasPrivateEndpoints(): Boolean = endpoints.isNotEmpty()

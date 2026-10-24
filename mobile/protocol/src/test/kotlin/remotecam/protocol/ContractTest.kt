@@ -125,6 +125,49 @@ class ContractTest {
     }
 
     @Test
+    fun pinsTheExpiryBoundaryToTheGivenInstant() {
+        val bytes = qrPayload(expiresAt = 2_000_000_000).encode()
+
+        assertIs<QrDecodeResult.Accepted>(QrPayload.decode(bytes, 1_999_999_999))
+        assertEquals(ReasonCode.QR_EXPIRED, rejectionReason(bytes, 2_000_000_000))
+        assertEquals(ReasonCode.QR_EXPIRED, rejectionReason(bytes, 2_000_000_001))
+    }
+
+    @Test
+    fun structuralValidityIgnoresTheClock() {
+        val expiredLongAgo = qrPayload(expiresAt = 1)
+
+        assertTrue(expiredLongAgo.isStructurallyValid())
+        assertFalse(expiredLongAgo.isExpiredAt(0))
+        assertTrue(expiredLongAgo.isExpiredAt(1))
+        assertTrue(expiredLongAgo.isExpiredAt(1_700_000_000))
+    }
+
+    @Test
+    fun structuralValidityRejectsPayloadsThatCannotBeEncoded() {
+        val publicEndpoint = QrEndpoint(4, ByteArray(12) + byteArrayOf(8, 8, 8, 8), 51820)
+        val payload = qrPayload(expiresAt = 2_000_000_000, endpoints = listOf(publicEndpoint))
+
+        assertFalse(payload.isStructurallyValid())
+    }
+
+    private fun qrPayload(
+        expiresAt: Long,
+        endpoints: List<QrEndpoint> = listOf(assertNotNull(QrEndpoint.fromAddress(4, "192.168.1.42", 51820))),
+    ): QrPayload = QrPayload(
+        sessionId = ByteArray(16) { 1 },
+        epoch = 7,
+        expiresAt = expiresAt,
+        pairingToken = ByteArray(32) { 2 },
+        tlsFingerprint = ByteArray(32) { 3 },
+        capabilities = 0,
+        endpoints = endpoints,
+    )
+
+    private fun rejectionReason(input: ByteArray, nowUnix: Long): ReasonCode =
+        (QrPayload.decode(input, nowUnix) as QrDecodeResult.Rejected).reason
+
+    @Test
     fun endpointOrderIsStable() {
         val first = QrPayload(
             sessionId = ByteArray(16),
