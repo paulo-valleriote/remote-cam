@@ -1,0 +1,264 @@
+//! The pairing listener: TLS 1.3 only, ephemeral certificate, dedicated ALPN.
+//!
+//! The listener owns the server half of the channel. It accepts a TCP
+//! connection, completes a TLS 1.3 handshake against the ephemeral certificate,
+//! and hands the caller an authenticated transport. It performs no token
+//! validation and starts no media: those belong to the session lifecycle.
+
+use std::fmt;
+use std::net::{Ipv4Addr, SocketAddr};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::task::{Context, Poll};
+
+use remotecam_protocol::ReasonCode;
+use rustls::server::ServerSessionMemoryCache;
+use rustls::{ProtocolVersion, ServerConfig};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::net::TcpListener;
+use tokio_rustls::TlsAcceptor;
+use tokio_rustls::server::TlsStream;
+
+use crate::certificate::EphemeralCertificate;
+use crate::error::{PairingError, classify_io_error};
+
+/// The dedicated ALPN protocol name carried by both sides.
+pub const ALPN_PROTOCOL: &[u8] = b"remotecam/1";
+
+/// Failure while binding the listener.
+#[derive(Debug)]
+pub enum ListenerError {
+    /// The TLS configuration was refused.
+    Tls(rustls::Error),
+    /// The socket could not be bound or inspected.
+    Io(std::io::Error),
+}
+
+impl fmt::Display for ListenerError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Tls(error) => write!(formatter, "TLS configuration failed: {error}"),
+            Self::Io(error) => write!(formatter, "listener socket failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for ListenerError {}
+
+fn server_config(
+    certificate: EphemeralCertificate,
+) -> Result<(Arc<ServerConfig>, [u8; 32]), ListenerError> {
+    let fingerprint = certificate.fingerprint();
+    let (der, key) = certificate.into_parts();
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let mut config = ServerConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .map_err(ListenerError::Tls)?
+        .with_no_client_auth()
+        .with_single_cert(vec![der], key)
+        .map_err(ListenerError::Tls)?;
+    config.alpn_protocols = vec![ALPN_PROTOCOL.to_vec()];
+    config.session_storage = ServerSessionMemoryCache::new(0);
+    config.send_tls13_tickets = 0;
+    Ok((Arc::new(config), fingerprint))
+}
+
+/// A loopback or private-interface pairing listener.
+pub struct PairingListener {
+    listener: TcpListener,
+    acceptor: TlsAcceptor,
+    fingerprint: [u8; 32],
+    local_addr: SocketAddr,
+    attempts: AtomicU32,
+}
+
+impl fmt::Debug for PairingListener {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PairingListener")
+            .field("local_addr", &self.local_addr)
+            .field("fingerprint", &"[elided]")
+            .field("attempts", &self.attempts())
+            .finish()
+    }
+}
+
+impl PairingListener {
+    /// Binds the listener to `address` and prepares the TLS 1.3 server.
+    pub async fn bind(
+        address: SocketAddr,
+        certificate: EphemeralCertificate,
+    ) -> Result<Self, ListenerError> {
+        let (config, fingerprint) = server_config(certificate)?;
+        let listener = TcpListener::bind(address)
+            .await
+            .map_err(ListenerError::Io)?;
+        let local_addr = listener.local_addr().map_err(ListenerError::Io)?;
+        Ok(Self {
+            listener,
+            acceptor: TlsAcceptor::from(config),
+            fingerprint,
+            local_addr,
+            attempts: AtomicU32::new(0),
+        })
+    }
+
+    /// Binds an ephemeral port on IPv4 loopback.
+    pub async fn bind_loopback(certificate: EphemeralCertificate) -> Result<Self, ListenerError> {
+        Self::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)), certificate).await
+    }
+
+    /// The address the listener is bound to.
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
+    }
+
+    /// The leaf fingerprint the listener serves.
+    pub fn fingerprint(&self) -> [u8; 32] {
+        self.fingerprint
+    }
+
+    /// How many connections have reached the TLS handshake.
+    pub fn attempts(&self) -> u32 {
+        self.attempts.load(Ordering::SeqCst)
+    }
+
+    /// Accepts one connection and completes the TLS 1.3 handshake.
+    pub async fn accept(&self) -> Result<ServerChannel, PairingError> {
+        let (stream, _peer) = self.listener.accept().await.map_err(|error| {
+            PairingError::new(ReasonCode::DesktopUnreachable, error.to_string())
+        })?;
+        self.attempts.fetch_add(1, Ordering::SeqCst);
+        let stream = self
+            .acceptor
+            .accept(stream)
+            .await
+            .map_err(|error| PairingError::new(classify_io_error(&error), error.to_string()))?;
+        Ok(ServerChannel { inner: stream })
+    }
+}
+
+/// The server side of an established pairing channel.
+pub struct ServerChannel {
+    inner: TlsStream<tokio::net::TcpStream>,
+}
+
+impl fmt::Debug for ServerChannel {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ServerChannel")
+            .field("tls13", &self.is_tls13())
+            .field("alpn_protocol", &self.alpn_protocol())
+            .finish()
+    }
+}
+
+impl ServerChannel {
+    /// Whether the connection negotiated TLS 1.3.
+    pub fn is_tls13(&self) -> bool {
+        self.inner.get_ref().1.protocol_version() == Some(ProtocolVersion::TLSv1_3)
+    }
+
+    /// The ALPN protocol the connection negotiated.
+    pub fn alpn_protocol(&self) -> Option<&[u8]> {
+        self.inner.get_ref().1.alpn_protocol()
+    }
+
+    /// The peer address of the underlying socket.
+    pub fn peer_addr(&self) -> std::io::Result<SocketAddr> {
+        self.inner.get_ref().0.peer_addr()
+    }
+}
+
+impl AsyncRead for ServerChannel {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(context, buffer)
+    }
+}
+
+impl AsyncWrite for ServerChannel {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write(context, buffer)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(context)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(context)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ListenerError, PairingListener, server_config};
+    use crate::certificate::EphemeralCertificate;
+
+    #[test]
+    fn listener_errors_name_the_failing_stage() {
+        let io = ListenerError::Io(std::io::Error::other("port in use"));
+        let tls = ListenerError::Tls(rustls::Error::General("bad configuration".into()));
+
+        assert!(io.to_string().contains("listener socket failed"));
+        assert!(tls.to_string().contains("TLS configuration failed"));
+    }
+
+    #[tokio::test]
+    async fn binds_loopback_and_reports_the_served_fingerprint() {
+        let certificate = EphemeralCertificate::generate().expect("certificate");
+        let fingerprint = certificate.fingerprint();
+
+        let listener = PairingListener::bind_loopback(certificate)
+            .await
+            .expect("listener");
+
+        assert!(listener.local_addr().ip().is_loopback());
+        assert_ne!(listener.local_addr().port(), 0);
+        assert_eq!(listener.fingerprint(), fingerprint);
+        assert_eq!(listener.attempts(), 0);
+
+        let rendered = format!("{listener:?}");
+        assert!(rendered.contains("[elided]"));
+        assert!(!rendered.contains(&remotecam_protocol::hex::encode_hex(&fingerprint)));
+    }
+
+    #[tokio::test]
+    async fn reports_a_port_that_is_already_bound() {
+        let first =
+            PairingListener::bind_loopback(EphemeralCertificate::generate().expect("certificate"))
+                .await
+                .expect("listener");
+        let second_certificate = EphemeralCertificate::generate().expect("certificate");
+
+        let error = PairingListener::bind(first.local_addr(), second_certificate)
+            .await
+            .expect_err("a bound port must be refused");
+
+        assert!(error.to_string().contains("listener socket failed"));
+    }
+
+    #[test]
+    fn the_server_configuration_carries_the_certificate_fingerprint() {
+        let certificate = EphemeralCertificate::generate().expect("certificate");
+        let expected = certificate.fingerprint();
+        let (_, fingerprint) = server_config(certificate).expect("configuration");
+
+        assert_eq!(fingerprint, expected);
+    }
+}

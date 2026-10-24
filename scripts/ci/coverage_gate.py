@@ -1,15 +1,17 @@
 """Coverage gate for the delivered product packages.
 
-Enforces ≥ 90 % line coverage for ``desktop/crates/protocol`` and
-``desktop/crates/session-core`` (via ``cargo-llvm-cov``) and ``mobile/protocol``
-(via JaCoCo). ``spikes/`` and the product harness are exempt: the first is a
-recorded deviation (T117), the second is not a shipped package (ADR-0008).
+Enforces ≥ 90 % line coverage for ``desktop/crates/protocol``,
+``desktop/crates/session-core`` and ``desktop/crates/pairing`` (via
+``cargo-llvm-cov``) and ``mobile/protocol`` (via JaCoCo). ``spikes/`` and the
+product harness are exempt: the first is a recorded deviation (T117), the
+second is not a shipped package (ADR-0008).
 
 Usage::
 
     python scripts/ci/coverage_gate.py \
         --rust-summary <cargo-llvm-cov --summary-only output for remotecam-protocol> \
         --rust-session-core-summary <cargo-llvm-cov --summary-only output for remotecam-session-core> \
+        --rust-pairing-summary <cargo-llvm-cov --summary-only output for remotecam-pairing> \
         --jacoco-report <jacocoTestReport.xml>
 
 Exit status is 1 when any package is below 90 %.
@@ -69,6 +71,10 @@ def main() -> int:
         help="Text output of `cargo llvm-cov --summary-only` for remotecam-session-core",
     )
     parser.add_argument(
+        "--rust-pairing-summary",
+        help="Text output of `cargo llvm-cov --summary-only` for remotecam-pairing",
+    )
+    parser.add_argument(
         "--jacoco-report",
         help="Path to JaCoCo XML report for mobile/protocol",
     )
@@ -79,6 +85,7 @@ def main() -> int:
     rust_summaries = [
         ("Rust protocol", args.rust_summary),
         ("Rust session core", args.rust_session_core_summary),
+        ("Rust pairing", args.rust_pairing_summary),
     ]
     for label, summary_path in rust_summaries:
         if not summary_path:

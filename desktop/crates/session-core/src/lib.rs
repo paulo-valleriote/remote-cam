@@ -1,6 +1,9 @@
 //! RemoteCam Session Core: the product session state machine and vocabulary.
 
 pub mod testing;
+pub mod token;
+
+pub use token::PairingToken;
 
 /// The lifecycle position of the single session a desktop may hold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -69,6 +72,13 @@ impl SessionId {
     /// Builds an identifier from its raw bytes.
     pub const fn from_bytes(bytes: [u8; Self::LENGTH]) -> Self {
         Self(bytes)
+    }
+
+    /// Draws a fresh identifier from the injected random source.
+    pub fn generate<R: RandomSource + ?Sized>(random: &mut R) -> Self {
+        let mut bytes = [0_u8; Self::LENGTH];
+        random.fill_bytes(&mut bytes);
+        Self::from_bytes(bytes)
     }
 
     /// The raw bytes of the identifier.
@@ -231,9 +241,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     }
 
     fn assign_session_id(&mut self) -> SessionId {
-        let mut bytes = [0u8; SessionId::LENGTH];
-        self.random.fill_bytes(&mut bytes);
-        let session_id = SessionId::from_bytes(bytes);
+        let session_id = SessionId::generate(&mut self.random);
         self.session_id = Some(session_id);
         session_id
     }

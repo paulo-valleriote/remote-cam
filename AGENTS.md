@@ -52,7 +52,7 @@ remotecam/
 
 Every complex subdirectory (`desktop/`, `mobile/`, `protocol/`, `harness/`, `spikes/`) has its own `AGENTS.md` with rules that **do not** apply to other parts.
 
-- `desktop/AGENTS.md` — Rust workspace (3 crates), Windows Media Foundation boundaries, `rust-toolchain.toml` (1.99.1), `rustls`, `subtle` constant-time pinning, token zeroization, structured-logging redaction.
+- `desktop/AGENTS.md` — Rust workspace (4 crates), Windows Media Foundation boundaries, `rust-toolchain.toml` (1.99.1), `rustls`, `subtle` constant-time pinning, token zeroization, structured-logging redaction.
 - `mobile/AGENTS.md` — Kotlin Serialization JSON, strict parsing (unknown keys rejected), TLS 1.3 certificate pinning, `compileSdk` 36, the `:protocol` module.
 - `protocol/AGENTS.md` — Versioned contracts (v1), `signaling.schema.json`, `reason-codes.json` (closed reason codes), conformance harness, `protocol/vectors/`.
 - `harness/AGENTS.md` — Product-owned headless harness, own workspace and toolchain, FR-039 (no `spikes/` imports), deterministic JSON report, `make harness`.
