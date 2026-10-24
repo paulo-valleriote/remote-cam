@@ -1,0 +1,170 @@
+{
+  "version": 1,
+  "description": "Pinned canonical frames for the emitting direction. Every vector must encode to exactly expected_frame and parse back to the same message. Executed by the Rust contract crate; the Kotlin emitter joins with REC-14.",
+  "vectors": [
+    {
+      "id": "enc-pair",
+      "description": "The canonical pair frame; every limit is present.",
+      "message": {
+        "version": 1,
+        "type": "pair",
+        "token": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30,
+          "max_video_bitrate_kbps": 2500,
+          "max_audio_bitrate_kbps": 48
+        }
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"pair\",\"token\":\"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\",\"dtls_fingerprint\":\"9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a\",\"limits\":{\"max_width\":1280,\"max_height\":720,\"max_frame_rate\":30,\"max_video_bitrate_kbps\":2500,\"max_audio_bitrate_kbps\":48}}"
+    },
+    {
+      "id": "enc-pair-empty-limits",
+      "description": "An empty limits object is emitted as an empty object, not omitted.",
+      "message": {
+        "version": 1,
+        "type": "pair",
+        "token": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "limits": {}
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"pair\",\"token\":\"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\",\"dtls_fingerprint\":\"9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a\",\"limits\":{}}"
+    },
+    {
+      "id": "enc-paired",
+      "description": "The canonical paired frame.",
+      "message": {
+        "version": 1,
+        "type": "paired",
+        "session_id": "00112233445566778899aabbccddeeff",
+        "epoch": 7,
+        "dtls_fingerprint": "9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a",
+        "accepted_limits": {
+          "max_width": 1280,
+          "max_height": 720,
+          "max_frame_rate": 30
+        }
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"paired\",\"session_id\":\"00112233445566778899aabbccddeeff\",\"epoch\":7,\"dtls_fingerprint\":\"9f2c1e4b6a8d0f3c5e7a9b1d2f4c6e8a0b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a\",\"accepted_limits\":{\"max_width\":1280,\"max_height\":720,\"max_frame_rate\":30}}"
+    },
+    {
+      "id": "enc-offer",
+      "description": "The canonical offer frame with its CRLF SDP body escaped.",
+      "message": {
+        "version": 1,
+        "type": "offer",
+        "epoch": 7,
+        "sdp": "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n"
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"offer\",\"epoch\":7,\"sdp\":\"v=0\\r\\no=- 1 1 IN IP4 0.0.0.0\\r\\nm=video 9 UDP/TLS/RTP/SAVPF 96\\r\\n\"}"
+    },
+    {
+      "id": "enc-answer",
+      "description": "The canonical recvonly answer frame.",
+      "message": {
+        "version": 1,
+        "type": "answer",
+        "epoch": 7,
+        "sdp": "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=recvonly\r\n"
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"answer\",\"epoch\":7,\"sdp\":\"v=0\\r\\no=- 1 1 IN IP4 0.0.0.0\\r\\nm=video 9 UDP/TLS/RTP/SAVPF 96\\r\\na=recvonly\\r\\n\"}"
+    },
+    {
+      "id": "enc-ice",
+      "description": "Candidates keep their schema order and omit an absent protocol.",
+      "message": {
+        "version": 1,
+        "type": "ice",
+        "epoch": 7,
+        "candidates": [
+          {
+            "address": "192.168.1.42",
+            "port": 51234,
+            "component": 1,
+            "protocol": "udp"
+          },
+          {
+            "address": "fe80::1",
+            "port": 51235,
+            "component": 2
+          }
+        ]
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"ice\",\"epoch\":7,\"candidates\":[{\"address\":\"192.168.1.42\",\"port\":51234,\"component\":1,\"protocol\":\"udp\"},{\"address\":\"fe80::1\",\"port\":51235,\"component\":2}]}"
+    },
+    {
+      "id": "enc-stats",
+      "description": "Every optional metric is present and emitted in schema order.",
+      "message": {
+        "version": 1,
+        "type": "stats",
+        "fps": 30.0,
+        "video_bitrate_kbps": 2500.0,
+        "rtt_ms": 12.4,
+        "loss_pct": 0.0,
+        "thermal_status": "none"
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"stats\",\"fps\":30.0,\"video_bitrate_kbps\":2500.0,\"rtt_ms\":12.4,\"loss_pct\":0.0,\"thermal_status\":\"none\"}"
+    },
+    {
+      "id": "enc-stats-empty",
+      "description": "A stats message without metrics emits only version and type.",
+      "message": {
+        "version": 1,
+        "type": "stats"
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"stats\"}"
+    },
+    {
+      "id": "enc-close",
+      "description": "The canonical close frame.",
+      "message": {
+        "version": 1,
+        "type": "close",
+        "code": "ended_by_mobile"
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"close\",\"code\":\"ended_by_mobile\"}"
+    },
+    {
+      "id": "enc-error",
+      "description": "The canonical error frame with its diagnostic text.",
+      "message": {
+        "version": 1,
+        "type": "error",
+        "code": "invalid_message",
+        "message": "malformed frame"
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"error\",\"code\":\"invalid_message\",\"message\":\"malformed frame\"}"
+    },
+    {
+      "id": "enc-error-without-message",
+      "description": "An absent diagnostic text is omitted.",
+      "message": {
+        "version": 1,
+        "type": "error",
+        "code": "invalid_message"
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"error\",\"code\":\"invalid_message\"}"
+    },
+    {
+      "id": "enc-ping",
+      "description": "The canonical ping frame.",
+      "message": {
+        "version": 1,
+        "type": "ping"
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"ping\"}"
+    },
+    {
+      "id": "enc-pong",
+      "description": "The canonical pong frame.",
+      "message": {
+        "version": 1,
+        "type": "pong"
+      },
+      "expected_frame": "{\"version\":1,\"type\":\"pong\"}"
+    }
+  ]
+}

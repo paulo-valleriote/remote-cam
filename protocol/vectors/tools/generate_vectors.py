@@ -740,6 +740,105 @@ def build_signal_scenarios() -> list[dict]:
     return scenarios
 
 
+def canonical_frame(message: dict) -> str:
+    return json.dumps(message, separators=(",", ":"), ensure_ascii=False)
+
+
+def encoding_vector(vector_id: str, description: str, message: dict) -> dict:
+    return {
+        "id": vector_id,
+        "description": description,
+        "message": message,
+        "expected_frame": canonical_frame(message),
+    }
+
+
+def build_encoding_vectors() -> list[dict]:
+    base = base_messages()
+    without_protocol = mutated(
+        base["ice"],
+        candidates=[
+            {"address": "192.168.1.42", "port": 51234, "component": 1, "protocol": "udp"},
+            {"address": "fe80::1", "port": 51235, "component": 2},
+        ],
+    )
+    stats_with_floats = mutated(
+        base["stats"],
+        fps=30.0,
+        video_bitrate_kbps=2500.0,
+        rtt_ms=12.4,
+        loss_pct=0.0,
+    )
+
+    return [
+        encoding_vector(
+            "enc-pair",
+            "The canonical pair frame; every limit is present.",
+            base["pair"],
+        ),
+        encoding_vector(
+            "enc-pair-empty-limits",
+            "An empty limits object is emitted as an empty object, not omitted.",
+            mutated(base["pair"], limits={}),
+        ),
+        encoding_vector(
+            "enc-paired",
+            "The canonical paired frame.",
+            base["paired"],
+        ),
+        encoding_vector(
+            "enc-offer",
+            "The canonical offer frame with its CRLF SDP body escaped.",
+            base["offer"],
+        ),
+        encoding_vector(
+            "enc-answer",
+            "The canonical recvonly answer frame.",
+            base["answer"],
+        ),
+        encoding_vector(
+            "enc-ice",
+            "Candidates keep their schema order and omit an absent protocol.",
+            without_protocol,
+        ),
+        encoding_vector(
+            "enc-stats",
+            "Every optional metric is present and emitted in schema order.",
+            stats_with_floats,
+        ),
+        encoding_vector(
+            "enc-stats-empty",
+            "A stats message without metrics emits only version and type.",
+            {"version": 1, "type": "stats"},
+        ),
+        encoding_vector(
+            "enc-close",
+            "The canonical close frame.",
+            base["close"],
+        ),
+        encoding_vector(
+            "enc-error",
+            "The canonical error frame with its diagnostic text.",
+            mutated(base["error"], message="malformed frame"),
+        ),
+        encoding_vector(
+            "enc-error-without-message",
+            "An absent diagnostic text is omitted.",
+            base["error"],
+        ),
+        encoding_vector(
+            "enc-ping",
+            "The canonical ping frame.",
+            base["ping"],
+        ),
+        encoding_vector(
+            "enc-pong",
+            "The canonical pong frame.",
+            base["pong"],
+        ),
+    ]
+
+
 def build_reason_code_vector() -> dict:
     source = json.loads((ROOT / "protocol" / "reason-codes.json").read_text())
     return {
@@ -772,6 +871,14 @@ def main() -> None:
             "version": 1,
             "description": "Pinned signaling and pairing scenarios. kind=message cases are executed by both protocol consumers; kind=handshake cases are executed by the pairing harness.",
             "scenarios": build_signal_scenarios(),
+        },
+    )
+    write_json(
+        VECTORS / "signaling" / "encoding.json",
+        {
+            "version": 1,
+            "description": "Pinned canonical frames for the emitting direction. Every vector must encode to exactly expected_frame and parse back to the same message. Executed by the Rust contract crate; the Kotlin emitter joins with REC-14.",
+            "vectors": build_encoding_vectors(),
         },
     )
     print("vectors written under", VECTORS)

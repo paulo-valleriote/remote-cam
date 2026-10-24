@@ -58,7 +58,7 @@ injection and media-core crates by relative path.
 
 ### 5. Tests and coverage
 
-- `protocol/` — gate ≥90%. `tests/contract.rs`, `bin/conformance.rs` (vectors from `protocol/vectors/`).
+- `protocol/` — gate ≥90%. `tests/contract.rs` (vectors from `protocol/vectors/`), `tests/signaling_encoding.rs` (canonical emission and round-trip), `bin/conformance.rs`.
 - `app/` — log formatting/redaction tests.
 - No `spikes/` module is imported by any crate here.
 
