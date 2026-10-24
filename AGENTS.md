@@ -52,3 +52,17 @@ Every complex subdirectory (`desktop/`, `mobile/`, `protocol/`, `spikes/`) has i
 - When creating a new spike, put it in `spikes/` (never `desktop/` or `mobile/`), register evidence, update `spikes/AGENTS.md`.
 - When modifying `desktop/` with Windows-specific code, consult `desktop/AGENTS.md` before using the `windows` crate or DirectShow.
 - When modifying `mobile/`, verify strict JSON parsing and certificate pinning (`mobile/AGENTS.md`).
+
+## Agent skills
+
+### Issue tracker
+
+Jira via Atlassian MCP (board REC: to do / in progress / done). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context (root GLOSSARY.md + docs/adr/). See `docs/agents/domain.md`.
