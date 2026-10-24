@@ -431,7 +431,7 @@
     "A message with an unknown field is rejected with invalid_message; unknown fields are never ignored."
   ],
   "x-conformance": {
-    "description": "The Kotlin and Rust implementations MUST both pass the vectors in protocol/vectors/signaling/. Each vector names the message, the expected accept/reject outcome, and the expected reason code on rejection.",
+    "description": "Both implementations MUST pass the parse vectors in protocol/vectors/signaling/scenarios.json. The canonical frames in protocol/vectors/signaling/encoding.json pin the emitting direction; each implementation executes them once its encoder is wired into its conformance harness. Each parse vector names the message, the expected accept/reject outcome, and the expected reason code on rejection.",
     "vector_directory": "protocol/vectors/signaling/",
     "minimum_vectors": 40
   },

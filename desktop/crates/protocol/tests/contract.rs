@@ -19,6 +19,11 @@ fn every_pinned_vector_produces_its_expected_outcome() {
     );
     assert_eq!(report.reason_codes.count, 26);
     assert!(report.reason_codes.ok);
+    assert_eq!(
+        report.encoding.len(),
+        13,
+        "every encoding vector must be executed"
+    );
 }
 
 #[test]

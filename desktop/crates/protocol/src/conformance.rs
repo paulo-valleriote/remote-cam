@@ -21,6 +21,7 @@ pub struct ConformanceReport {
     pub qr: Vec<QrResult>,
     pub signaling: Vec<SignalingResult>,
     pub reason_codes: ReasonCodeResult,
+    pub encoding: Vec<EncodingResult>,
 }
 
 /// Observed outcome for one QR vector.
@@ -49,6 +50,13 @@ pub struct SignalingResult {
 pub struct ReasonCodeResult {
     pub count: usize,
     pub ok: bool,
+}
+
+/// Observed outcome for one encoding vector.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EncodingResult {
+    pub id: String,
+    pub encoded_bytes: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,6 +113,18 @@ struct ReasonCodeDocument {
 }
 
 #[derive(Debug, Deserialize)]
+struct EncodingVectorFile {
+    vectors: Vec<EncodingVector>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EncodingVector {
+    id: String,
+    message: serde_json::Value,
+    expected_frame: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct ReasonCodeEntry {
     code: String,
     categories: Vec<String>,
@@ -143,10 +163,12 @@ pub fn run_vectors(vectors_dir: &Path) -> Result<ConformanceReport, String> {
     let qr = run_qr_vectors(&vectors_dir.join("qr"))?;
     let signaling = run_signaling_scenarios(&vectors_dir.join("signaling/scenarios.json"))?;
     let reason_codes = check_reason_codes(&vectors_dir.join("../reason-codes.json"))?;
+    let encoding = run_encoding_vectors(&vectors_dir.join("signaling/encoding.json"))?;
     Ok(ConformanceReport {
         qr,
         signaling,
         reason_codes,
+        encoding,
     })
 }
 
@@ -307,6 +329,50 @@ fn run_signaling_scenarios(path: &Path) -> Result<Vec<SignalingResult>, String> 
     Ok(results)
 }
 
+fn run_encoding_vectors(path: &Path) -> Result<Vec<EncodingResult>, String> {
+    let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let file: EncodingVectorFile =
+        serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))?;
+    file.vectors.into_iter().map(run_encoding_vector).collect()
+}
+
+fn run_encoding_vector(vector: EncodingVector) -> Result<EncodingResult, String> {
+    let source =
+        serde_json::to_vec(&vector.message).map_err(|error| format!("{}: {error}", vector.id))?;
+    let message = parse_signaling(&source).map_err(|error| {
+        format!(
+            "{}: the vector message is not valid: {:?}",
+            vector.id, error.code
+        )
+    })?;
+    let encoded = message
+        .encode()
+        .map_err(|error| format!("{}: expected a frame, observed {error:?}", vector.id))?;
+    if encoded != vector.expected_frame.as_bytes() {
+        return Err(format!(
+            "{}: canonical frame mismatch: observed {}",
+            vector.id,
+            String::from_utf8_lossy(&encoded)
+        ));
+    }
+    let reparsed = parse_signaling(&encoded).map_err(|error| {
+        format!(
+            "{}: the encoded frame is rejected: {:?}",
+            vector.id, error.code
+        )
+    })?;
+    if reparsed != message {
+        return Err(format!(
+            "{}: encode then parse changed the message",
+            vector.id
+        ));
+    }
+    Ok(EncodingResult {
+        id: vector.id,
+        encoded_bytes: encoded.len(),
+    })
+}
+
 fn check_reason_codes(path: &Path) -> Result<ReasonCodeResult, String> {
     let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let document: ReasonCodeDocument =
@@ -344,4 +410,44 @@ fn check_reason_codes(path: &Path) -> Result<ReasonCodeResult, String> {
         count: document.codes.len(),
         ok,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{EncodingVector, run_encoding_vector};
+
+    fn vector(message: serde_json::Value, expected_frame: &str) -> EncodingVector {
+        EncodingVector {
+            id: "test-vector".to_owned(),
+            message,
+            expected_frame: expected_frame.to_owned(),
+        }
+    }
+
+    #[test]
+    fn a_vector_message_the_parser_rejects_is_a_harness_error() {
+        let error = run_encoding_vector(vector(json!({"version": 1, "type": "hello"}), "{}"))
+            .expect_err("an invalid vector message must fail the harness");
+        assert!(error.contains("the vector message is not valid"), "{error}");
+    }
+
+    #[test]
+    fn a_frame_that_differs_from_the_pinned_bytes_is_a_harness_error() {
+        let error = run_encoding_vector(vector(
+            json!({"version": 1, "type": "ping"}),
+            r#"{"version":1,"type":"pong"}"#,
+        ))
+        .expect_err("a divergent canonical frame must fail the harness");
+        assert!(error.contains("canonical frame mismatch"), "{error}");
+    }
+
+    #[test]
+    fn a_pinned_vector_encodes_and_round_trips() {
+        let frame = r#"{"version":1,"type":"ping"}"#;
+        let result = run_encoding_vector(vector(json!({"version": 1, "type": "ping"}), frame))
+            .expect("a pinned vector must pass");
+        assert_eq!(result.encoded_bytes, frame.len());
+    }
 }

@@ -58,7 +58,7 @@ injection and media-core crates by relative path.
 
 ### 5. Tests and coverage
 
-- `protocol/` — gate ≥90%. `tests/contract.rs`, `bin/conformance.rs` (vectors from `protocol/vectors/`).
+- `protocol/` — gate ≥90%. `tests/contract.rs` (vectors from `protocol/vectors/`), `tests/signaling_encoding.rs` (canonical emission and round-trip), `bin/conformance.rs`.
 - `session-core/` — gate ≥90%. Deterministic unit tests for the state machine; the clock and RNG seams arrive with REC-20.
 - `app/` — log formatting/redaction tests.
 - No `spikes/` module is imported by any crate here.
