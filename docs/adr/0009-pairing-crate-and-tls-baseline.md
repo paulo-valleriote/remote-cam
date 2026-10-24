@@ -17,9 +17,9 @@ REC-21 builds the pairing material and the channel it authorises:
 
 Three constraints shape where that code can live:
 
-1. `desktop/crates/session-core` is deliberately I/O-free and standard-library
-   only today (ADR-0008). Adding a TLS stack or a socket to it would invert its
-   role: it is the session domain, not a transport adapter.
+1. `desktop/crates/session-core` is deliberately I/O-free (ADR-0008). Adding a
+   TLS stack or a socket to it would invert its role: it is the session domain,
+   not a transport adapter.
 2. The constitution requires external dependencies behind adapters that
    implement domain interfaces, and requires every dependency to be justified
    before it is added.
@@ -46,6 +46,15 @@ domain, not only in the adapter.
 - `session-core` gains `PairingToken` and `SessionId::generate`. It gains no
   I/O and no TLS dependency.
 - Nothing under `spikes/` is imported.
+
+### Listener binding
+
+- `PairingListener::bind` binds the address supplied by its caller, including
+  wildcard and non-loopback addresses so a mobile peer can reach the desktop
+  over a private network. `bind_loopback` remains available for loopback-only
+  use, including tests.
+- The caller chooses which interfaces to expose; the pairing listener does not
+  silently restrict access to loopback.
 
 ### Session Core addition
 

@@ -19,8 +19,8 @@
 - **Workspace:** `harness/Cargo.toml` (resolver 3, edition 2024, MSRV 1.92, version 0.1.0) with one member, `crates/harness`.
 - **Toolchain:** `harness/rust-toolchain.toml` — `1.99.1`, components `clippy` + `rustfmt`, profile `minimal`.
 - **Build and run:** `make harness` runs `cargo run --quiet --locked --package remotecam-harness` from inside `harness/`, so rustup honours the pinned toolchain.
-- **Dependency direction:** the harness consumes `desktop/crates/session-core` by relative path. It never reaches into `desktop/crates/app` and never defines the contract, which belongs to `protocol/`.
-- **Output:** one JSON line on stdout per run, containing the report version, scenario, observed state, per-scenario verdict and summary. Exit code 0 means every scenario passed; 1 means at least one failed.
+- **Dependency direction:** the harness consumes `desktop/crates/session-core` and `desktop/crates/protocol` by relative path. It never reaches into `desktop/crates/app` and never defines the contract, which belongs to `protocol/`.
+- **Output:** one JSON line on stdout per run, containing the report version, scenario, observed state, per-scenario verdict, an optional failure reason code, and a summary. Exit code 0 means every scenario passed; 1 means at least one failed.
 
 ## Harness-specific rules
 

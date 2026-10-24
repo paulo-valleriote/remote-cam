@@ -152,11 +152,12 @@ compiles it. The harness drives the Session Core from
 deterministic JSON line per run. Exit code 0 means every scenario passed; exit
 code 1 means at least one failed.
 
-The current scaffold proves the wiring only: one `scaffold` scenario checks that
-a fresh Session Core rests in `idle`. The injected clock and RNG, the full
-report (contract version, commit, seed, injected clock start, environment and
-per-scenario verdicts) and the pairing path arrive with the F1-02 walking
-skeleton. Nothing under `spikes/` is imported (FR-039,
+The product harness runs a deterministic pairing scenario through the Session
+Core: the mobile's `pair` frame authenticates with the one-use token, the
+desktop responds with `paired`, and negotiation reaches `connected` before
+media starts. The report excludes the token and DTLS fingerprint. The injected
+clock and RNG make the scenario reproducible. Nothing under `spikes/` is
+imported. A failed scenario includes its reason code in the report (FR-039,
 [ADR-0007](docs/adr/0007-harness-location.md),
 [ADR-0008](docs/adr/0008-harness-dependency-baseline.md)).
 

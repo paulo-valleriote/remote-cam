@@ -7,4 +7,6 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+remotecam-protocol = { path = "../protocol" }
+subtle.workspace = true
 zeroize.workspace = true

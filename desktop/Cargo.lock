@@ -3888,6 +3888,8 @@ dependencies = [
 name = "remotecam-session-core"
 version = "0.1.0"
 dependencies = [
+ "remotecam-protocol",
+ "subtle",
  "zeroize",
 ]
 

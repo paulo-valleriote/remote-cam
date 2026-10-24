@@ -1,13 +1,15 @@
+use remotecam_protocol::signaling::{Limits, SignalingMessage};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
 use remotecam_session_core::{
-    Clock, Effect, RandomSource, SessionCore, SessionEvent, SessionId, SessionState, Timestamp,
-    TransitionErrorCode,
+    Clock, Effect, PairingMaterial, RandomSource, SessionCore, SessionEvent, SessionId,
+    SessionState, Timestamp, TransitionErrorCode,
 };
 
-const HAPPY_PATH: [SessionEvent; 5] = [
+const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
+
+const HAPPY_PATH: [SessionEvent; 4] = [
     SessionEvent::StartPairing,
     SessionEvent::PeerConnected,
-    SessionEvent::PairAuthenticated,
     SessionEvent::NegotiationCompleted,
     SessionEvent::EndSession,
 ];
@@ -18,8 +20,33 @@ fn core_at(
 ) -> (SessionCore<ManualClock, SeededRandomSource>, ManualClock) {
     let clock = ManualClock::new(Timestamp::from_millis(start_millis));
     let handle = clock.clone();
-    let core = SessionCore::new(clock, SeededRandomSource::new(seed));
+    let core = SessionCore::new(clock, SeededRandomSource::new(seed), DESKTOP_FINGERPRINT);
     (core, handle)
+}
+
+fn authenticate(core: &mut SessionCore<ManualClock, SeededRandomSource>) -> Effect {
+    let effects = core
+        .handle(SessionEvent::StartPairing)
+        .expect("starting pairing is valid");
+    let [Effect::PresentPairing(material)] = effects.as_slice() else {
+        panic!("starting pairing presents its material");
+    };
+    let frame = pair_frame(material);
+
+    core.handle(SessionEvent::PeerConnected)
+        .expect("the peer may connect while pairing is ready");
+    core.authenticate_first_frame(&frame)
+        .expect("the matching token authenticates")
+}
+
+fn pair_frame(material: &PairingMaterial) -> Vec<u8> {
+    SignalingMessage::Pair {
+        token: *material.token().as_bytes(),
+        dtls_fingerprint: [0x55; 32],
+        limits: Limits::new(),
+    }
+    .encode()
+    .expect("the pair message is valid")
 }
 
 fn core_in(
@@ -31,13 +58,30 @@ fn core_in(
         SessionState::Idle => &[],
         SessionState::PairingReady => &HAPPY_PATH[..1],
         SessionState::Handshaking => &HAPPY_PATH[..2],
-        SessionState::Negotiating => &HAPPY_PATH[..3],
-        SessionState::Connected => &HAPPY_PATH[..4],
-        SessionState::Ended => &HAPPY_PATH[..5],
+        SessionState::Negotiating => &HAPPY_PATH[..2],
+        SessionState::Connected => &HAPPY_PATH[..3],
+        SessionState::Ended => &HAPPY_PATH[..4],
     };
 
+    let mut frame = None;
     for event in events {
+        if *event == SessionEvent::StartPairing {
+            let effects = core.handle(*event).expect("the setup path is valid");
+            let [Effect::PresentPairing(material)] = effects.as_slice() else {
+                panic!("starting pairing presents its material");
+            };
+            frame = Some(pair_frame(material));
+            continue;
+        }
+        if *event == SessionEvent::NegotiationCompleted {
+            core.authenticate_first_frame(frame.as_deref().expect("pairing started"))
+                .expect("the matching token authenticates");
+        }
         core.handle(*event).expect("the setup path is valid");
+    }
+    if state == SessionState::Negotiating {
+        core.authenticate_first_frame(frame.as_deref().expect("pairing started"))
+            .expect("the matching token authenticates");
     }
 
     (core, clock)
@@ -64,7 +108,13 @@ fn starting_a_pairing_moves_to_pairing_ready_and_presents_the_material() {
         .expect("starting a pairing assigns a session id");
 
     assert_eq!(core.state(), SessionState::PairingReady);
-    assert_eq!(effects, vec![Effect::PresentPairing { session_id }]);
+    let [Effect::PresentPairing(material)] = effects.as_slice() else {
+        panic!("starting pairing presents its material");
+    };
+    assert_eq!(material.session_id(), session_id);
+    assert_eq!(material.epoch(), 1);
+    assert_eq!(core.epoch(), Some(1));
+    assert_eq!(material.token().as_bytes().len(), 32);
     assert_eq!(core.last_transition_at(), Timestamp::from_millis(1_000));
 }
 
@@ -105,15 +155,21 @@ fn a_peer_connection_moves_to_handshaking_without_an_effect() {
 
 #[test]
 fn an_authenticated_pair_sends_paired_and_moves_to_negotiating() {
-    let (mut core, clock) = core_in(SessionState::Handshaking, 7);
+    let (mut core, clock) = core_at(7, 0);
     clock.advance(15);
 
-    let effects = core
-        .handle(SessionEvent::PairAuthenticated)
-        .expect("authentication is valid during the handshake");
+    let effect = authenticate(&mut core);
 
     assert_eq!(core.state(), SessionState::Negotiating);
-    assert_eq!(effects, vec![Effect::SendPaired]);
+    assert_eq!(
+        effect,
+        Effect::SendPaired {
+            session_id: core.session_id().expect("pairing assigned a session id"),
+            epoch: 1,
+            dtls_fingerprint: DESKTOP_FINGERPRINT,
+            accepted_limits: Limits::new(),
+        }
+    );
     assert_eq!(core.last_transition_at(), Timestamp::from_millis(15));
 }
 
@@ -151,7 +207,27 @@ fn the_happy_path_walks_every_state_in_order() {
     let mut states = vec![core.state()];
     let mut effects = Vec::new();
 
-    for event in HAPPY_PATH {
+    let start_effects = core
+        .handle(SessionEvent::StartPairing)
+        .expect("starting pairing is valid");
+    let [Effect::PresentPairing(material)] = start_effects.as_slice() else {
+        panic!("starting pairing presents its material");
+    };
+    let frame = pair_frame(material);
+    effects.push(start_effects);
+    states.push(core.state());
+
+    effects.push(
+        core.handle(SessionEvent::PeerConnected)
+            .expect("the peer may connect while pairing is ready"),
+    );
+    states.push(core.state());
+    effects.push(vec![
+        core.authenticate_first_frame(&frame)
+            .expect("the matching token authenticates"),
+    ]);
+    states.push(core.state());
+    for event in [SessionEvent::NegotiationCompleted, SessionEvent::EndSession] {
         effects.push(core.handle(event).expect("the happy path is valid"));
         states.push(core.state());
     }
@@ -168,10 +244,9 @@ fn the_happy_path_walks_every_state_in_order() {
         ]
     );
 
-    let session_id = core.session_id().expect("the path assigned a session id");
-    assert_eq!(effects[0], vec![Effect::PresentPairing { session_id }]);
+    assert!(matches!(effects[0].as_slice(), [Effect::PresentPairing(_)]));
     assert_eq!(effects[1], Vec::new());
-    assert_eq!(effects[2], vec![Effect::SendPaired]);
+    assert!(matches!(effects[2].as_slice(), [Effect::SendPaired { .. }]));
     assert_eq!(effects[3], vec![Effect::StartMedia]);
     assert_eq!(effects[4], vec![Effect::End]);
 }
@@ -182,7 +257,6 @@ fn an_out_of_order_event_is_rejected_with_a_closed_code_and_keeps_the_state() {
         (SessionState::Idle, SessionEvent::PeerConnected),
         (SessionState::Idle, SessionEvent::EndSession),
         (SessionState::PairingReady, SessionEvent::StartPairing),
-        (SessionState::PairingReady, SessionEvent::PairAuthenticated),
         (
             SessionState::Handshaking,
             SessionEvent::NegotiationCompleted,
@@ -223,7 +297,32 @@ fn run_path(seed: u64, start_millis: u64) -> Trace {
     let mut effects = Vec::new();
     let mut timestamps = Vec::new();
 
-    for event in HAPPY_PATH {
+    clock.advance(10);
+    let start_effects = core
+        .handle(SessionEvent::StartPairing)
+        .expect("starting pairing is valid");
+    let [Effect::PresentPairing(material)] = start_effects.as_slice() else {
+        panic!("starting pairing presents its material");
+    };
+    let frame = pair_frame(material);
+    effects.push(start_effects);
+    timestamps.push(core.last_transition_at());
+
+    clock.advance(10);
+    effects.push(
+        core.handle(SessionEvent::PeerConnected)
+            .expect("the peer may connect while pairing is ready"),
+    );
+    timestamps.push(core.last_transition_at());
+
+    clock.advance(10);
+    effects.push(vec![
+        core.authenticate_first_frame(&frame)
+            .expect("the matching token authenticates"),
+    ]);
+    timestamps.push(core.last_transition_at());
+
+    for event in [SessionEvent::NegotiationCompleted, SessionEvent::EndSession] {
         clock.advance(10);
         effects.push(core.handle(event).expect("the happy path is valid"));
         timestamps.push(core.last_transition_at());

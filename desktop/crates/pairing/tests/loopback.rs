@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use remotecam_pairing::{
     ALPN_PROTOCOL, EphemeralCertificate, PairingError, PairingListener, PinnedClient,
-    classify_io_error,
+    classify_io_error, sha256_fingerprint,
 };
 use remotecam_protocol::ReasonCode;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -11,8 +11,8 @@ use rustls::crypto::CryptoProvider;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, Error as RustlsError, SignatureScheme};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
+use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 fn server_name() -> ServerName<'static> {
     ServerName::try_from("remotecam.local").expect("valid certificate name")
@@ -119,6 +119,53 @@ async fn refuses_a_tls13_handshake_without_the_dedicated_alpn() {
 }
 
 #[tokio::test]
+async fn refuses_a_pinned_server_that_does_not_negotiate_alpn() {
+    let certified =
+        rcgen::generate_simple_self_signed(vec!["remotecam.local".to_owned()]).expect("cert");
+    let fingerprint = sha256_fingerprint(certified.cert.der().as_ref());
+    let certificate = certified.cert.der().clone();
+    let private_key = rustls::pki_types::PrivateKeyDer::Pkcs8(
+        rustls::pki_types::PrivatePkcs8KeyDer::from(certified.signing_key.serialize_der()),
+    );
+    let server_config = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_protocol_versions(&[&rustls::version::TLS13])
+    .expect("TLS 1.3 server configuration")
+    .with_no_client_auth()
+    .with_single_cert(vec![certificate], private_key)
+    .expect("server certificate");
+    let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("server listener");
+    let address = listener.local_addr().expect("server address");
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("TCP connection");
+        TlsAcceptor::from(Arc::new(server_config))
+            .accept(stream)
+            .await
+            .expect("TLS handshake")
+    });
+
+    let client = PinnedClient::new(fingerprint).expect("client");
+    let error = client
+        .connect(address)
+        .await
+        .expect_err("a pinned server without the required ALPN must be refused");
+
+    assert_eq!(error.code(), ReasonCode::TlsHandshakeFailed);
+    assert!(
+        server
+            .await
+            .expect("server task")
+            .get_ref()
+            .1
+            .alpn_protocol()
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn carries_bytes_both_ways_after_the_handshake() {
     let (listener, fingerprint, address) = bound_listener().await;
     let server = accept_one(&listener);
@@ -160,6 +207,61 @@ async fn carries_bytes_both_ways_after_the_handshake() {
     assert!(rendered.contains("ServerChannel"));
     assert_eq!(rendered.matches("tls13: true").count(), 2);
     assert_eq!(rendered.matches("alpn_protocol: Some(").count(), 2);
+}
+
+#[tokio::test]
+async fn accepts_concurrent_clients_once_each() {
+    const CONNECTIONS: usize = 8;
+
+    let (listener, fingerprint, address) = bound_listener().await;
+    let client = Arc::new(PinnedClient::new(fingerprint).expect("client"));
+    let acceptors: Vec<_> = (0..CONNECTIONS)
+        .map(|_| {
+            let listener = Arc::clone(&listener);
+            tokio::spawn(async move {
+                let mut channel = listener.accept().await.expect("concurrent handshake");
+                let mut marker = [0];
+                channel
+                    .read_exact(&mut marker)
+                    .await
+                    .expect("client marker");
+                channel.write_all(&marker).await.expect("server echo");
+                channel.flush().await.expect("server flush");
+                marker[0]
+            })
+        })
+        .collect();
+    let clients: Vec<_> = (0..CONNECTIONS)
+        .map(|index| {
+            let client = Arc::clone(&client);
+            tokio::spawn(async move {
+                let marker = [index as u8];
+                let mut channel = client.connect(address).await.expect("concurrent handshake");
+                assert!(channel.is_tls13());
+                assert_eq!(channel.alpn_protocol(), Some(ALPN_PROTOCOL));
+                channel.write_all(&marker).await.expect("client marker");
+                channel.flush().await.expect("client flush");
+                let mut echoed = [0];
+                channel.read_exact(&mut echoed).await.expect("server echo");
+                assert_eq!(echoed, marker);
+                marker[0]
+            })
+        })
+        .collect();
+
+    let mut client_markers = Vec::with_capacity(CONNECTIONS);
+    for connection in clients {
+        client_markers.push(connection.await.expect("client task"));
+    }
+    let mut server_markers = Vec::with_capacity(CONNECTIONS);
+    for acceptor in acceptors {
+        server_markers.push(acceptor.await.expect("listener task"));
+    }
+    client_markers.sort_unstable();
+    server_markers.sort_unstable();
+    assert_eq!(client_markers, (0..CONNECTIONS as u8).collect::<Vec<_>>());
+    assert_eq!(server_markers, client_markers);
+    assert_eq!(listener.attempts(), CONNECTIONS as u32);
 }
 
 #[tokio::test]

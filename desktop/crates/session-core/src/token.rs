@@ -1,5 +1,6 @@
 use std::fmt;
 
+use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::RandomSource;
@@ -23,16 +24,25 @@ impl PairingToken {
     pub const fn as_bytes(&self) -> &[u8; Self::LENGTH] {
         &self.0
     }
+
+    pub(crate) fn matches(&self, candidate: &[u8; Self::LENGTH]) -> bool {
+        bool::from(self.0.ct_eq(candidate))
+    }
 }
 
 impl fmt::Debug for PairingToken {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_tuple("PairingToken")
-            .field(&"[elided]")
-            .finish()
+        formatter.write_str("PairingToken([REDACTED])")
     }
 }
+
+impl PartialEq for PairingToken {
+    fn eq(&self, other: &Self) -> bool {
+        self.matches(other.as_bytes())
+    }
+}
+
+impl Eq for PairingToken {}
 
 #[cfg(test)]
 mod tests {
@@ -64,7 +74,7 @@ mod tests {
     fn debug_never_prints_the_secret() {
         let rendered = format!("{:?}", PairingToken::from_bytes([7; PairingToken::LENGTH]));
 
-        assert_eq!(rendered, "PairingToken(\"[elided]\")");
+        assert_eq!(rendered, "PairingToken([REDACTED])");
         assert!(!rendered.contains("07"));
     }
 

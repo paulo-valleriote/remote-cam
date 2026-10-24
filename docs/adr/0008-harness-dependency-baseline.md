@@ -32,8 +32,12 @@ implicit inheritance.
   duplicated and it is not vendored.
 - The Session Core does not define the wire contract; `protocol/` remains the
   single source of truth. The core consumes the contract when it needs it.
-- The scaffold has **no external dependencies** (standard library only). A
-  dependency added by a later Session Core task needs its own ADR entry.
+- The pairing harness consumes both Session Core and the local protocol crate
+  by relative path so it can construct a valid mobile `pair` frame using the
+  canonical encoder. This adds no external dependency.
+- At scaffold creation, the Session Core had **no external dependencies**
+  (standard library only). Later dependencies need their own ADR justification;
+  pairing-token primitives are recorded in ADR-0009.
 
 ### Harness workspace dependencies
 
@@ -88,8 +92,8 @@ carry anticipatory dependencies.
   shipped package.
 - Adding a harness dependency now requires an ADR entry, not just a manifest
   edit.
-- The scaffold proves the build path only: the binary prints one JSON line and
-  exits 0. The full report schema, injected clock and seed arrive with the rest
-  of REC-9 (F1-02).
-- Nothing under `spikes/` is imported, and the dependency direction is
-  `harness → desktop/crates/session-core → protocol/`.
+- The original scaffold proved the build path only. F1-02 extends it to run the
+  pairing path with injected clock and RNG.
+- Nothing under `spikes/` is imported. The harness drives
+  `desktop/crates/session-core` and constructs peer frames from
+  `desktop/crates/protocol`; the Session Core also consumes the protocol crate.
