@@ -1,7 +1,8 @@
 .PHONY: test coverage lint
 
-test: ## Run the desktop, Android and spike-tooling tests
+test: ## Run the desktop, harness, Android and spike-tooling tests
 	$(CARGO) test --manifest-path desktop/Cargo.toml --workspace
+	cd harness && $(CARGO) test --workspace
 	$(CARGO) test --manifest-path spikes/f0-signaling/Cargo.toml
 	$(CARGO) test --manifest-path spikes/f0-media-core/Cargo.toml
 	$(CARGO) test --manifest-path spikes/f0-injection/Cargo.toml
@@ -13,17 +14,21 @@ test: ## Run the desktop, Android and spike-tooling tests
 	cd spikes/tools && $(PYTHON_BIN) -m pytest tests ../f0-camera-injection ../f0-handshake ../f0-virtual-audio
 	bash protocol/vectors/run_conformance.sh
 
-coverage: ## Report coverage for the delivered contract packages (≥90% required; spikes/ exempt per T117)
+coverage: ## Report coverage for the delivered product packages (≥90% required; spikes/ exempt per T117)
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || { echo "error: cargo-llvm-cov is required; install it with 'cargo install cargo-llvm-cov'." >&2; exit 1; }
 	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-protocol --summary-only > .coverage/rust_protocol_summary.txt
+	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-session-core --summary-only > .coverage/rust_session_core_summary.txt
 	$(GRADLE) -p mobile :protocol:jacocoTestReport
 	python3 scripts/ci/coverage_gate.py \
 		--rust-summary .coverage/rust_protocol_summary.txt \
+		--rust-session-core-summary .coverage/rust_session_core_summary.txt \
 		--jacoco-report mobile/protocol/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
 
 lint: ## Check formatting and run the linters
 	$(CARGO) fmt --manifest-path desktop/Cargo.toml --all -- --check
 	$(CARGO) clippy --manifest-path desktop/Cargo.toml --workspace --all-targets -- -D warnings
+	cd harness && $(CARGO) fmt --all -- --check
+	cd harness && $(CARGO) clippy --workspace --all-targets -- -D warnings
 	$(CARGO) fmt --manifest-path spikes/f0-signaling/Cargo.toml -- --check
 	$(CARGO) clippy --manifest-path spikes/f0-signaling/Cargo.toml --all-targets -- -D warnings
 	$(CARGO) fmt --manifest-path spikes/f0-media-core/Cargo.toml -- --check

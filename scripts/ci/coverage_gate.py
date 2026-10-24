@@ -1,16 +1,18 @@
-"""Coverage gate for the F0 protocol packages.
+"""Coverage gate for the delivered product packages.
 
-Enforces ≥ 90 % line coverage for ``desktop/crates/protocol`` (via
-``cargo-llvm-cov``) and ``mobile/protocol`` (via JaCoCo). ``spikes/`` is
-exempt per the recorded deviation (T117).
+Enforces ≥ 90 % line coverage for ``desktop/crates/protocol`` and
+``desktop/crates/session-core`` (via ``cargo-llvm-cov``) and ``mobile/protocol``
+(via JaCoCo). ``spikes/`` and the product harness are exempt: the first is a
+recorded deviation (T117), the second is not a shipped package (ADR-0008).
 
 Usage::
 
     python scripts/ci/coverage_gate.py \
-        --rust-summary <cargo-llvm-cov --summary-only output> \
+        --rust-summary <cargo-llvm-cov --summary-only output for remotecam-protocol> \
+        --rust-session-core-summary <cargo-llvm-cov --summary-only output for remotecam-session-core> \
         --jacoco-report <jacocoTestReport.xml>
 
-Exit status is 1 when either package is below 90 %.
+Exit status is 1 when any package is below 90 %.
 """
 
 from __future__ import annotations
@@ -56,11 +58,15 @@ def jacoco_coverage(report_path: str) -> float | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Enforce ≥ 90 % coverage for F0 protocol packages."
+        description="Enforce ≥ 90 % coverage for the delivered product packages."
     )
     parser.add_argument(
         "--rust-summary",
         help="Text output of `cargo llvm-cov --summary-only` for remotecam-protocol",
+    )
+    parser.add_argument(
+        "--rust-session-core-summary",
+        help="Text output of `cargo llvm-cov --summary-only` for remotecam-session-core",
     )
     parser.add_argument(
         "--jacoco-report",
@@ -70,16 +76,22 @@ def main() -> int:
 
     failures = []
 
-    if args.rust_summary:
-        with open(args.rust_summary, "r", encoding="utf-8") as fh:
+    rust_summaries = [
+        ("Rust protocol", args.rust_summary),
+        ("Rust session core", args.rust_session_core_summary),
+    ]
+    for label, summary_path in rust_summaries:
+        if not summary_path:
+            continue
+        with open(summary_path, "r", encoding="utf-8") as fh:
             rust_pct = rust_coverage_from_summary(fh.read())
         if rust_pct is None:
-            print("error: could not parse Rust protocol coverage from summary")
+            print(f"error: could not parse {label} coverage from summary")
             return 1
-        print(f"Rust protocol coverage: {rust_pct:.2f}%")
+        print(f"{label} coverage: {rust_pct:.2f}%")
         if rust_pct < THRESHOLD:
             failures.append(
-                f"Rust protocol coverage {rust_pct:.2f}% below {THRESHOLD}% threshold"
+                f"{label} coverage {rust_pct:.2f}% below {THRESHOLD}% threshold"
             )
 
     if args.jacoco_report:
@@ -94,11 +106,11 @@ def main() -> int:
             )
 
     if failures:
-        for f in failures:
-            print(f, file=sys.stderr)
+        for failure in failures:
+            print(failure, file=sys.stderr)
         return 1
 
-    print("Coverage gate PASSED: both protocol packages at or above 90%")
+    print("Coverage gate PASSED: all delivered packages at or above 90%")
     return 0
 
 
