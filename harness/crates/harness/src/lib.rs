@@ -1,6 +1,7 @@
 //! The product harness: a headless driver for the RemoteCam Session Core.
 
-use remotecam_session_core::{SessionCore, SessionState};
+use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
+use remotecam_session_core::{SessionCore, SessionState, Timestamp};
 use serde::Serialize;
 
 /// The per-scenario outcome carried by the report.
@@ -54,5 +55,10 @@ impl HarnessReport {
 
 /// Runs the scaffold scenario against a fresh Session Core.
 pub fn run() -> HarnessReport {
-    HarnessReport::for_session_state(SessionCore::new().state())
+    let core = SessionCore::new(
+        ManualClock::new(Timestamp::ZERO),
+        SeededRandomSource::new(0),
+    );
+
+    HarnessReport::for_session_state(core.state())
 }

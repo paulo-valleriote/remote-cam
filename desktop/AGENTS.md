@@ -59,7 +59,7 @@ injection and media-core crates by relative path.
 ### 5. Tests and coverage
 
 - `protocol/` — gate ≥90%. `tests/contract.rs`, `bin/conformance.rs` (vectors from `protocol/vectors/`).
-- `session-core/` — gate ≥90%. Deterministic unit tests for the state machine; the clock and RNG seams arrive with REC-20.
+- `session-core/` — gate ≥90%. Deterministic tests through `handle(event)`. The clock and randomness enter only through the `Clock` and `RandomSource` traits; `testing::{ManualClock, SeededRandomSource}` provide the reproducible implementations used by tests and the harness.
 - `app/` — log formatting/redaction tests.
 - No `spikes/` module is imported by any crate here.
 
