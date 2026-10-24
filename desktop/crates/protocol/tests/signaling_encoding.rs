@@ -106,7 +106,13 @@ fn the_canonical_frame_pins_the_key_order() {
         r#"{"version":1,"type":"pong"}"#,
     ];
 
-    for (message, expected) in every_message().into_iter().zip(expected) {
+    let messages = every_message();
+    assert_eq!(
+        messages.len(),
+        expected.len(),
+        "every message must have a pinned canonical frame"
+    );
+    for (message, expected) in messages.into_iter().zip(expected) {
         assert_eq!(
             message.encode().expect("a valid message must encode"),
             expected.as_bytes(),

@@ -759,7 +759,7 @@ def build_encoding_vectors() -> list[dict]:
         base["ice"],
         candidates=[
             {"address": "192.168.1.42", "port": 51234, "component": 1, "protocol": "udp"},
-            {"address": "fe80::1", "port": 51235, "component": 2},
+            {"address": "10.0.0.7", "port": 51235, "component": 2},
         ],
     )
     stats_with_floats = mutated(

@@ -126,7 +126,7 @@ pub enum IceComponent {
 }
 
 impl IceComponent {
-    pub fn as_u8(self) -> u8 {
+    fn as_u8(self) -> u8 {
         match self {
             Self::Rtp => 1,
             Self::Rtcp => 2,
@@ -466,14 +466,16 @@ impl SignalingMessage {
     /// Encodes the message in canonical field order. Optional fields that were
     /// never supplied are omitted.
     pub fn encode(&self) -> Result<Vec<u8>, EncodeError> {
-        let frame =
-            serde_json::to_vec(self).expect("a validated signaling message always serializes");
-        if frame.len() > MAX_SIGNALING_MESSAGE_BYTES {
+        let encoded = serde_json::to_vec(&CanonicalFrame(self))
+            .expect("a validated signaling message always serializes");
+        if encoded.len() > MAX_SIGNALING_MESSAGE_BYTES {
             return Err(EncodeError::FrameTooLarge);
         }
-        Ok(frame)
+        Ok(encoded)
     }
 }
+
+struct CanonicalFrame<'a>(&'a SignalingMessage);
 
 struct HexBytes<'a>(&'a [u8]);
 
@@ -486,13 +488,13 @@ impl Serialize for HexBytes<'_> {
     }
 }
 
-impl Serialize for SignalingMessage {
+impl Serialize for CanonicalFrame<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        match self {
-            Self::Pair {
+        match self.0 {
+            SignalingMessage::Pair {
                 token,
                 dtls_fingerprint,
                 limits,
@@ -505,7 +507,7 @@ impl Serialize for SignalingMessage {
                 frame.serialize_field("limits", limits)?;
                 frame.end()
             }
-            Self::Paired {
+            SignalingMessage::Paired {
                 session_id,
                 epoch,
                 dtls_fingerprint,
@@ -520,7 +522,7 @@ impl Serialize for SignalingMessage {
                 frame.serialize_field("accepted_limits", accepted_limits)?;
                 frame.end()
             }
-            Self::Offer { epoch, sdp } => {
+            SignalingMessage::Offer { epoch, sdp } => {
                 let mut frame = serializer.serialize_struct("offer", 4)?;
                 frame.serialize_field("version", &PROTOCOL_VERSION)?;
                 frame.serialize_field("type", "offer")?;
@@ -528,7 +530,7 @@ impl Serialize for SignalingMessage {
                 frame.serialize_field("sdp", sdp)?;
                 frame.end()
             }
-            Self::Answer { epoch, sdp } => {
+            SignalingMessage::Answer { epoch, sdp } => {
                 let mut frame = serializer.serialize_struct("answer", 4)?;
                 frame.serialize_field("version", &PROTOCOL_VERSION)?;
                 frame.serialize_field("type", "answer")?;
@@ -536,7 +538,7 @@ impl Serialize for SignalingMessage {
                 frame.serialize_field("sdp", sdp)?;
                 frame.end()
             }
-            Self::Ice { epoch, candidates } => {
+            SignalingMessage::Ice { epoch, candidates } => {
                 let mut frame = serializer.serialize_struct("ice", 4)?;
                 frame.serialize_field("version", &PROTOCOL_VERSION)?;
                 frame.serialize_field("type", "ice")?;
@@ -544,7 +546,7 @@ impl Serialize for SignalingMessage {
                 frame.serialize_field("candidates", candidates)?;
                 frame.end()
             }
-            Self::Stats(stats) => {
+            SignalingMessage::Stats(stats) => {
                 let mut frame = serializer.serialize_struct("stats", 7)?;
                 frame.serialize_field("version", &PROTOCOL_VERSION)?;
                 frame.serialize_field("type", "stats")?;
@@ -565,14 +567,14 @@ impl Serialize for SignalingMessage {
                 }
                 frame.end()
             }
-            Self::Close { code } => {
+            SignalingMessage::Close { code } => {
                 let mut frame = serializer.serialize_struct("close", 3)?;
                 frame.serialize_field("version", &PROTOCOL_VERSION)?;
                 frame.serialize_field("type", "close")?;
                 frame.serialize_field("code", code)?;
                 frame.end()
             }
-            Self::Error { code, message } => {
+            SignalingMessage::Error { code, message } => {
                 let mut frame = serializer.serialize_struct("error", 4)?;
                 frame.serialize_field("version", &PROTOCOL_VERSION)?;
                 frame.serialize_field("type", "error")?;
@@ -582,13 +584,13 @@ impl Serialize for SignalingMessage {
                 }
                 frame.end()
             }
-            Self::Ping => {
+            SignalingMessage::Ping => {
                 let mut frame = serializer.serialize_struct("ping", 2)?;
                 frame.serialize_field("version", &PROTOCOL_VERSION)?;
                 frame.serialize_field("type", "ping")?;
                 frame.end()
             }
-            Self::Pong => {
+            SignalingMessage::Pong => {
                 let mut frame = serializer.serialize_struct("pong", 2)?;
                 frame.serialize_field("version", &PROTOCOL_VERSION)?;
                 frame.serialize_field("type", "pong")?;
