@@ -47,3 +47,11 @@ fn the_same_state_produces_the_same_report() {
 
     assert_eq!(first, second);
 }
+
+#[test]
+fn the_scaffold_run_is_reproducible() {
+    let first = run().to_json().expect("the report is a plain JSON value");
+    let second = run().to_json().expect("the report is a plain JSON value");
+
+    assert_eq!(first, second);
+}

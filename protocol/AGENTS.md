@@ -14,7 +14,7 @@
   - Emitted frames are canonical (`version`, `type`, then schema order) and never above 16 KiB.
 - **Before editing:** update `signaling.schema.json` / `reason-codes.json` and `specs/001-f0-technical-spikes/research.md`; run `make spike-interop` / `run_conformance.sh`.
 
-**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/contracts/signaling-messages.schema.json`, `.claude/skills/technical-design-doc-creator/`.
+**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/contracts/signaling-messages.schema.json`, `.agents/skills/`.
 
 ## Context and architecture
 

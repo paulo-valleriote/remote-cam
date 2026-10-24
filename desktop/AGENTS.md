@@ -11,7 +11,7 @@
   - No `NON-PRODUCTION` code lives here; F0 implementations are quarantined under `spikes/` (ADR-0003).
 - **Before editing:** read `docs/constitution.md` and `protocol/AGENTS.md` if touching contracts; build with `make build-desktop`.
 
-**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/research.md`, `.claude/skills/technical-design-doc-creator/`.
+**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/research.md`, `.agents/skills/`.
 
 ## Context and architecture
 
@@ -59,7 +59,7 @@ injection and media-core crates by relative path.
 ### 5. Tests and coverage
 
 - `protocol/` — gate ≥90%. `tests/contract.rs` (vectors from `protocol/vectors/`), `tests/signaling_encoding.rs` (canonical emission and round-trip), `bin/conformance.rs`.
-- `session-core/` — gate ≥90%. Deterministic unit tests for the state machine; the clock and RNG seams arrive with REC-20.
+- `session-core/` — gate ≥90%. Deterministic tests through `handle(event)`. The clock and randomness enter only through the `Clock` and `RandomSource` traits; `testing::{ManualClock, SeededRandomSource}` provide the reproducible implementations used by tests and the harness. A rejected event carries the local closed code `invalid_transition`; it is a state-machine code, not part of the closed wire reason set in `protocol/reason-codes.json`.
 - `app/` — log formatting/redaction tests.
 - No `spikes/` module is imported by any crate here.
 
