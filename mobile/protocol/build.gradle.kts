@@ -43,9 +43,14 @@ jacoco {
     toolVersion = libs.versions.jacoco.get()
 }
 
+val unitTestCoverageExec =
+    layout.buildDirectory.file(
+        "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec"
+    )
+
 tasks.register<JacocoReport>("jacocoTestReport") {
     dependsOn("testDebugUnitTest")
-    onlyIf { layout.buildDirectory.file("jacoco/testDebugUnitTest.exec").get().asFile.exists() }
+    onlyIf { unitTestCoverageExec.get().asFile.exists() }
 
     reports {
         xml.required.set(true)
@@ -55,9 +60,14 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     val javaClasses = fileTree(layout.buildDirectory.dir("intermediates/javac/debug/classes")) {
         exclude("**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*")
     }
-    val kotlinClasses = fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug"))
+    val kotlinClasses =
+        fileTree(
+            layout.buildDirectory.dir(
+                "intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"
+            )
+        )
 
     classDirectories.setFrom(javaClasses, kotlinClasses)
     sourceDirectories.setFrom(files("src/main/kotlin", "src/main/java"))
-    executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
+    executionData.setFrom(unitTestCoverageExec)
 }
