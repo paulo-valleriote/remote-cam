@@ -80,7 +80,6 @@ impl SessionId {
         Self(bytes)
     }
 
-    /// Draws a fresh identifier from the injected random source.
     pub fn generate<R: RandomSource + ?Sized>(random: &mut R) -> Self {
         let mut bytes = [0_u8; Self::LENGTH];
         random.fill_bytes(&mut bytes);

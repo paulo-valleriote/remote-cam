@@ -10,8 +10,8 @@ application shell is not part of this phase.
 | Crate | Directory | Responsibility |
 | --- | --- | --- |
 | `remotecam-protocol` | `crates/protocol` | Rust implementation of the shared signaling and QR contract. Delivered package, coverage gate ≥ 90 %. |
-| `remotecam-session-core` | `crates/session-core` | Product session state machine and session vocabulary. No I/O or TLS; deterministic, with `zeroize` as its only dependency. |
-| `remotecam-pairing` | `crates/pairing` | Ephemeral certificate, pairing material and the pinned TLS 1.3 listener/client (ADR-0009). Delivered package, coverage gate ≥ 90 %. |
+| `remotecam-session-core` | `crates/session-core` | Product session state machine and session vocabulary. No I/O or TLS; deterministic, using `subtle` for constant-time token comparison and `zeroize` for token erasure. |
+| `remotecam-pairing` | `crates/pairing` | Ephemeral certificate, pairing material and the pinned TLS 1.3 listener/client. The listener binds the caller-supplied address, including LAN interfaces (ADR-0009). Delivered package, coverage gate ≥ 90 %. |
 | `remotecam-app` | `crates/app` | Desktop shell, diagnostics and structured logging. |
 
 The F0 crates `remotecam-signaling`, `remotecam-media-core`,

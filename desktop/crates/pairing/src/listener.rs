@@ -21,7 +21,6 @@ pub const ALPN_PROTOCOL: &[u8] = b"remotecam/1";
 #[derive(Debug)]
 pub enum ListenerError {
     Tls(rustls::Error),
-    NonLoopbackAddress(SocketAddr),
     Io(std::io::Error),
 }
 
@@ -29,12 +28,6 @@ impl fmt::Display for ListenerError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tls(error) => write!(formatter, "TLS configuration failed: {error}"),
-            Self::NonLoopbackAddress(address) => {
-                write!(
-                    formatter,
-                    "pairing listener must bind to loopback, not {address}"
-                )
-            }
             Self::Io(error) => write!(formatter, "listener socket failed: {error}"),
         }
     }
@@ -84,9 +77,6 @@ impl PairingListener {
         address: SocketAddr,
         certificate: EphemeralCertificate,
     ) -> Result<Self, ListenerError> {
-        if !address.ip().is_loopback() {
-            return Err(ListenerError::NonLoopbackAddress(address));
-        }
         let (config, fingerprint) = server_config(certificate)?;
         let listener = TcpListener::bind(address)
             .await
@@ -248,15 +238,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn refuses_to_bind_a_non_loopback_address() {
-        let error = PairingListener::bind(
+    async fn binds_a_wildcard_address_for_lan_peers() {
+        let listener = PairingListener::bind(
             SocketAddr::from(([0, 0, 0, 0], 0)),
             EphemeralCertificate::generate().expect("certificate"),
         )
         .await
-        .expect_err("pairing listeners must be loopback-only");
+        .expect("pairing listener can bind all local interfaces");
 
-        assert!(error.to_string().contains("loopback"));
+        assert!(listener.local_addr().ip().is_unspecified());
+        assert_ne!(listener.local_addr().port(), 0);
     }
 
     #[test]
