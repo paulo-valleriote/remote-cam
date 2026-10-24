@@ -4,6 +4,8 @@
 //! The payload is encoded and decoded as raw bytes. It is never treated as
 //! UTF-8 text: the QR decoder must return the byte sequence unchanged.
 
+use std::fmt;
+
 use crate::address::{format_address, is_private_ipv4, is_private_ipv6, parse_private_address};
 use crate::reason::ReasonCode;
 
@@ -135,6 +137,30 @@ pub struct QrDecodeError {
     /// Closed reason code from the contract.
     pub code: ReasonCode,
 }
+
+impl fmt::Display for QrEncodeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoEndpoints => formatter.write_str("no private endpoints were supplied"),
+            Self::TooLarge { encoded_bytes } => write!(
+                formatter,
+                "encoded payload would use {encoded_bytes} bytes, exceeding the {MAX_PAYLOAD_BYTES} byte limit"
+            ),
+            Self::InvalidEndpoint => formatter
+                .write_str("one or more endpoints are not private or do not match the family"),
+        }
+    }
+}
+
+impl std::error::Error for QrEncodeError {}
+
+impl fmt::Display for QrDecodeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", self.code.as_str())
+    }
+}
+
+impl std::error::Error for QrDecodeError {}
 
 impl QrDecodeError {
     fn new(code: ReasonCode) -> Self {

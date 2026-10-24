@@ -4,10 +4,12 @@ use std::fmt;
 
 use remotecam_protocol::ReasonCode;
 use remotecam_protocol::signaling::{Limits, SignalingMessage, parse_signaling};
-use subtle::ConstantTimeEq;
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroize;
 
 pub mod testing;
+pub mod token;
+
+pub use token::PairingToken;
 
 /// The lifecycle position of the single session a desktop may hold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -78,43 +80,18 @@ impl SessionId {
         Self(bytes)
     }
 
+    /// Draws a fresh identifier from the injected random source.
+    pub fn generate<R: RandomSource + ?Sized>(random: &mut R) -> Self {
+        let mut bytes = [0_u8; Self::LENGTH];
+        random.fill_bytes(&mut bytes);
+        Self::from_bytes(bytes)
+    }
+
     /// The raw bytes of the identifier.
     pub const fn as_bytes(&self) -> &[u8; Self::LENGTH] {
         &self.0
     }
 }
-
-/// The single-use secret carried in the desktop's pairing material.
-pub struct PairingToken(Zeroizing<[u8; 32]>);
-
-impl PairingToken {
-    fn new(bytes: [u8; 32]) -> Self {
-        Self(Zeroizing::new(bytes))
-    }
-
-    /// The token bytes used to construct the QR payload.
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-
-    fn matches(&self, candidate: &[u8; 32]) -> bool {
-        bool::from(self.0.ct_eq(candidate))
-    }
-}
-
-impl fmt::Debug for PairingToken {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("PairingToken([REDACTED])")
-    }
-}
-
-impl PartialEq for PairingToken {
-    fn eq(&self, other: &Self) -> bool {
-        self.matches(&other.0)
-    }
-}
-
-impl Eq for PairingToken {}
 
 /// The short-lived material the desktop presents for one pairing attempt.
 #[derive(Debug, PartialEq, Eq)]
@@ -395,11 +372,11 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
                 self.epoch = Some(epoch);
                 let mut token_bytes = [0u8; 32];
                 self.random.fill_bytes(&mut token_bytes);
-                self.pairing_token = Some(PairingToken::new(token_bytes));
+                self.pairing_token = Some(PairingToken::from_bytes(token_bytes));
                 let material = PairingMaterial {
                     session_id,
                     epoch,
-                    token: PairingToken::new(token_bytes),
+                    token: PairingToken::from_bytes(token_bytes),
                 };
                 token_bytes.zeroize();
                 Some((
@@ -421,9 +398,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     }
 
     fn assign_session_id(&mut self) -> SessionId {
-        let mut bytes = [0u8; SessionId::LENGTH];
-        self.random.fill_bytes(&mut bytes);
-        let session_id = SessionId::from_bytes(bytes);
+        let session_id = SessionId::generate(&mut self.random);
         self.session_id = Some(session_id);
         session_id
     }

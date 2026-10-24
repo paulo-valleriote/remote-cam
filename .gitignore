@@ -25,6 +25,7 @@ mobile/**/build/
 mobile/local.properties
 mobile/.kotlin/
 spikes/f0-mobile-*/build/
+spikes/f0-mobile-*/.gradle/
 
 # Build artifacts
 dist/
