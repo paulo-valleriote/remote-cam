@@ -26,6 +26,10 @@
 #           set -euo pipefail
 #           manifests=(
 #             desktop/Cargo.toml
+#             spikes/f0-signaling/Cargo.toml
+#             spikes/f0-media-core/Cargo.toml
+#             spikes/f0-injection/Cargo.toml
+#             spikes/f0-audio-bridge/Cargo.toml
 #             spikes/f0-handshake/Cargo.toml
 #             spikes/f0-pipeline/Cargo.toml
 #           )
@@ -74,6 +78,14 @@
 #       - name: Run tests
 #         run: cargo test --workspace
 # 
+#       - name: Test and lint the quarantined crates
+#         working-directory: .
+#         run: |
+#           for manifest in spikes/f0-signaling spikes/f0-media-core spikes/f0-injection spikes/f0-audio-bridge; do
+#             cargo clippy --manifest-path "$manifest/Cargo.toml" --all-targets -- -D warnings
+#             cargo test --manifest-path "$manifest/Cargo.toml"
+#           done
+#
 #       - name: Test and lint the pairing harness
 #         working-directory: .
 #         run: |
@@ -159,7 +171,7 @@
 #         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 # 
 #       - name: Run unit tests and JaCoCo report
-#         run: gradle -p mobile :protocol:testDebugUnitTest :protocol:jacocoTestReport :core:testDebugUnitTest --no-daemon
+#         run: gradle -p mobile :protocol:testDebugUnitTest :protocol:jacocoTestReport --no-daemon
 # 
 #       - name: Publish coverage
 #         run: python3 scripts/ci/coverage_summary.py mobile/protocol/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml >> "$GITHUB_STEP_SUMMARY"

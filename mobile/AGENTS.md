@@ -3,23 +3,22 @@
 > Mobile-specific rules. Do NOT apply to `desktop/`, `protocol/`, or `spikes/`.
 
 **Quick start:**
-- **Scope:** `mobile/` only — Kotlin, AGP 9.4.1, `compileSdk` 36, `minSdk` 29, three modules.
+- **Scope:** `mobile/` only — Kotlin, AGP 9.4.1, `compileSdk` 36, `minSdk` 29, one module.
 - **Hard rules:**
   - Serialization is `kotlinx-serialization-json` (no `.proto`).
   - Parsing is strict: unknown keys and `version > 1` are rejected.
-  - TLS 1.3 certificate pinning (`X509TrustManager` + SHA-256); `hostnameVerifier` is disabled.
-  - `CameraXCaptureSource` uses only `ImageAnalysis`.
-  - Every source file is tagged `NON-PRODUCTION`.
-- **Before editing:** read `protocol/AGENTS.md` if touching contracts; build with `make build-mobile`.
+  - `:protocol` is the delivered contract and must stay at ≥90 % coverage.
+  - No `NON-PRODUCTION` code lives here; the F0 app and core modules are quarantined under `spikes/` (ADR-0003).
+- **Before editing:** read `docs/constitution.md` and `protocol/AGENTS.md` if touching contracts; build with `make build-mobile`.
 
-**Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`.
+**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.claude/skills/technical-design-doc-creator/`.
 
 ## Context and architecture
 
-- **F0 non-production app:** all modules (`:app`, `:core`, `:protocol`) are spike harnesses, not production.
 - **Gradle:** `gradle/libs.versions.toml` version catalog; `build.gradle.kts` (AGP 9.4.1, Kotlin 2.4.10); `compileSdk` 36; `minSdk` 29.
-- **Modules (3):** `:protocol` (contract), `:core` (capture + transport), `:app` (shell + service).
-- **Build:** `make build-mobile` = `gradlew -p mobile :app:assembleDebug`.
+- **Modules (1):** `:protocol` (the shared contract). The F0 `:core` and `:app` modules are quarantined.
+- **Build:** `make build-mobile` = `gradle -p mobile :protocol:assembleDebug`.
+- **Product app:** the capture/transmit application is built in F2, not in F1.
 
 ## Mobile-specific rules
 
@@ -27,7 +26,6 @@
 
 - **Format:** `kotlinx-serialization-json` (1.12.0). Zero `.proto` files exist.
 - **Usage in `:protocol`:** `buildJsonObject`, `Json.parseToJsonElement`, `JsonPrimitive`, `encodeToString`. `SignalingEncoder` produces canonical JSON; `SignalingParser` rejects unknown fields and versions `> 1`.
-- **Usage in `:core`:** `StructuredLog.toJson()` builds JSON records.
 - **Rule:** never use `getText()` for QR reading; always `Result.getBytes()` + `QrPayload.decode()`.
 
 ### 2. Strict parsing (no deviations tolerated)
@@ -40,40 +38,29 @@
 - `QrPayload.decode()` validates magic (`RCM1`), version (`1`), capabilities mask (`0xffc0` reserved bits must be zero), endpoint count, private-address rules, and expiry (`expiresAt > nowUnix`).
 - `Addresses` — documented IPv4/IPv6 regex; APIPA (`169.254.*`) is excluded despite regex presence.
 
-### 3. TLS 1.3 certificate pinning (`:core`)
-
-- `SignalingClient` uses custom `X509TrustManager`; verifies leaf certificate DER SHA-256 fingerprint; `hostnameVerifier` disabled (`{ _, _ -> true }`).
-- No root store in product path.
-- Ephemeral certificate (`rcgen` equivalent on Kotlin side).
-- Rejects certificates with a different fingerprint. The Kotlin comparison is not constant-time, which is acceptable because the pinned fingerprint is a public value, not a secret.
-
-### 4. `:protocol` module — shared contract
+### 3. `:protocol` module — shared contract
 
 - `namespace = "remotecam.protocol"`, `compileSdk` 36, `minSdk` 29, `compileOptions` Java 17.
 - Dependencies: `kotlinx.serialization.json`, `junit.jupiter` (JUnit 5 via `useJUnitPlatform()`), `kotlin.test`.
 - Coverage: `jacoco` enabled (`jacocoTestReport` produces XML + HTML). Gate ≥90%.
 - `build.gradle.kts`: `testOptions { unitTests.all { it.useJUnitPlatform() } }`.
 
-### 5. `:core` module — capture and transport
+### 4. Quarantined F0 modules
 
-- `CameraXCaptureSource` — only `ImageAnalysis` (no `Preview`) to minimize ISP work, latency, and heat.
-- `PeerConnectionFactoryProvider` — `PeerConnection.RTCConfiguration(emptyList())` (host-candidates only, no STUN/TURN).
-- `StructuredLog` — JSON lines, mandatory redaction (correlation IDs 32 lowercase hex).
-- `SignalingClient` — TLS 1.3 WSS client.
-- `TransportConfig` — unit tests (`assertTrue(config.iceServers.isEmpty())`).
-- `CaptureTest` — byte-level YUV copy (`ByteBuffer.allocateDirect`).
-- Robolectric (`4.13`) for unit tests.
+The F0 Android harness moved out of this tree in F1-01:
 
-### 6. `:app` module — shell and service
+| Module | Quarantined at | Contents |
+| --- | --- | --- |
+| `:core` | `spikes/f0-mobile-core` | `CameraXCaptureSource`, `YuvPlaneCopier`, `StructuredLog`, `SignalingClient`, `PeerConnectionFactoryProvider` and their tests |
+| `:app` | `spikes/f0-mobile-app` | `MainActivity`, `RemoteCamApplication`, manifest and resources |
 
-- `MainActivity`, `RemoteCamApplication`, `StreamingService` (referenced in `AndroidManifest.xml`; source file may be stub).
-- Permissions: `CAMERA`, `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CAMERA`, `FOREGROUND_SERVICE_MICROPHONE`, `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE`.
-- Service: `StreamingService` (`foreground`, `camera|microphone`, `exported=false`).
-- **Repeated in all source files:** `/** NON-PRODUCTION — F0 risk-reduction spike (FR-039) */`.
+They are source records only: they are not in `settings.gradle.kts`, are not
+built, and MUST NOT be imported from `mobile/` (FR-039, ADR-0003). The TLS 1.3
+pinning and capture rules they demonstrate are design input for F2, not live
+rules in this tree.
 
-### 7. Before modifying
+### 5. Before modifying
 
-- Before changing `protocol/src/main/kotlin/remotecam/protocol/SignalingParser.kt`: re-read `protocol/AGENTS.md` (version 1, strict rejection).
-- Before modifying `core/src/main/kotlin/remotecam/core/signaling/SignalingClient.kt`: check TLS pinning and absence of root store (`mobile/AGENTS.md` §3).
+- Before changing `protocol/src/main/kotlin/remotecam/protocol/SignalingParser.kt`: re-read `protocol/AGENTS.md` (version 1, strict rejection, wire freeze).
 - Before adding any `.proto`: **none exist**; all wire serialization is JSON (`kotlinx.serialization`).
 - Before using `spikes/`: read `spikes/AGENTS.md` (FR-039, no merge).

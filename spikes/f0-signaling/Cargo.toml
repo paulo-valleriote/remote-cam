@@ -1,0 +1,32 @@
+[package]
+name = "remotecam-signaling"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "Proprietary"
+publish = false
+description = "Quarantined F0 signaling spike crate - NON-PRODUCTION"
+
+# NON-PRODUCTION — quarantined F0 risk-reduction spike (FR-039). Nothing here
+# merges into `desktop/` or `mobile/`; see docs/adr/0003-f0-code-quarantine.md.
+
+[dependencies]
+remotecam-protocol = { path = "../../desktop/crates/protocol" }
+futures-util = "=0.3.34"
+qrcode = "=0.14.1"
+rand = "=0.10.3"
+rcgen = "=0.14.10"
+rustls = "=0.23.46"
+serde_json = "=1.0.154"
+sha2 = "=0.11.1"
+subtle = "=2.6.1"
+tokio = { version = "=1.54.1", features = [
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+tokio-rustls = "=0.26.6"
+tokio-tungstenite = "=0.30.0"

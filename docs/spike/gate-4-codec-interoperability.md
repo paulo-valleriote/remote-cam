@@ -68,7 +68,9 @@ The receiver listens for WebSocket signaling connections on port 8443 (TLS 1.3, 
 
 On the Android reference device:
 
-1. Install the F0 spike APK: `./gradlew :app:installDebug`
+1. Install the F0 spike APK. The F0 `:app` module is now quarantined at
+   `spikes/f0-mobile-app` and is no longer part of the `mobile/` Gradle project;
+   reproduce this step from the F0 commit with `./gradlew :app:installDebug`.
 2. Launch "RemoteCam" app
 3. Grant Camera and Microphone permissions
 4. Tap "Start Session"

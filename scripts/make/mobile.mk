@@ -1,4 +1,4 @@
 .PHONY: build-mobile
 
-build-mobile: ## Build the Android debug application
-	$(GRADLE) -p mobile :app:assembleDebug
+build-mobile: ## Assemble the Android contract library (mobile/protocol/build/outputs/aar)
+	$(GRADLE) -p mobile :protocol:assembleDebug

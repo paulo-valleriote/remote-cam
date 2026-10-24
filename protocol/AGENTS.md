@@ -13,7 +13,7 @@
   - `MAX_MESSAGE_BYTES = 16 KiB`.
 - **Before editing:** update `signaling.schema.json` / `reason-codes.json` and `specs/001-f0-technical-spikes/research.md`; run `make spike-interop` / `run_conformance.sh`.
 
-**Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/contracts/signaling-messages.schema.json`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`.
+**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/contracts/signaling-messages.schema.json`, `.claude/skills/technical-design-doc-creator/`.
 
 ## Context and architecture
 
@@ -33,8 +33,8 @@
 
 ### 2. Strict versioning
 
-- Contract is **v1**. Parsing rejects `version > 1` in `SignalingParser` and `protocol::Version`.
-- If a contract changes:
+- Contract is **v1** and frozen for F1 (ADR-0002). Parsing rejects `version > 1` in `SignalingParser` and `protocol::Version`.
+- If a contract changes (outside the F1 freeze):
   1. Update `signaling.schema.json`, `qr-payload.md`, `reason-codes.json`.
   2. Update `specs/001-f0-technical-spikes/research.md` (decision D-new-name).
   3. Update `mobile/protocol` contract consumption if needed.

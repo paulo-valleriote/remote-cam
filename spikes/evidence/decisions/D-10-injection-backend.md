@@ -8,7 +8,7 @@
 | `chosen_option` | `mf_virtual_camera` (recommended; not yet `accepted`) |
 | `approver` | Technical lead — **not yet signed**; the record cannot be `accepted` before the matrix exists |
 | `decided_at` | — |
-| `evidence_refs` | `desktop/crates/injection/src/mf_virtual_camera.rs`, `desktop/crates/injection/src/registration.rs`, `spikes/tools/analysis/injection.py`, `spikes/f0-camera-injection/run_matrix.py`, `spikes/evidence/injection/runs/mf_virtual_camera/chrome/run.json` (**partial run**), `spikes/evidence/injection/injection_matrix.json` (**not yet produced**) |
+| `evidence_refs` | `spikes/f0-injection/src/mf_virtual_camera.rs`, `spikes/f0-injection/src/registration.rs`, `spikes/tools/analysis/injection.py`, `spikes/f0-camera-injection/run_matrix.py`, `spikes/evidence/injection/runs/mf_virtual_camera/chrome/run.json` (**partial run**), `spikes/evidence/injection/injection_matrix.json` (**not yet produced**) |
 | `downstream_impact` | The media and injection phase: fixes the frame handoff contract, the installer, and the bitness support obligation |
 
 ## Status note
@@ -40,11 +40,11 @@ collected at closure.
 A Media Foundation media source registered through `MFCreateVirtualCamera` with
 `MFVirtualCameraAccess_CurrentUser`, hosted by the Windows Frame Server.
 
-* Implemented in `desktop/crates/injection/src/mf_virtual_camera.rs`:
+* Implemented in `spikes/f0-injection/src/mf_virtual_camera.rs`:
   `IMFMediaSource` + `IMFMediaStream` + `IMFMediaEventGenerator`, NV12
   1280×720@30 and 640×480@30, frame timestamps, stream state transitions, and
   the `IClassFactory`/`DllGetClassObject` registration points.
-* Registration in `desktop/crates/injection/src/registration.rs`: the COM
+* Registration in `spikes/f0-injection/src/registration.rs`: the COM
   in-process server under `HKCU\Software\Classes\CLSID\{...}` and the camera
   instance with `MFVirtualCameraLifetime_Session`. `register_current_user`
   refuses to elevate; `register_machine_wide` exists only to *measure* the
@@ -60,7 +60,7 @@ A Media Foundation media source registered through `MFCreateVirtualCamera` with
 A project-owned live source filter with one NV12 output pin, registered under
 the "Video Capture Sources" category, with separate 32-bit and 64-bit CLSIDs.
 
-* Located in `desktop/vendor/dshow-vcam-fallback/`.
+* Located in `spikes/f0-dshow-vcam-fallback/`.
 * Status: **written but never compiled** — no MSVC toolchain and no Windows SDK
   on the F0 host. `README.md` lists exactly what is unfinished.
 * Why it remains the fallback: a 32-bit consumer on 64-bit Windows reads the
@@ -95,8 +95,8 @@ for **every** application, so the two backends are compared like with like.
 
 | Evidence | Where | What it proves |
 | --- | --- | --- |
-| 12 ring-buffer tests | `desktop/crates/injection/tests/ring_buffer.rs` | drop-oldest under backpressure, multi-reader cursors, monotonic publish, discard counting, shutdown release |
-| 3 marker tests | `desktop/crates/injection/src/test_pattern.rs` | the per-frame identifier survives at both announced sizes |
+| 12 ring-buffer tests | `spikes/f0-injection/tests/ring_buffer.rs` | drop-oldest under backpressure, multi-reader cursors, monotonic publish, discard counting, shutdown release |
+| 3 marker tests | `spikes/f0-injection/src/test_pattern.rs` | the per-frame identifier survives at both announced sizes |
 | 16 continuity tests | `spikes/tools/tests/test_injection_continuity.py` | the 2 000 ms stall boundary, duplicates, size/rate mismatch, `observed_duration_s ≥ 1800` |
 | 9 matrix tests | `spikes/f0-camera-injection/tests/test_matrix_schema.py` | full coverage per evaluated backend, a reason on every `not_tested` cell, a derivable decision |
 | 15 marker-decoder tests | `spikes/tools/tests/test_marker.py` | the Python decoder agrees with the Rust producer |

@@ -61,7 +61,7 @@ Expected artefacts:
 * `spikes/evidence/pairing/pairing_throttling.json`
 * one `spikes/evidence/pairing/<scenario_id>.trace` per scenario (local-only, gitignored)
 
-The harness runs the real listener (`desktop/crates/signaling`) and the real pinned client over
+The harness runs the real listener (`spikes/f0-signaling`) and the real pinned client over
 loopback TLS 1.3. Nothing in the TLS, pinning or token path is mocked. It exits non-zero if any
 observed code differs from the pinned expectation, and each entry carries `expectation_met`.
 

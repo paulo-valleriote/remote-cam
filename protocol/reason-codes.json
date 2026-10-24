@@ -111,7 +111,7 @@
     {
       "code": "listener_closed",
       "categories": ["pairing_rejection"],
-      "meaning": "The listener was closed after repeated failures, or the session was superseded.",
+      "meaning": "The listener was closed after repeated failures.",
       "user_actionable": false,
       "security_event": true
     },

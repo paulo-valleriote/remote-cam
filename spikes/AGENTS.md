@@ -3,11 +3,11 @@
 > Spike-specific rules. Do NOT apply to `desktop/`, `mobile/`, or `protocol/`.
 
 **Quick start:**
-- **Scope:** non-production F0 harnesses (`f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/`).
+- **Scope:** non-production F0 harnesses (`f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/`) and quarantined F0 code (`f0-signaling/`, `f0-media-core/`, `f0-injection/`, `f0-audio-bridge/`, `f0-dshow-vcam-fallback/`, `f0-mobile-core/`, `f0-mobile-app/`).
 - **Hard rules:** see "Absolute rule (FR-039)" below — non-negotiable.
 - **Before editing:** read `spikes/README.md`; run `preflight` + `selftest`; register `environment.json`.
 
-**Context sources:** `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.specify/init-options.json`, `.claude/skills/technical-design-doc-creator/`, `.opencode/commands/speckit.*`.
+**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.claude/skills/technical-design-doc-creator/`.
 
 ## Absolute rule (FR-039) — NON-NEGOTIABLE
 
@@ -16,13 +16,14 @@
 - No `spikes/` file may be imported by `desktop/` or `mobile/`.
 - No spike is promoted without a new implementation task in the product (`README.md` rule 4).
 - Quality = documented procedure + evidence (`spikes/evidence/`), **not** test coverage (`spikes/` exempt from ≥90% gate).
-- All source carries `NON-PRODUCTION — F0 risk-reduction spike (FR-039)`.
-- Each `Cargo.toml`: `publish = false`, `edition = "2024"`, description "NON-PRODUCTION".
+- Each spike crate or module is marked `NON-PRODUCTION — F0 risk-reduction spike (FR-039)` in its manifest, entry module or README. The marker need not repeat in every file; quarantined code is marked once and covered by ADR-0003.
+- Each spike `Cargo.toml`: `publish = false`, `edition = "2024"`, and a `description` naming it NON-PRODUCTION.
 - Python `pyproject.toml`: `remotecam-spike-tools`, `python >= 3.12`, `publish = false`.
 
 ## Context and architecture
 
 - **Active spikes:** `f0-pipeline/`, `f0-handshake/`, `f0-camera-injection/`, `f0-codec-interop/`, `f0-virtual-audio/`. All five are built harnesses. Live measurement runs require the Windows reference host.
+- **Quarantined F0 code:** `f0-signaling/`, `f0-media-core/`, `f0-injection/`, `f0-audio-bridge/`, `f0-dshow-vcam-fallback/`, `f0-mobile-core/`, `f0-mobile-app/`. Moved out of `desktop/` and `mobile/` in F1-01; provenance only (ADR-0003). The Rust crates are standalone packages consumed by the spike harnesses; the mobile modules are source records and are not built.
 - **Fixtures:** `fixtures/` (calibration WAV 48kHz mono 16-bit, CSV phrases with nonce).
 - **Tooling:** `tools/` (Python: analysis, metrics, validation, redaction, preflight, selftest, report assembly).
 - **Evidence:** `spikes/evidence/` — derived only; raw captures (`.wav/.mp4/.etl/.webm/.trace`) are `.gitignore`.
@@ -33,8 +34,9 @@
 ### 1. Non-production and isolation
 
 - No `spikes/` module importable by `desktop/` or `mobile/`.
-- `f0-pipeline/Cargo.toml` references `remotecam-injection`/`remotecam-media-core` via `../../desktop/crates/` — spike **consumes** product, never vice versa.
-- No `spikes/` code merged without a new task (`tasks.md`) in the product.
+- `f0-pipeline/Cargo.toml` references `remotecam-injection`/`remotecam-media-core` at `../f0-injection` and `../f0-media-core` — spike **consumes** quarantined code, never the product.
+- `f0-handshake` references `remotecam-signaling` at `../f0-signaling`; `f0-virtual-audio` references `remotecam-audio-bridge` at `../f0-audio-bridge`.
+- No `spikes/` code is merged into the product. Reuse requires a new implementation task in `desktop/` or `mobile/` (ADR-0003).
 
 ### 2. Evidence and validation
 

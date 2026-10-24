@@ -1,30 +1,32 @@
 # RemoteCam Desktop
 
-Rust workspace for the Windows 11 receive-and-inject application. F0 builds
-disposable harnesses around the risk surfaces; the product application shell is
-not part of this phase.
+Rust workspace for the Windows 11 receive-and-inject application. F0 built
+disposable harnesses around the risk surfaces; those harnesses and the F0
+implementations are now quarantined under `spikes/` (ADR-0003). The product
+application shell is not part of this phase.
 
 ## Crates
 
 | Crate | Directory | Responsibility |
 | --- | --- | --- |
 | `remotecam-protocol` | `crates/protocol` | Rust implementation of the shared signaling and QR contract. Delivered package, coverage gate ≥ 90 %. |
-| `remotecam-signaling` | `crates/signaling` | TLS 1.3 WSS listener, pinned client, ephemeral certificate, QR generation, token store and throttling. |
-| `remotecam-media-core` | `crates/media-core` | Receive-only peer connection, jitter policy, Media Foundation decode adapters, handoff, audio render and A/V sync. |
-| `remotecam-injection` | `crates/injection` | NV12 ring buffer and Media Foundation virtual camera media source and registration. |
-| `remotecam-audio-bridge` | `crates/audio-bridge` | WASAPI render into the virtual audio endpoint, readiness and degraded operation. |
 | `remotecam-app` | `crates/app` | Desktop shell, diagnostics and structured logging. |
+
+The F0 crates `remotecam-signaling`, `remotecam-media-core`,
+`remotecam-injection` and `remotecam-audio-bridge` moved to `spikes/f0-*` in
+F1-01. They are non-production, are not workspace members, and must not be
+imported from this tree.
 
 ## Prerequisites
 
 - Rust 1.99.1, pinned by `rust-toolchain.toml`; the workspace MSRV is 1.92 and
   the edition is 2024.
-- Windows 11 build 22000 or later for the Media Foundation virtual camera and
-  WASAPI crates.
+- Windows 11 build 22000 or later when the product shell starts using Media
+  Foundation or WASAPI (not yet in this phase).
 - Windows 11 SDK and MSVC build tools when building the `windows` crate on
   Windows.
-- Linux builds the protocol, media-core and spike harnesses for CI; the
-  `windows` dependency is target-gated.
+- Linux builds the protocol crate and the quarantined spike harnesses for CI;
+  the `windows` dependency is target-gated.
 
 Dependency versions are pinned exactly in `Cargo.toml`; `Cargo.lock` is
 committed. A dependency bump is a deliberate change and updates the dependency

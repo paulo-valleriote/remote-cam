@@ -1,11 +1,15 @@
 .PHONY: test coverage lint
 
-test: ## Run the desktop, mobile and measurement-tooling tests
+test: ## Run the desktop, Android and spike-tooling tests
 	$(CARGO) test --manifest-path desktop/Cargo.toml --workspace
+	$(CARGO) test --manifest-path spikes/f0-signaling/Cargo.toml
+	$(CARGO) test --manifest-path spikes/f0-media-core/Cargo.toml
+	$(CARGO) test --manifest-path spikes/f0-injection/Cargo.toml
+	$(CARGO) test --manifest-path spikes/f0-audio-bridge/Cargo.toml
 	$(CARGO) test --manifest-path spikes/f0-handshake/Cargo.toml
 	$(CARGO) test --manifest-path spikes/f0-pipeline/Cargo.toml
 	$(CARGO) test --manifest-path spikes/f0-virtual-audio/Cargo.toml
-	$(GRADLE) -p mobile :protocol:testDebugUnitTest :core:testDebugUnitTest
+	$(GRADLE) -p mobile :protocol:testDebugUnitTest
 	cd spikes/tools && $(PYTHON_BIN) -m pytest tests ../f0-camera-injection ../f0-handshake ../f0-virtual-audio
 	bash protocol/vectors/run_conformance.sh
 
@@ -20,6 +24,14 @@ coverage: ## Report coverage for the delivered contract packages (≥90% require
 lint: ## Check formatting and run the linters
 	$(CARGO) fmt --manifest-path desktop/Cargo.toml --all -- --check
 	$(CARGO) clippy --manifest-path desktop/Cargo.toml --workspace --all-targets -- -D warnings
+	$(CARGO) fmt --manifest-path spikes/f0-signaling/Cargo.toml -- --check
+	$(CARGO) clippy --manifest-path spikes/f0-signaling/Cargo.toml --all-targets -- -D warnings
+	$(CARGO) fmt --manifest-path spikes/f0-media-core/Cargo.toml -- --check
+	$(CARGO) clippy --manifest-path spikes/f0-media-core/Cargo.toml --all-targets -- -D warnings
+	$(CARGO) fmt --manifest-path spikes/f0-injection/Cargo.toml -- --check
+	$(CARGO) clippy --manifest-path spikes/f0-injection/Cargo.toml --all-targets -- -D warnings
+	$(CARGO) fmt --manifest-path spikes/f0-audio-bridge/Cargo.toml -- --check
+	$(CARGO) clippy --manifest-path spikes/f0-audio-bridge/Cargo.toml --all-targets -- -D warnings
 	$(CARGO) fmt --manifest-path spikes/f0-handshake/Cargo.toml -- --check
 	$(CARGO) clippy --manifest-path spikes/f0-handshake/Cargo.toml --all-targets -- -D warnings
 	$(CARGO) fmt --manifest-path spikes/f0-pipeline/Cargo.toml -- --check
