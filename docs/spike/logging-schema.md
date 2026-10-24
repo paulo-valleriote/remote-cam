@@ -1,6 +1,6 @@
 # Structured Log Schema — desktop and mobile
 
-**Status**: canonical for F0 · **Consumers**: `desktop/crates/app/src/logging.rs`, `mobile/core/src/main/kotlin/remotecam/core/logging/StructuredLog.kt`, the diagnostic panel
+**Status**: canonical for F0 · **Consumers**: `desktop/crates/app/src/logging.rs`, `spikes/f0-mobile-core/src/main/kotlin/remotecam/core/logging/StructuredLog.kt`, the diagnostic panel
 
 Every log line is one JSON object, in English, with the same field names on both platforms. The schema exists so that a failure can be diagnosed from the recorded evidence alone, and so that secrets cannot leak into a log by accident.
 

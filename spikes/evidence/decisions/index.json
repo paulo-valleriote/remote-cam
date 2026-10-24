@@ -13,8 +13,8 @@
       "path": "spikes/evidence/decisions/D-10-injection-backend.md",
       "fallback": "dshow_filter (DirectShow capture filter)",
       "evidence_refs": [
-        "desktop/crates/injection/src/mf_virtual_camera.rs",
-        "desktop/crates/injection/src/registration.rs",
+        "spikes/f0-injection/src/mf_virtual_camera.rs",
+        "spikes/f0-injection/src/registration.rs",
         "spikes/f0-camera-injection/run_matrix.py",
         "spikes/evidence/injection/runs/mf_virtual_camera/chrome/run.json"
       ],
@@ -34,7 +34,7 @@
       "evidence_refs": [
         "specs/001-f0-technical-spikes/research.md",
         "docs/tdd-remotecam-v1.md",
-        "desktop/crates/media-core/src/adapters/software_decoder.rs"
+        "spikes/f0-media-core/src/adapters/software_decoder.rs"
       ],
       "missing_evidence": [
         "spikes/evidence/interop/interop_record.json",
@@ -51,10 +51,10 @@
       "path": "spikes/evidence/decisions/D-quality-default.md",
       "fallback": "1280x720@30 only (Option C)",
       "evidence_refs": [
-        "desktop/crates/media-core/src/receiver.rs",
-        "desktop/crates/media-core/src/adapters/mf_decoder.rs",
-        "desktop/crates/media-core/src/jitter_policy.rs",
-        "desktop/crates/media-core/tests/jitter_policy.rs"
+        "spikes/f0-media-core/src/receiver.rs",
+        "spikes/f0-media-core/src/adapters/mf_decoder.rs",
+        "spikes/f0-media-core/src/jitter_policy.rs",
+        "spikes/f0-media-core/tests/jitter_policy.rs"
       ],
       "missing_evidence": [
         "spikes/evidence/pipeline/latency_summary.json",

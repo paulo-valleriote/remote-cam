@@ -10,7 +10,7 @@ publish = false
 # `desktop/` or `mobile/`.
 
 [dependencies]
-remotecam-audio-bridge = { path = "../../desktop/crates/audio-bridge" }
+remotecam-audio-bridge = { path = "../f0-audio-bridge" }
 serde_json = "=1.0.154"
 
 [profile.release]

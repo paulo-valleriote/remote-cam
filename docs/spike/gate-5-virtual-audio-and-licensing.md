@@ -135,7 +135,7 @@ Verify, and record in the run notes:
 | Any of the above | Video-only session **starts and delivers video** | audio is disabled, video is unaffected |
 
 A readiness state that does not name the next step is a failure of FR-032. The unit tests in
-`desktop/crates/audio-bridge/tests/readiness.rs` pin these states on Linux CI; the live check is what
+`spikes/f0-audio-bridge/tests/readiness.rs` pin these states on Linux CI; the live check is what
 proves them on the reference host.
 
 ### Step 5 — Record the consumer application for ≥ 10 minutes

@@ -101,7 +101,7 @@ BACKENDS = [
         "installer_required": "none",
         "licensing": "proprietary",
         "license_file_present": False,
-        "source_reference": "desktop/vendor/dshow-vcam-fallback",
+        "source_reference": "spikes/f0-dshow-vcam-fallback",
     },
 ]
 

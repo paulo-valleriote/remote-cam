@@ -22,6 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "remotecam"
 
-include(":app")
-include(":core")
 include(":protocol")

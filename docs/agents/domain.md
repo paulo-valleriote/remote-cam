@@ -17,10 +17,14 @@ Single-context repo (this repo):
 ```
 /
 ├── GLOSSARY.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
+├── docs/
+│   ├── constitution.md
+│   └── adr/
+│       ├── 0001-jira-source-of-truth.md
+│       └── 0002-wire-freeze.md
+├── desktop/
+├── mobile/
+└── protocol/
 ```
 
 ## Use the glossary's vocabulary

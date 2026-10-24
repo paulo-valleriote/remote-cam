@@ -1,0 +1,40 @@
+[package]
+name = "remotecam-media-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "Proprietary"
+publish = false
+
+# NON-PRODUCTION — quarantined F0 risk-reduction spike (FR-039). Nothing here
+# merges into `desktop/` or `mobile/`; see docs/adr/0003-f0-code-quarantine.md.
+
+[dependencies]
+async-trait = "=0.1.92"
+remotecam-injection = { path = "../f0-injection" }
+rtc = "=0.21.1"
+sha2 = "=0.11.1"
+tokio = "=1.54.1"
+webrtc = "=0.21.1"
+
+# The software decoder exists only so the Linux CI can exercise the handoff and
+# stall paths. The Windows path always uses the Media Foundation decoder and is
+# never allowed to cite the software result for the latency gate.
+[target.'cfg(not(windows))'.dependencies]
+openh264 = "=0.9.9"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "=0.62.2"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Media_Audio",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com",
+]
+
+[dev-dependencies]
+criterion = "=0.8.2"

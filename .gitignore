@@ -13,8 +13,6 @@ node_modules/
 vendor/
 .venv/
 venv/
-!desktop/vendor/
-!desktop/vendor/**
 
 # Rust
 desktop/target/
@@ -25,6 +23,7 @@ mobile/.gradle/
 mobile/**/build/
 mobile/local.properties
 mobile/.kotlin/
+spikes/f0-mobile-*/build/
 
 # Build artifacts
 dist/

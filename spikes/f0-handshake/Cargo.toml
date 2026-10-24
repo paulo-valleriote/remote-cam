@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 remotecam-protocol = { path = "../../desktop/crates/protocol" }
-remotecam-signaling = { path = "../../desktop/crates/signaling" }
+remotecam-signaling = { path = "../f0-signaling" }
 futures-util = "0.3.34"
 rustls = "0.23.46"
 serde = { version = "1.0.229", features = ["derive"] }

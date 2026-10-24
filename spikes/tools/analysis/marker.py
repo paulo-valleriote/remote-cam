@@ -3,7 +3,7 @@
 The producer draws a 20-block binary marker in the luma plane: a 4-bit sync
 prefix followed by the 16-bit frame number, duplicated top-left and bottom-right
 (because a consumer preview may crop a corner). This module is the Python twin
-of ``desktop/crates/injection/src/test_pattern.rs`` and must use the same
+of ``spikes/f0-injection/src/test_pattern.rs`` and must use the same
 geometry:
 
 * margin 8 px, block edge ``min(40, (width - 16) // 20)``;

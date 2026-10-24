@@ -50,7 +50,7 @@
 | --- | --- |
 | `specs/001-f0-technical-spikes/research.md` (D-05, D-17) | exists — design rationale |
 | `docs/tdd-remotecam-v1.md` §5.4, §5.5 | exists — target capture and transport design |
-| `desktop/crates/media-core/src/adapters/software_decoder.rs` | exists — software fallback adapter |
+| `spikes/f0-media-core/src/adapters/software_decoder.rs` | exists — software fallback adapter |
 | `spikes/evidence/interop/interop_record.json` | **not produced** |
 | `spikes/evidence/interop/codec_comparison.json` | **not produced** |
 | 10-minute live interop run on the reference Android device | **not recorded (C-04)** |

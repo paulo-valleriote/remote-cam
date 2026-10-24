@@ -17,9 +17,32 @@ maintainer approval.
 | `f0-camera-injection/` | Per-application virtual camera matrix and consumer harnesses. |
 | `f0-codec-interop/` | Android-to-desktop codec negotiation and corruption comparison. |
 | `f0-virtual-audio/` | Virtual audio render, capture, dropout and intelligibility workflow. |
+| `f0-signaling/` | Quarantined F0 signaling crate: TLS 1.3 WSS listener, pinned client, token store, throttling. |
+| `f0-media-core/` | Quarantined F0 media crate: receive-only peer connection, jitter policy, decode adapters, handoff. |
+| `f0-injection/` | Quarantined F0 injection crate: NV12 ring buffer, Media Foundation virtual camera, registration. |
+| `f0-audio-bridge/` | Quarantined F0 audio crate: WASAPI render, readiness and degraded operation. |
+| `f0-dshow-vcam-fallback/` | Quarantined DirectShow virtual-camera fallback (C++/CMake). |
+| `f0-mobile-core/` | Quarantined F0 Android core module (source record, not built). |
+| `f0-mobile-app/` | Quarantined F0 Android app module (source record, not built). |
 | `tools/` | Python measurement tooling: analysis, validation, metrics and report assembly. |
 | `fixtures/` | Versioned synthetic fixtures, including the 40/60/120 ms calibration capture. |
 | `evidence/` | Generated evidence. Raw captures are local-only; derived metrics, scripts and procedures are versioned. |
+
+## Quarantine
+
+The `f0-signaling/`, `f0-media-core/`, `f0-injection/`, `f0-audio-bridge/`,
+`f0-dshow-vcam-fallback/`, `f0-mobile-core/` and `f0-mobile-app/` directories
+were moved out of `desktop/` and `mobile/` in F1-01. They are retained for
+provenance and reproducibility only:
+
+- the Rust crates are standalone packages with exact dependency pins, consumed
+  by the spike harnesses by relative path;
+- the mobile modules are source records, are not part of the `mobile/` Gradle
+  build, and are not built;
+- none of them may be imported by `desktop/` or `mobile/`, and none is a merge
+  source for the product.
+
+See [ADR-0003](../docs/adr/0003-f0-code-quarantine.md).
 
 ## Evidence layout
 

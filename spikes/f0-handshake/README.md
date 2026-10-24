@@ -24,7 +24,7 @@ state behind. The procedure is
 ## What runs
 
 `make spike-handshake` executes every handshake and throttling scenario against
-the real listener (`desktop/crates/signaling`) and the real pinned client. No
+the real listener (`spikes/f0-signaling`) and the real pinned client. No
 TLS or token check is mocked. It writes:
 
 * `spikes/evidence/pairing/pairing_scenarios.json` — one entry per scenario, with

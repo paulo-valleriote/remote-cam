@@ -148,7 +148,7 @@ Evaluated **only if at least one primary cell fails**, and then for every
 application. Build and register it first:
 
 ```powershell
-cmake -S desktop/vendor/dshow-vcam-fallback -B build/dshow-vcam-x64 -A x64 -DREMOTECAM_BASE_CLASSES=<sdk samples>\multimedia\directshow\baseclasses
+cmake -S spikes/f0-dshow-vcam-fallback -B build/dshow-vcam-x64 -A x64 -DREMOTECAM_BASE_CLASSES=<sdk samples>\multimedia\directshow\baseclasses
 cmake --build build/dshow-vcam-x64 --config Release
 regsvr32 /n /i:user build\dshow-vcam-x64\Release\dshow_vcam_fallback.dll
 ```

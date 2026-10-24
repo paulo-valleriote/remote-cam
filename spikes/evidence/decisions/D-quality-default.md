@@ -8,7 +8,7 @@
 | `chosen_option` | 1280×720@30 default, 1920×1080@30 optional maximum (recommended; not yet `accepted`) |
 | `approver` | Technical lead — **not yet signed**; the record cannot be `accepted` before the measured evidence exists |
 | `decided_at` | — |
-| `evidence_refs` | `desktop/crates/media-core/src/receiver.rs`, `desktop/crates/media-core/src/adapters/mf_decoder.rs`, `desktop/crates/media-core/src/jitter_policy.rs`, `spikes/f0-pipeline/src/synthetic_source.rs`, `spikes/evidence/pipeline/latency_summary.json` (**not yet produced**) |
+| `evidence_refs` | `spikes/f0-media-core/src/receiver.rs`, `spikes/f0-media-core/src/adapters/mf_decoder.rs`, `spikes/f0-media-core/src/jitter_policy.rs`, `spikes/f0-pipeline/src/synthetic_source.rs`, `spikes/evidence/pipeline/latency_summary.json` (**not yet produced**) |
 | `downstream_impact` | F1/F2 encode settings, the mobile camera profile, the bandwidth budget and the installer's default quality |
 
 ## Status note
@@ -79,11 +79,11 @@ run by `make preflight` and by the pipeline harness before any measurement; the 
 
 | Evidence | Where | What it proves |
 | --- | --- | --- |
-| Receive-only configuration tests | `desktop/crates/media-core/src/receiver.rs` | No ICE server, no send track, NACK/RTCP/PLI are required |
-| Jitter-policy tests | `desktop/crates/media-core/tests/jitter_policy.rs` | Target depth adapts, playout delay moves in bounded steps, stall fast-forwards, depth is bounded |
-| Drift tests | `desktop/crates/media-core/tests/drift.rs` | 5 ms/h recovered; a free-running resampler at 36 ms/h fails; RTP pacing converges |
-| Concurrency and teardown tests | `desktop/crates/media-core/tests/{concurrency,teardown}.rs` | Ordering, idempotent session events, epoch invalidation, handle release |
-| Media Foundation verification and decoder | `desktop/crates/media-core/src/adapters/mf_decoder.rs` | NV12-only output, DXGI device manager, documented buffer-lock order |
+| Receive-only configuration tests | `spikes/f0-media-core/src/receiver.rs` | No ICE server, no send track, NACK/RTCP/PLI are required |
+| Jitter-policy tests | `spikes/f0-media-core/tests/jitter_policy.rs` | Target depth adapts, playout delay moves in bounded steps, stall fast-forwards, depth is bounded |
+| Drift tests | `spikes/f0-media-core/tests/drift.rs` | 5 ms/h recovered; a free-running resampler at 36 ms/h fails; RTP pacing converges |
+| Concurrency and teardown tests | `spikes/f0-media-core/tests/{concurrency,teardown}.rs` | Ordering, idempotent session events, epoch invalidation, handle release |
+| Media Foundation verification and decoder | `spikes/f0-media-core/src/adapters/mf_decoder.rs` | NV12-only output, DXGI device manager, documented buffer-lock order |
 | Latency analyser tests | `spikes/tools/tests/test_pipeline_metrics.py` | Raw p95 is the judged value; floor and corrected value are published; stage sum rule |
 
 The gate procedure is `docs/spike/gate-3-desktop-receive-pipeline.md`.
