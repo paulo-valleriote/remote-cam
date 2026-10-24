@@ -39,5 +39,7 @@ when it is part of the F1 gate.
   and the difference is visible in the repository layout.
 - REC-9 creates `harness/` and its `AGENTS.md`; until then the directory does
   not exist and no target claims to run it.
+- **Realised:** REC-18 (2026-10-24) created `harness/`, its `AGENTS.md` and the
+  `make harness` target; the dependency baseline is in ADR-0008.
 - The F1 exit gate is judged on the product harness, not on the F0 spike
   evidence.

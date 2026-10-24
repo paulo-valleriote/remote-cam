@@ -18,6 +18,7 @@ MAKEFILES=(
     "$REPO_ROOT/Makefile"
     "$REPO_ROOT/scripts/make/common.mk"
     "$REPO_ROOT/scripts/make/desktop.mk"
+    "$REPO_ROOT/scripts/make/harness.mk"
     "$REPO_ROOT/scripts/make/mobile.mk"
     "$REPO_ROOT/scripts/make/quality.mk"
     "$REPO_ROOT/scripts/make/spikes.mk"

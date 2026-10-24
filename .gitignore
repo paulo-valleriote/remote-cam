@@ -16,6 +16,7 @@ venv/
 
 # Rust
 desktop/target/
+harness/target/
 spikes/**/target/
 
 # Android

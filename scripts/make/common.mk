@@ -19,5 +19,6 @@ install: ## Install the Python measurement package and its development dependenc
 
 clean: ## Remove generated build artefacts and never committed evidence
 	$(CARGO) clean --manifest-path desktop/Cargo.toml
+	$(CARGO) clean --manifest-path harness/Cargo.toml
 	@if command -v $(GRADLE) >/dev/null 2>&1; then $(GRADLE) -p mobile clean; else echo "gradle not found; skipped mobile clean"; fi
 	rm -rf spikes/evidence/tmp

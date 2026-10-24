@@ -13,6 +13,7 @@ decision was made and why.
 | [0005](0005-superseded-vs-listener-closed.md) | `superseded` and `listener_closed` mean different things |
 | [0006](0006-handshake-vectors.md) | Handshake vectors are a non-wire addition |
 | [0007](0007-harness-location.md) | Product harness location and status |
+| [0008](0008-harness-dependency-baseline.md) | Session Core crate location and harness dependency baseline |
 
 Add a new ADR by scanning this directory for the highest number and
 incrementing it. To revisit a decision, write a new ADR that supersedes the old

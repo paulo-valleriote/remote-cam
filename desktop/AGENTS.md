@@ -3,7 +3,7 @@
 > Desktop-specific rules. Do NOT apply to `mobile/`, `protocol/`, or `spikes/`.
 
 **Quick start:**
-- **Scope:** `desktop/` only — Rust workspace, 2 crates, MSRV 1.92; pinned toolchain 1.99.1 via `rust-toolchain.toml`.
+- **Scope:** `desktop/` only — Rust workspace, 3 crates, MSRV 1.92; pinned toolchain 1.99.1 via `rust-toolchain.toml`.
 - **Hard rules:**
   - All dependencies are pinned with `=`; `Cargo.lock` is versioned.
   - Windows APIs only behind `cfg(windows)`, targeting the Windows 11 SDK.
@@ -16,10 +16,10 @@
 ## Context and architecture
 
 - **Rust workspace:** `Cargo.toml` resolver 3, edition 2024, MSRV 1.92, version 0.1.0.
-- **Crates (2):** `protocol` (delivered contract) and `app` (product shell and structured logging).
+- **Crates (3):** `protocol` (delivered contract), `session-core` (product session state machine) and `app` (product shell and structured logging).
 - **Toolchain:** `rust-toolchain.toml` — `1.99.1`, components `clippy` + `rustfmt`, profile `minimal`.
-- **Build:** `make build-desktop` = `cargo build --manifest-path desktop/Cargo.toml --workspace`.
-- **No executable entry point** (`main`) in this phase; the F0 harnesses are under `spikes/`.
+- **Build:** `make build-desktop` = `cargo build --manifest-path desktop/Cargo.toml --workspace`. It does not build `harness/`, which is a separate workspace.
+- **No executable entry point** (`main`) in this phase; the product harness is under `harness/` and the F0 harnesses are under `spikes/`.
 
 ## Desktop-specific rules
 
@@ -59,6 +59,7 @@ injection and media-core crates by relative path.
 ### 5. Tests and coverage
 
 - `protocol/` — gate ≥90%. `tests/contract.rs`, `bin/conformance.rs` (vectors from `protocol/vectors/`).
+- `session-core/` — gate ≥90%. Deterministic unit tests for the state machine; the clock and RNG seams arrive with REC-20.
 - `app/` — log formatting/redaction tests.
 - No `spikes/` module is imported by any crate here.
 
