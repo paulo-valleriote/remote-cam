@@ -7,7 +7,7 @@
 - **Hard rules:** see "Absolute rule" below — non-negotiable.
 - **Before editing:** read `docs/constitution.md` and the sub-part `AGENTS.md`; build with `make build-desktop` / `make build-mobile`; run the product harness with `make harness`; for spikes, be evidence-first (`spikes/evidence/`).
 
-**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.claude/skills/technical-design-doc-creator/`. Planning and issues live in Jira board `REC` (see `docs/agents/issue-tracker.md`).
+**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.agents/skills/`. Planning and issues live in Jira board `REC` (see `docs/agents/issue-tracker.md`).
 
 ## Constitution (non-negotiable)
 

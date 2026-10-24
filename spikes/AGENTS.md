@@ -7,7 +7,7 @@
 - **Hard rules:** see "Absolute rule (FR-039)" below — non-negotiable.
 - **Before editing:** read `spikes/README.md`; run `preflight` + `selftest`; register `environment.json`.
 
-**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.claude/skills/technical-design-doc-creator/`.
+**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/plan.md`, `.agents/skills/`.
 
 ## Absolute rule (FR-039) — NON-NEGOTIABLE
 

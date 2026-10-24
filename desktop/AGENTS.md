@@ -11,7 +11,7 @@
   - No `NON-PRODUCTION` code lives here; F0 implementations are quarantined under `spikes/` (ADR-0003).
 - **Before editing:** read `docs/constitution.md` and `protocol/AGENTS.md` if touching contracts; build with `make build-desktop`.
 
-**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/research.md`, `.claude/skills/technical-design-doc-creator/`.
+**Context sources:** `docs/constitution.md`, `GLOSSARY.md`, `docs/adr/`, `docs/tdd-remotecam-v1.md`, `specs/001-f0-technical-spikes/research.md`, `.agents/skills/`.
 
 ## Context and architecture
 
