@@ -1,37 +1,25 @@
-//! The 256-bit single-use pairing token.
-//!
-//! The token is drawn from the injected random source, lives in memory only,
-//! and wipes its buffer when dropped. It deliberately has no `Clone` and no
-//! `PartialEq`: a copy is a second unaccounted secret, and the constant-time
-//! comparison belongs to the pairing authentication step.
-
 use std::fmt;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::RandomSource;
 
-/// A pairing secret generated once per session.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct PairingToken([u8; 32]);
 
 impl PairingToken {
-    /// The number of bytes in a pairing token.
     pub const LENGTH: usize = 32;
 
-    /// Draws a fresh token from the injected random source.
     pub fn generate<R: RandomSource + ?Sized>(random: &mut R) -> Self {
         let mut bytes = [0_u8; Self::LENGTH];
         random.fill_bytes(&mut bytes);
         Self(bytes)
     }
 
-    /// Builds a token from its raw bytes.
     pub const fn from_bytes(bytes: [u8; Self::LENGTH]) -> Self {
         Self(bytes)
     }
 
-    /// The raw bytes of the token.
     pub const fn as_bytes(&self) -> &[u8; Self::LENGTH] {
         &self.0
     }

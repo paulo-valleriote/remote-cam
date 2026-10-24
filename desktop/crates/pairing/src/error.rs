@@ -1,14 +1,7 @@
-//! The closed reason code carried by a pairing failure.
-//!
-//! A failure is either a decision of this crate (a pin mismatch, a TLS version
-//! refusal) or an I/O fault. Both map onto the protocol's closed reason set so
-//! the local diagnostic never invents a free-form code.
-
 use std::fmt;
 
 use remotecam_protocol::ReasonCode;
 
-/// Why a pairing handshake did not complete.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PairingError {
     code: ReasonCode,
@@ -16,7 +9,6 @@ pub struct PairingError {
 }
 
 impl PairingError {
-    /// Builds a failure from a closed code and an English diagnostic detail.
     pub fn new(code: ReasonCode, detail: impl Into<String>) -> Self {
         Self {
             code,
@@ -24,12 +16,10 @@ impl PairingError {
         }
     }
 
-    /// The closed code the diagnostic reports.
     pub fn code(&self) -> ReasonCode {
         self.code
     }
 
-    /// The English detail. It never carries a token or a full fingerprint.
     pub fn detail(&self) -> &str {
         &self.detail
     }
@@ -43,11 +33,10 @@ impl fmt::Display for PairingError {
 
 impl std::error::Error for PairingError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None // diagnostic-only; underlying rustls/io cause is preserved in detail text
+        None
     }
 }
 
-/// Maps a `rustls` error to the closed reason code set.
 pub fn classify_rustls_error(error: &rustls::Error) -> ReasonCode {
     match error {
         rustls::Error::AlertReceived(alert) => match alert {
@@ -72,7 +61,6 @@ pub fn classify_rustls_error(error: &rustls::Error) -> ReasonCode {
     }
 }
 
-/// Maps a `tokio` or `std` I/O error wrapping a `rustls` error to a reason code.
 pub fn classify_io_error(error: &std::io::Error) -> ReasonCode {
     error
         .get_ref()

@@ -1,8 +1,3 @@
-//! Loopback integration tests for the pairing channel.
-//!
-//! Every scenario uses a real TCP socket on IPv4 loopback. The certificate, the
-//! TLS handshake and the pin comparison are the production ones.
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -102,6 +97,25 @@ async fn refuses_a_tls12_client_with_tls_version_unsupported() {
 
     let server_error = server.await.expect("server task").expect_err("refused");
     assert_eq!(server_error.code(), ReasonCode::TlsVersionUnsupported);
+}
+
+#[tokio::test]
+async fn refuses_a_tls13_handshake_without_the_dedicated_alpn() {
+    let (listener, _fingerprint, address) = bound_listener().await;
+    let server = accept_one(&listener);
+
+    let connector = TlsConnector::from(Arc::new(tls13_client_without_alpn_config()));
+    let stream = TcpStream::connect(address).await.expect("tcp");
+    let _client_handshake = connector
+        .connect(server_name(), stream)
+        .await
+        .expect("TLS 1.3 itself is supported");
+
+    let server_error = server
+        .await
+        .expect("server task")
+        .expect_err("the listener must reject a handshake without ALPN");
+    assert_eq!(server_error.code(), ReasonCode::TlsHandshakeFailed);
 }
 
 #[tokio::test]
@@ -242,4 +256,17 @@ fn tls12_client_config() -> rustls::ClientConfig {
         .with_no_client_auth();
     config.alpn_protocols = vec![ALPN_PROTOCOL.to_vec()];
     config
+}
+
+fn tls13_client_without_alpn_config() -> rustls::ClientConfig {
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let verifier = AcceptAnyCertificate {
+        provider: Arc::clone(&provider),
+    };
+    rustls::ClientConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .expect("TLS 1.3 client configuration")
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(verifier))
+        .with_no_client_auth()
 }

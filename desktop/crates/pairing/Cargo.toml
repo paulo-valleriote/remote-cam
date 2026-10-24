@@ -15,6 +15,7 @@ sha2.workspace = true
 subtle.workspace = true
 tokio = { workspace = true, features = ["net", "rt"] }
 tokio-rustls.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 rustls.workspace = true

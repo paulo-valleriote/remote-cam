@@ -1,10 +1,3 @@
-//! The pairing listener: TLS 1.3 only, ephemeral certificate, dedicated ALPN.
-//!
-//! The listener owns the server half of the channel. It accepts a TCP
-//! connection, completes a TLS 1.3 handshake against the ephemeral certificate,
-//! and hands the caller an authenticated transport. It performs no token
-//! validation and starts no media: those belong to the session lifecycle.
-
 use std::fmt;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::pin::Pin;
@@ -23,15 +16,12 @@ use tokio_rustls::server::TlsStream;
 use crate::certificate::EphemeralCertificate;
 use crate::error::{PairingError, classify_io_error};
 
-/// The dedicated ALPN protocol name carried by both sides.
 pub const ALPN_PROTOCOL: &[u8] = b"remotecam/1";
 
-/// Failure while binding the listener.
 #[derive(Debug)]
 pub enum ListenerError {
-    /// The TLS configuration was refused.
     Tls(rustls::Error),
-    /// The socket could not be bound or inspected.
+    NonLoopbackAddress(SocketAddr),
     Io(std::io::Error),
 }
 
@@ -39,6 +29,12 @@ impl fmt::Display for ListenerError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tls(error) => write!(formatter, "TLS configuration failed: {error}"),
+            Self::NonLoopbackAddress(address) => {
+                write!(
+                    formatter,
+                    "pairing listener must bind to loopback, not {address}"
+                )
+            }
             Self::Io(error) => write!(formatter, "listener socket failed: {error}"),
         }
     }
@@ -64,7 +60,6 @@ fn server_config(
     Ok((Arc::new(config), fingerprint))
 }
 
-/// A loopback or private-interface pairing listener.
 pub struct PairingListener {
     listener: TcpListener,
     acceptor: TlsAcceptor,
@@ -85,11 +80,13 @@ impl fmt::Debug for PairingListener {
 }
 
 impl PairingListener {
-    /// Binds the listener to `address` and prepares the TLS 1.3 server.
     pub async fn bind(
         address: SocketAddr,
         certificate: EphemeralCertificate,
     ) -> Result<Self, ListenerError> {
+        if !address.ip().is_loopback() {
+            return Err(ListenerError::NonLoopbackAddress(address));
+        }
         let (config, fingerprint) = server_config(certificate)?;
         let listener = TcpListener::bind(address)
             .await
@@ -104,27 +101,22 @@ impl PairingListener {
         })
     }
 
-    /// Binds an ephemeral port on IPv4 loopback.
     pub async fn bind_loopback(certificate: EphemeralCertificate) -> Result<Self, ListenerError> {
         Self::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)), certificate).await
     }
 
-    /// The address the listener is bound to.
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
     }
 
-    /// The leaf fingerprint the listener serves.
     pub fn fingerprint(&self) -> [u8; 32] {
         self.fingerprint
     }
 
-    /// How many connections have reached the TLS handshake.
     pub fn attempts(&self) -> u32 {
         self.attempts.load(Ordering::SeqCst)
     }
 
-    /// Accepts one connection and completes the TLS 1.3 handshake.
     pub async fn accept(&self) -> Result<ServerChannel, PairingError> {
         let (stream, _peer) = self.listener.accept().await.map_err(|error| {
             PairingError::new(ReasonCode::DesktopUnreachable, error.to_string())
@@ -135,11 +127,16 @@ impl PairingListener {
             .accept(stream)
             .await
             .map_err(|error| PairingError::new(classify_io_error(&error), error.to_string()))?;
+        if stream.get_ref().1.alpn_protocol() != Some(ALPN_PROTOCOL) {
+            return Err(PairingError::new(
+                ReasonCode::TlsHandshakeFailed,
+                "the dedicated ALPN protocol was not negotiated",
+            ));
+        }
         Ok(ServerChannel { inner: stream })
     }
 }
 
-/// The server side of an established pairing channel.
 pub struct ServerChannel {
     inner: TlsStream<tokio::net::TcpStream>,
 }
@@ -155,17 +152,14 @@ impl fmt::Debug for ServerChannel {
 }
 
 impl ServerChannel {
-    /// Whether the connection negotiated TLS 1.3.
     pub fn is_tls13(&self) -> bool {
         self.inner.get_ref().1.protocol_version() == Some(ProtocolVersion::TLSv1_3)
     }
 
-    /// The ALPN protocol the connection negotiated.
     pub fn alpn_protocol(&self) -> Option<&[u8]> {
         self.inner.get_ref().1.alpn_protocol()
     }
 
-    /// The peer address of the underlying socket.
     pub fn peer_addr(&self) -> std::io::Result<SocketAddr> {
         self.inner.get_ref().0.peer_addr()
     }
@@ -207,7 +201,7 @@ impl AsyncWrite for ServerChannel {
 
 #[cfg(test)]
 mod tests {
-    use super::{ListenerError, PairingListener, server_config};
+    use super::{ListenerError, PairingListener, SocketAddr, server_config};
     use crate::certificate::EphemeralCertificate;
 
     #[test]
@@ -251,6 +245,18 @@ mod tests {
             .expect_err("a bound port must be refused");
 
         assert!(error.to_string().contains("listener socket failed"));
+    }
+
+    #[tokio::test]
+    async fn refuses_to_bind_a_non_loopback_address() {
+        let error = PairingListener::bind(
+            SocketAddr::from(([0, 0, 0, 0], 0)),
+            EphemeralCertificate::generate().expect("certificate"),
+        )
+        .await
+        .expect_err("pairing listeners must be loopback-only");
+
+        assert!(error.to_string().contains("loopback"));
     }
 
     #[test]

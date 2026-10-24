@@ -1,9 +1,3 @@
-//! The pinned pairing client.
-//!
-//! The client trusts exactly one SHA-256 fingerprint: the one the QR payload
-//! carries. No root store is consulted, TLS 1.3 is the only version offered,
-//! and a mismatch aborts the connection. There is one attempt and no fallback.
-
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -80,8 +74,6 @@ impl ServerCertVerifier for ExactPinVerifier {
         Err(self.rejection.record(ReasonCode::CertificatePinMismatch))
     }
 
-    /// TLS 1.2 is never offered, so this hook can only be reached by a peer
-    /// that ignores the version negotiation. It refuses instead of verifying.
     fn verify_tls12_signature(
         &self,
         _message: &[u8],
@@ -135,7 +127,6 @@ fn client_config(
     Ok(config)
 }
 
-/// A client that reaches exactly one pinned pairing listener.
 pub struct PinnedClient {
     fingerprint: [u8; 32],
     config: Arc<ClientConfig>,
@@ -143,7 +134,6 @@ pub struct PinnedClient {
 }
 
 impl PinnedClient {
-    /// Builds a client that trusts exactly `fingerprint`.
     pub fn new(fingerprint: [u8; 32]) -> Result<Self, PairingError> {
         let rejection = Arc::new(RejectionState::default());
         let config = client_config(fingerprint, &rejection)?;
@@ -154,15 +144,10 @@ impl PinnedClient {
         })
     }
 
-    /// The exact fingerprint this client requires.
     pub fn fingerprint(&self) -> [u8; 32] {
         self.fingerprint
     }
 
-    /// Connects once and completes the TLS 1.3 handshake.
-    ///
-    /// A pin mismatch is terminal: the method returns the closed reason code and
-    /// does not try another address, another certificate or another version.
     pub async fn connect(&self, address: SocketAddr) -> Result<ClientChannel, PairingError> {
         self.rejection.clear();
         let stream = TcpStream::connect(address).await.map_err(|error| {
@@ -185,7 +170,6 @@ impl PinnedClient {
     }
 }
 
-/// The client side of an established pairing channel.
 pub struct ClientChannel {
     inner: TlsStream<TcpStream>,
 }
@@ -201,17 +185,14 @@ impl fmt::Debug for ClientChannel {
 }
 
 impl ClientChannel {
-    /// Whether the connection negotiated TLS 1.3.
     pub fn is_tls13(&self) -> bool {
         self.inner.get_ref().1.protocol_version() == Some(rustls::ProtocolVersion::TLSv1_3)
     }
 
-    /// The ALPN protocol the connection negotiated.
     pub fn alpn_protocol(&self) -> Option<&[u8]> {
         self.inner.get_ref().1.alpn_protocol()
     }
 
-    /// The address of the listener the channel reached.
     pub fn peer_addr(&self) -> std::io::Result<SocketAddr> {
         self.inner.get_ref().0.peer_addr()
     }

@@ -3873,6 +3873,7 @@ dependencies = [
  "subtle",
  "tokio",
  "tokio-rustls",
+ "zeroize",
 ]
 
 [[package]]

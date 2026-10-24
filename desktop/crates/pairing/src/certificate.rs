@@ -1,22 +1,13 @@
-//! Ephemeral, per-session TLS certificates.
-//!
-//! The certificate and its private key exist in memory only. The QR payload
-//! carries the SHA-256 of the DER-encoded leaf, and the mobile pins exactly that
-//! value, so no certificate authority or persisted key is involved.
-
 use std::fmt;
 
 use rcgen::KeyPair;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use sha2::{Digest, Sha256};
 
-/// The subject alternative name carried by every ephemeral certificate.
 pub const CERTIFICATE_SERVER_NAME: &str = "remotecam.local";
 
-/// Failure while creating the ephemeral certificate.
 #[derive(Debug)]
 pub enum CertificateError {
-    /// The generator refused to create the certificate or the key.
     Generation(rcgen::Error),
 }
 
@@ -42,12 +33,10 @@ impl From<rcgen::Error> for CertificateError {
     }
 }
 
-/// The SHA-256 digest of a DER-encoded certificate.
 pub fn sha256_fingerprint(der: &[u8]) -> [u8; 32] {
     Sha256::digest(der).into()
 }
 
-/// One in-memory ECDSA P-256 certificate and its private key.
 pub struct EphemeralCertificate {
     der: CertificateDer<'static>,
     key: PrivateKeyDer<'static>,
@@ -65,7 +54,6 @@ impl fmt::Debug for EphemeralCertificate {
 }
 
 impl EphemeralCertificate {
-    /// Generates a fresh self-signed certificate for one session.
     pub fn generate() -> Result<Self, CertificateError> {
         let certified =
             rcgen::generate_simple_self_signed(vec![CERTIFICATE_SERVER_NAME.to_owned()])?;
@@ -85,12 +73,10 @@ impl EphemeralCertificate {
         }
     }
 
-    /// The DER-encoded leaf certificate.
     pub fn der_bytes(&self) -> &[u8] {
         self.der.as_ref()
     }
 
-    /// The exact SHA-256 fingerprint the QR payload carries.
     pub fn fingerprint(&self) -> [u8; 32] {
         self.fingerprint
     }
