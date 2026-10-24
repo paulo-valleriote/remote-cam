@@ -16,8 +16,8 @@
 - No `spikes/` file may be imported by `desktop/` or `mobile/`.
 - No spike is promoted without a new implementation task in the product (`README.md` rule 4).
 - Quality = documented procedure + evidence (`spikes/evidence/`), **not** test coverage (`spikes/` exempt from ≥90% gate).
-- All source carries `NON-PRODUCTION — F0 risk-reduction spike (FR-039)`. Quarantined source is already marked or is covered by ADR-0003.
-- Each `Cargo.toml`: `publish = false`, `edition = "2024"`, description "NON-PRODUCTION".
+- Each spike crate or module is marked `NON-PRODUCTION — F0 risk-reduction spike (FR-039)` in its manifest, entry module or README. The marker need not repeat in every file; quarantined code is marked once and covered by ADR-0003.
+- Each spike `Cargo.toml`: `publish = false`, `edition = "2024"`, and a `description` naming it NON-PRODUCTION.
 - Python `pyproject.toml`: `remotecam-spike-tools`, `python >= 3.12`, `publish = false`.
 
 ## Context and architecture

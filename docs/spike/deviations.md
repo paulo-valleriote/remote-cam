@@ -89,6 +89,8 @@ recommended.
 
 ## D4 — F0 harness implementations live under product crates until replaced
 
+**Status:** closed on 2026-10-24 by [ADR-0003](../adr/0003-f0-code-quarantine.md); the text below records the deviation as approved at F0 closure.
+
 **Deviation:** The F0 implementations remain under
 `desktop/crates/{signaling,media-core,injection,audio-bridge,app}` and
 `mobile/core` even though they are marked `NON-PRODUCTION`. FR-039 says spike
@@ -110,6 +112,16 @@ and the review rule remain in force in the meantime.
 
 **Rollback:** Quarantine each crate/module under `spikes/` when its owning phase
 starts, updating the path dependencies and CI lanes in the same delivery.
+
+**Resolution (F1-01, 2026-10-24):** The quarantine landed as the rollback
+described. The Rust crates moved to `spikes/f0-signaling`, `spikes/f0-media-core`,
+`spikes/f0-injection` and `spikes/f0-audio-bridge`; the DirectShow fallback moved
+to `spikes/f0-dshow-vcam-fallback`; `mobile/core` and `mobile/app` moved to
+`spikes/f0-mobile-core` and `spikes/f0-mobile-app`. `desktop/crates/app` remains
+in the product tree: it carries no `NON-PRODUCTION` marker and owns the
+structured-logging implementation, so D4's listing of it is superseded by
+ADR-0003. Path dependencies, the Makefile and the READMEs were updated in the
+same delivery.
 
 **Approval:** Approved by Paulo Valleriote on 2026-10-23.
 

@@ -1,3 +1,5 @@
+// QUARANTINED F0 RECORD — NON-PRODUCTION. Not wired into the mobile/ Gradle
+// build and not built. See the module README and ADR-0003.
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)

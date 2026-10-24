@@ -2,14 +2,14 @@
 Version history
 ===============
 1.1.0 — 2026-10-21
-  Modified principles:
-    - I. Qualidade de Código → I. Code Quality (translated; documentation language rule expanded)
-    - II. Testabilidade → II. Testability (translated)
-    - III. Manutenibilidade e Observabilidade → III. Maintainability and Observability (translated)
-  Modified sections:
-    - Estrutura de Pastas e Limites de Módulo → Project Structure and Module Boundaries
-    - Fluxo de Desenvolvimento e Portões de Qualidade → Development Workflow and Quality Gates
-    - Governance (translated)
+  Modified principles (titles harmonised to English):
+    - I. Code Quality (documentation language rule expanded)
+    - II. Testability
+    - III. Maintainability and Observability
+  Modified sections (titles harmonised to English):
+    - Project Structure and Module Boundaries
+    - Development Workflow and Quality Gates
+    - Governance
   Added rules:
     - All project documentation MUST be written in English (constitution, READMEs, docs/,
       specifications, plans, review artifacts)
@@ -19,8 +19,8 @@ Version history
 1.0.0 — 2026-10-21 (initial adoption)
 
 This file is the canonical project constitution. It is referenced by the root
-`AGENTS.md`; the F1 decision to move it out of the retired speckit directory is
-recorded in docs/adr/0001-jira-source-of-truth.md.
+`AGENTS.md`; the F1 decision to move it out of the retired planning-tool
+directory is recorded in docs/adr/0001-jira-source-of-truth.md.
 -->
 
 # Remotecam Constitution

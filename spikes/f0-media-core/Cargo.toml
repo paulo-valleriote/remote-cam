@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.92"
 license = "Proprietary"
 publish = false
+description = "Quarantined F0 media-core spike crate - NON-PRODUCTION"
 
 # NON-PRODUCTION — quarantined F0 risk-reduction spike (FR-039). Nothing here
 # merges into `desktop/` or `mobile/`; see docs/adr/0003-f0-code-quarantine.md.

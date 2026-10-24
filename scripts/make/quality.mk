@@ -1,6 +1,6 @@
 .PHONY: test coverage lint
 
-test: ## Run the desktop, mobile and measurement-tooling tests
+test: ## Run the desktop, Android and spike-tooling tests
 	$(CARGO) test --manifest-path desktop/Cargo.toml --workspace
 	$(CARGO) test --manifest-path spikes/f0-signaling/Cargo.toml
 	$(CARGO) test --manifest-path spikes/f0-media-core/Cargo.toml

@@ -32,6 +32,11 @@ shared contracts and the product shell:
 | `mobile/protocol` | unchanged | delivered contract |
 | `desktop/crates/app` | unchanged | product shell and structured logging; never marked non-production |
 
+Deviation D4 listed `desktop/crates/app` in its scope, but the crate carries no
+`NON-PRODUCTION` marker and owns the structured-logging implementation the
+product keeps. It therefore stays in the product tree; this ADR narrows D4's
+scope explicitly rather than silently.
+
 Quarantine rules:
 
 - Quarantined crates have standalone `Cargo.toml` manifests with exact
