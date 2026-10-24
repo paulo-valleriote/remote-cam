@@ -26,7 +26,7 @@
 
 - **Format:** `kotlinx-serialization-json` (1.12.0). Zero `.proto` files exist.
 - **Usage in `:protocol`:** `buildJsonObject`, `Json.parseToJsonElement`, `JsonPrimitive`, `encodeToString`. `SignalingEncoder` produces canonical JSON; `SignalingParser` rejects unknown fields and versions `> 1`.
-- **Rule:** never use `getText()` for QR reading; always `Result.getBytes()` + `QrPayload.decode()`.
+- **Rule:** never use `getText()` for QR reading; always `Result.getBytes()` + `QrPayload.decode(bytes, nowUnix)`.
 
 ### 2. Strict parsing (no deviations tolerated)
 
@@ -35,7 +35,7 @@
   - `version > 1` (`UNSUPPORTED_VERSION`).
   - Messages `> 16 KiB` (`MAX_MESSAGE_BYTES`).
   - Uppercase hex (`0123456789ABCDEF` rejected; only `abcdef` accepted).
-- `QrPayload.decode()` validates magic (`RCM1`), version (`1`), capabilities mask (`0xffc0` reserved bits must be zero), endpoint count, private-address rules, and expiry (`expiresAt > nowUnix`).
+- `QrPayload.decode(bytes, nowUnix)` validates magic (`RCM1`), version (`1`), capabilities mask (`0xffc0` reserved bits must be zero), endpoint count, private-address rules, and expiry (`expiresAt > nowUnix`). `isStructurallyValid()` is the clock-free subset; `isExpiredAt(nowUnix)` is the explicit expiry check.
 - `Addresses` — documented IPv4/IPv6 regex; APIPA (`169.254.*`) is excluded despite regex presence.
 
 ### 3. `:protocol` module — shared contract
