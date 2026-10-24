@@ -21,5 +21,6 @@ fn the_headless_binary_emits_one_json_line_and_exits_zero() {
 
     let report: Value = serde_json::from_str(lines[0]).expect("the report is valid JSON");
     assert_eq!(report["verdict"], "pass");
-    assert_eq!(report["scenario"], "scaffold");
+    assert_eq!(report["scenario"], "pairing");
+    assert_eq!(report["observed_state"], "connected");
 }

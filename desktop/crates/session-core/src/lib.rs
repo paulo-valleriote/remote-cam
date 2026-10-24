@@ -1,5 +1,12 @@
 //! RemoteCam Session Core: the product session state machine and vocabulary.
 
+use std::fmt;
+
+use remotecam_protocol::ReasonCode;
+use remotecam_protocol::signaling::{Limits, SignalingMessage, parse_signaling};
+use subtle::ConstantTimeEq;
+use zeroize::{Zeroize, Zeroizing};
+
 pub mod testing;
 
 /// The lifecycle position of the single session a desktop may hold.
@@ -77,6 +84,63 @@ impl SessionId {
     }
 }
 
+/// The single-use secret carried in the desktop's pairing material.
+pub struct PairingToken(Zeroizing<[u8; 32]>);
+
+impl PairingToken {
+    fn new(bytes: [u8; 32]) -> Self {
+        Self(Zeroizing::new(bytes))
+    }
+
+    /// The token bytes used to construct the QR payload.
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    fn matches(&self, candidate: &[u8; 32]) -> bool {
+        bool::from(self.0.ct_eq(candidate))
+    }
+}
+
+impl fmt::Debug for PairingToken {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("PairingToken([REDACTED])")
+    }
+}
+
+impl PartialEq for PairingToken {
+    fn eq(&self, other: &Self) -> bool {
+        self.matches(&other.0)
+    }
+}
+
+impl Eq for PairingToken {}
+
+/// The short-lived material the desktop presents for one pairing attempt.
+#[derive(Debug, PartialEq, Eq)]
+pub struct PairingMaterial {
+    session_id: SessionId,
+    epoch: u64,
+    token: PairingToken,
+}
+
+impl PairingMaterial {
+    /// The identity of the pairing attempt.
+    pub const fn session_id(&self) -> SessionId {
+        self.session_id
+    }
+
+    /// The process-local session generation.
+    pub const fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    /// The single-use token to include in the QR payload.
+    pub const fn token(&self) -> &PairingToken {
+        &self.token
+    }
+}
+
 /// An input the Session Core decides on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SessionEvent {
@@ -84,8 +148,6 @@ pub enum SessionEvent {
     StartPairing,
     /// A peer opened the pinned channel.
     PeerConnected,
-    /// The peer proved it holds the pairing token.
-    PairAuthenticated,
     /// Offer and answer completed negotiation.
     NegotiationCompleted,
     /// One side ended an established session.
@@ -93,16 +155,65 @@ pub enum SessionEvent {
 }
 
 /// An action an adapter performs after the Session Core decides.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq)]
 pub enum Effect {
     /// Show the pairing material for the freshly assigned session.
-    PresentPairing { session_id: SessionId },
+    PresentPairing(PairingMaterial),
     /// Send the authenticated peer the `paired` frame.
-    SendPaired,
+    SendPaired {
+        session_id: SessionId,
+        epoch: u64,
+        dtls_fingerprint: [u8; 32],
+        accepted_limits: Limits,
+    },
     /// Start the media pipeline.
     StartMedia,
     /// Release the session resources.
     End,
+}
+
+impl fmt::Debug for Effect {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PresentPairing(material) => formatter
+                .debug_tuple("PresentPairing")
+                .field(material)
+                .finish(),
+            Self::SendPaired {
+                session_id,
+                epoch,
+                accepted_limits,
+                ..
+            } => formatter
+                .debug_struct("SendPaired")
+                .field("session_id", session_id)
+                .field("epoch", epoch)
+                .field("dtls_fingerprint", &"[REDACTED]")
+                .field("accepted_limits", accepted_limits)
+                .finish(),
+            Self::StartMedia => formatter.write_str("StartMedia"),
+            Self::End => formatter.write_str("End"),
+        }
+    }
+}
+
+/// A rejected first-frame pairing attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PairingError {
+    ProtocolViolation,
+    TokenInvalid,
+    TokenAlreadyUsed,
+}
+
+impl PairingError {
+    /// The stable rejection reason exposed to the transport adapter.
+    pub const fn code(self) -> ReasonCode {
+        match self {
+            Self::ProtocolViolation => ReasonCode::ProtocolViolation,
+            Self::TokenInvalid => ReasonCode::TokenInvalid,
+            Self::TokenAlreadyUsed => ReasonCode::TokenAlreadyUsed,
+        }
+    }
 }
 
 /// The closed code set for a rejected event.
@@ -160,17 +271,23 @@ pub struct SessionCore<C: Clock, R: RandomSource> {
     clock: C,
     random: R,
     session_id: Option<SessionId>,
+    epoch: Option<u64>,
+    pairing_token: Option<PairingToken>,
+    desktop_dtls_fingerprint: [u8; 32],
     last_transition_at: Timestamp,
 }
 
 impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     /// Creates a core that rests in `Idle` until the first event arrives.
-    pub fn new(clock: C, random: R) -> Self {
+    pub fn new(clock: C, random: R, desktop_dtls_fingerprint: [u8; 32]) -> Self {
         Self {
             state: SessionState::Idle,
             clock,
             random,
             session_id: None,
+            epoch: None,
+            pairing_token: None,
+            desktop_dtls_fingerprint,
             last_transition_at: Timestamp::ZERO,
         }
     }
@@ -183,6 +300,11 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     /// The identity of the pairing in progress, if one has started.
     pub fn session_id(&self) -> Option<SessionId> {
         self.session_id
+    }
+
+    /// The generation assigned to the current pairing, if one has started.
+    pub fn epoch(&self) -> Option<u64> {
+        self.epoch
     }
 
     /// The injected clock reading captured at the last accepted transition.
@@ -205,20 +327,88 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         Ok(effects)
     }
 
+    /// Authenticates the required first signaling frame from a connected peer.
+    pub fn authenticate_first_frame(&mut self, frame: &[u8]) -> Result<Effect, PairingError> {
+        if matches!(
+            self.state,
+            SessionState::Negotiating | SessionState::Connected
+        ) {
+            return Err(PairingError::TokenAlreadyUsed);
+        }
+
+        if self.state != SessionState::Handshaking {
+            self.reject_pairing_frame();
+            return Err(PairingError::ProtocolViolation);
+        }
+
+        let message = match parse_signaling(frame) {
+            Ok(message) => message,
+            Err(_) => {
+                self.reject_pairing_frame();
+                return Err(PairingError::ProtocolViolation);
+            }
+        };
+
+        let SignalingMessage::Pair {
+            mut token, limits, ..
+        } = message
+        else {
+            self.reject_pairing_frame();
+            return Err(PairingError::ProtocolViolation);
+        };
+
+        let Some(expected_token) = self.pairing_token.as_ref() else {
+            token.zeroize();
+            self.reject_pairing_frame();
+            return Err(PairingError::ProtocolViolation);
+        };
+        let token_matches = expected_token.matches(&token);
+        token.zeroize();
+
+        if !token_matches {
+            return Err(PairingError::TokenInvalid);
+        }
+
+        drop(self.pairing_token.take());
+        self.state = SessionState::Negotiating;
+        self.last_transition_at = self.clock.now();
+
+        Ok(Effect::SendPaired {
+            session_id: self.session_id.expect("pairing has a session identity"),
+            epoch: self.epoch.expect("pairing has an epoch"),
+            dtls_fingerprint: self.desktop_dtls_fingerprint,
+            accepted_limits: limits,
+        })
+    }
+
+    fn reject_pairing_frame(&mut self) {
+        self.state = SessionState::Ended;
+        drop(self.pairing_token.take());
+        self.last_transition_at = self.clock.now();
+    }
+
     fn transition(&mut self, event: SessionEvent) -> Option<(SessionState, Vec<Effect>)> {
         match (self.state, event) {
             (SessionState::Idle, SessionEvent::StartPairing) => {
                 let session_id = self.assign_session_id();
+                let epoch = 1;
+                self.epoch = Some(epoch);
+                let mut token_bytes = [0u8; 32];
+                self.random.fill_bytes(&mut token_bytes);
+                self.pairing_token = Some(PairingToken::new(token_bytes));
+                let material = PairingMaterial {
+                    session_id,
+                    epoch,
+                    token: PairingToken::new(token_bytes),
+                };
+                token_bytes.zeroize();
                 Some((
                     SessionState::PairingReady,
-                    vec![Effect::PresentPairing { session_id }],
+                    vec![Effect::PresentPairing(material)],
                 ))
             }
             (SessionState::PairingReady, SessionEvent::PeerConnected) => {
                 Some((SessionState::Handshaking, Vec::new()))
-            }
-            (SessionState::Handshaking, SessionEvent::PairAuthenticated) => {
-                Some((SessionState::Negotiating, vec![Effect::SendPaired]))
             }
             (SessionState::Negotiating, SessionEvent::NegotiationCompleted) => {
                 Some((SessionState::Connected, vec![Effect::StartMedia]))
@@ -241,7 +431,21 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SessionState, TransitionError, TransitionErrorCode};
+    use super::{PairingError, SessionState, TransitionError, TransitionErrorCode};
+    use remotecam_protocol::ReasonCode;
+
+    #[test]
+    fn pairing_failures_map_to_the_closed_reason_codes() {
+        assert_eq!(
+            PairingError::ProtocolViolation.code(),
+            ReasonCode::ProtocolViolation
+        );
+        assert_eq!(PairingError::TokenInvalid.code(), ReasonCode::TokenInvalid);
+        assert_eq!(
+            PairingError::TokenAlreadyUsed.code(),
+            ReasonCode::TokenAlreadyUsed
+        );
+    }
 
     #[test]
     fn every_state_has_a_stable_report_label() {
