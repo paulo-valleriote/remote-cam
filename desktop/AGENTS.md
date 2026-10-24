@@ -3,7 +3,7 @@
 > Desktop-specific rules. Do NOT apply to `mobile/`, `protocol/`, or `spikes/`.
 
 **Quick start:**
-- **Scope:** `desktop/` only — Rust workspace, 3 crates, MSRV 1.92; pinned toolchain 1.99.1 via `rust-toolchain.toml`.
+- **Scope:** `desktop/` only — Rust workspace, 4 crates, MSRV 1.92; pinned toolchain 1.99.1 via `rust-toolchain.toml`.
 - **Hard rules:**
   - All dependencies are pinned with `=`; `Cargo.lock` is versioned.
   - Windows APIs only behind `cfg(windows)`, targeting the Windows 11 SDK.
@@ -16,7 +16,7 @@
 ## Context and architecture
 
 - **Rust workspace:** `Cargo.toml` resolver 3, edition 2024, MSRV 1.92, version 0.1.0.
-- **Crates (3):** `protocol` (delivered contract), `session-core` (product session state machine) and `app` (product shell and structured logging).
+- **Crates (4):** `protocol` (delivered contract), `session-core` (product session state machine), `pairing` (ephemeral certificate, pairing material, pinned TLS 1.3 listener/client; ADR-0009) and `app` (product shell and structured logging).
 - **Toolchain:** `rust-toolchain.toml` — `1.99.1`, components `clippy` + `rustfmt`, profile `minimal`.
 - **Build:** `make build-desktop` = `cargo build --manifest-path desktop/Cargo.toml --workspace`. It does not build `harness/`, which is a separate workspace.
 - **No executable entry point** (`main`) in this phase; the product harness is under `harness/` and the F0 harnesses are under `spikes/`.
@@ -60,6 +60,7 @@ injection and media-core crates by relative path.
 
 - `protocol/` — gate ≥90%. `tests/contract.rs` (vectors from `protocol/vectors/`), `tests/signaling_encoding.rs` (canonical emission and round-trip), `bin/conformance.rs`.
 - `session-core/` — gate ≥90%. Deterministic tests through `handle(event)`. The clock and randomness enter only through the `Clock` and `RandomSource` traits; `testing::{ManualClock, SeededRandomSource}` provide the reproducible implementations used by tests and the harness. A rejected event carries the local closed code `invalid_transition`; it is a state-machine code, not part of the closed wire reason set in `protocol/reason-codes.json`.
+- `pairing/` — gate ≥90%. Unit tests cover the certificate, material and error mapping; `tests/loopback.rs` runs the real TLS 1.3 handshake over a loopback socket (exact pin accepted, divergent pin aborted with `certificate_pin_mismatch`, TLS 1.2 refused with `tls_version_unsupported`, no fallback on a closed port) and exchanges bytes in both directions. Tokens and full fingerprints never appear in `Debug` or error text.
 - `app/` — log formatting/redaction tests.
 - No `spikes/` module is imported by any crate here.
 
