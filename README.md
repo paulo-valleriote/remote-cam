@@ -160,18 +160,18 @@ exact pinned certificate, and exchanges `pair`, `paired`, `offer` and `answer`
 over the authenticated channel. Since QR v1 excludes loopback addresses, the
 synthetic client routes the valid advertised private endpoint's port to the
 loopback listener. After `answer`, the harness supplies two deterministic,
-in-process synthetic frames 33 ms apart; the Session Core reaches `connected`
-only after the first frame, then the session closes cleanly. The opaque
-version-1 answer is not parsed for media negotiation. The report includes the
-state trace, frame sequence/timestamps, and post-close resource counts; it
-excludes the pairing token, fingerprints, and frame payload bytes. The public
+in-process synthetic frames at logical timestamps 33 ms apart. The Session Core
+reaches `connected` only after the first frame, then the session closes cleanly.
+The opaque version-1 answer is not parsed for media negotiation. The report
+includes the state trace, frame sequence/timestamps, and post-close resource
+counts; it excludes the pairing token, fingerprints, and frame payload bytes. The public
 `run_with` API also supports a first-frame-timeout scenario: it returns
 `outcome: timed_out` at `idle`, records a frame arriving 33 ms after the
-3-second deadline as discarded, and reports released resources. Normal runtime
-uses real timers while tests drive the logical clock virtually. An integration
-test also verifies that a divergent QR pin is rejected after one connection
-attempt, with no fallback. The injected clock and RNG make the scenario
-reproducible. Nothing under `spikes/` is imported. A failed scenario includes
+3-second deadline as discarded, and reports released resources. Scenario
+timing advances the injected logical clock without waiting on real timers. An
+integration test also verifies that a divergent QR pin is rejected after one
+connection attempt, with no fallback. The injected clock and RNG make the
+scenario reproducible. Nothing under `spikes/` is imported. A failed scenario includes
 its reason code in the report (FR-039,
 [ADR-0007](docs/adr/0007-harness-location.md),
 [ADR-0008](docs/adr/0008-harness-dependency-baseline.md),
@@ -189,7 +189,7 @@ final `observed_state` is `ended` after cleanup):
 Timeout scenario report line:
 
 ```json
-{"report_version":2,"scenario":"first_frame_timeout","outcome":"timed_out","observed_state":"idle","message_sequence":["pair","paired","offer","answer"],"state_trace":[{"from":"idle","to":"pairing_ready","at_millis":0},{"from":"pairing_ready","to":"handshaking","at_millis":0},{"from":"handshaking","to":"negotiating","at_millis":0},{"from":"negotiating","to":"idle","at_millis":3000,"cause":"timeout"}],"frames":[],"late_frame_discarded":{"sequence":0,"at_millis":3033,"reason":"timeout"},"resources":{"listeners":{"created":1,"active_after_close":0},"connections":{"created":1,"active_after_close":0},"media_ports":{"created":1,"active_after_close":0},"tasks":{"created":1,"active_after_close":0}},"verdict":"pass","summary":{"scenarios":1,"passed":1,"failed":0}}
+{"report_version":2,"scenario":"first_frame_timeout","outcome":"timed_out","observed_state":"idle","message_sequence":["pair","paired","offer","answer"],"state_trace":[{"from":"idle","to":"pairing_ready","at_millis":0},{"from":"pairing_ready","to":"handshaking","at_millis":0},{"from":"handshaking","to":"negotiating","at_millis":0},{"from":"negotiating","to":"idle","at_millis":3001,"cause":"timeout"}],"frames":[],"late_frame_discarded":{"sequence":0,"at_millis":3033,"reason":"timeout"},"resources":{"listeners":{"created":1,"active_after_close":0},"connections":{"created":1,"active_after_close":0},"media_ports":{"created":1,"active_after_close":0},"tasks":{"created":1,"active_after_close":0}},"verdict":"pass","summary":{"scenarios":1,"passed":1,"failed":0}}
 ```
 
 ## Debugging

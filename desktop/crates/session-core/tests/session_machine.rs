@@ -231,11 +231,11 @@ fn a_frame_after_the_deadline_is_rejected() {
 }
 
 #[test]
-fn a_first_frame_timeout_before_the_deadline_is_rejected() {
+fn a_first_frame_timeout_at_the_deadline_is_rejected() {
     let (mut core, clock) = core_in(SessionState::Negotiating, 7);
     core.handle(SessionEvent::NegotiationCompleted)
         .expect("negotiation starts the media deadline");
-    clock.advance(2_999);
+    clock.advance(3_000);
 
     let result = core.handle(SessionEvent::FirstFrameTimedOut);
 
@@ -248,7 +248,7 @@ fn a_first_frame_timeout_resets_the_attempt_to_idle() {
     let (mut core, clock) = core_in(SessionState::Negotiating, 7);
     core.handle(SessionEvent::NegotiationCompleted)
         .expect("negotiation starts the media deadline");
-    clock.advance(3_000);
+    clock.advance(3_001);
 
     let effects = core
         .handle(SessionEvent::FirstFrameTimedOut)
@@ -258,7 +258,7 @@ fn a_first_frame_timeout_resets_the_attempt_to_idle() {
     assert_eq!(effects, vec![Effect::End]);
     assert_eq!(core.session_id(), None);
     assert_eq!(core.epoch(), None);
-    assert_eq!(core.last_transition_at(), Timestamp::from_millis(3_000));
+    assert_eq!(core.last_transition_at(), Timestamp::from_millis(3_001));
 }
 
 #[test]

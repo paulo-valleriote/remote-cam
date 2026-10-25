@@ -1,4 +1,4 @@
-PYTHON ?= python3
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 # Resolve a relative interpreter path (for example spikes/tools/.venv/bin/python)
 # before a recipe changes directory. Bare commands such as python3 pass through.
 PYTHON_BIN = $(if $(wildcard $(PYTHON)),$(abspath $(PYTHON)),$(PYTHON))

@@ -1,11 +1,5 @@
 //! The product harness: a headless driver for the RemoteCam pairing path.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
-use std::time::Duration;
-
 use remotecam_pairing::{
     EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient,
 };
@@ -19,9 +13,12 @@ use remotecam_session_core::{
     SessionCore, SessionEvent, SessionState, Timestamp,
 };
 use serde::Serialize;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::runtime::Builder;
-use tokio::time::sleep;
 use zeroize::{Zeroize, Zeroizing};
 
 const PAIRING_SEED: u64 = 0;
@@ -46,7 +43,6 @@ impl RandomSource for HarnessCertificateRandomSource {
 
 impl remotecam_pairing::certificate::CertificateRandomSource for HarnessCertificateRandomSource {}
 
-/// Selects the product-harness scenario to execute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScenarioKind {
     Pairing,
@@ -62,14 +58,10 @@ impl ScenarioKind {
     }
 }
 
-/// Inputs that make a harness scenario reproducible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScenarioConfig {
-    /// The scenario to execute.
     pub scenario: ScenarioKind,
-    /// The seed shared by pairing and synthetic media generation.
     pub seed: u64,
-    /// The initial instant on the scenario's logical clock.
     pub clock_start: Timestamp,
 }
 
@@ -99,7 +91,6 @@ pub struct Summary {
     pub failed: u32,
 }
 
-/// The session-level result observed while running a scenario.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Outcome {
@@ -108,7 +99,6 @@ pub enum Outcome {
     Failed,
 }
 
-/// One state transition captured by the scenario driver.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StateTransition {
     pub from: &'static str,
@@ -118,14 +108,12 @@ pub struct StateTransition {
     pub cause: Option<&'static str>,
 }
 
-/// The reportable metadata for one synthetic frame.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FrameObservation {
     pub sequence: u64,
     pub at_millis: u64,
 }
 
-/// A frame event discarded after the session timed out.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DiscardedFrame {
     pub sequence: u64,
@@ -133,14 +121,12 @@ pub struct DiscardedFrame {
     pub reason: &'static str,
 }
 
-/// Resource lifecycle counts captured after a scenario closes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct ResourceCount {
     pub created: usize,
     pub active_after_close: usize,
 }
 
-/// Lifecycle counts for resources owned by the harness scenario.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct ResourceReport {
     pub listeners: ResourceCount,
@@ -370,13 +356,8 @@ pub fn run() -> HarnessReport {
     run_with(ScenarioConfig::default())
 }
 
-/// Runs a deterministic harness scenario using the supplied seed and clock.
 pub fn run_with(config: ScenarioConfig) -> HarnessReport {
-    let runtime = match Builder::new_current_thread()
-        .enable_io()
-        .enable_time()
-        .build()
-    {
+    let runtime = match Builder::new_current_thread().enable_io().build() {
         Ok(runtime) => runtime,
         Err(_) => {
             let mut report = HarnessReport::for_pairing_result(
@@ -710,7 +691,6 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
     match config.scenario {
         ScenarioKind::Pairing => {
             for _ in 0..2 {
-                sleep(Duration::from_millis(FRAME_INTERVAL_MILLIS)).await;
                 clock.advance(FRAME_INTERVAL_MILLIS);
                 let Some(frame) = media_port.next_frame() else {
                     return HarnessReport::for_pairing_result(
@@ -775,8 +755,7 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
             report
         }
         ScenarioKind::FirstFrameTimeout => {
-            sleep(Duration::from_millis(FIRST_MEDIA_FRAME_TIMEOUT_MILLIS)).await;
-            clock.advance(FIRST_MEDIA_FRAME_TIMEOUT_MILLIS);
+            clock.advance(FIRST_MEDIA_FRAME_TIMEOUT_MILLIS + 1);
             let previous_state = core.state();
             let effects = match core.handle(SessionEvent::FirstFrameTimedOut) {
                 Ok(effects) => effects,
@@ -804,8 +783,7 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
                 Some("timeout"),
             );
 
-            sleep(Duration::from_millis(FRAME_INTERVAL_MILLIS)).await;
-            clock.advance(FRAME_INTERVAL_MILLIS);
+            clock.advance(FRAME_INTERVAL_MILLIS - 1);
             let late_frame = MediaFrame {
                 sequence: 0,
                 timestamp: clock.now(),
@@ -974,8 +952,6 @@ mod tests {
     fn run_virtual(config: ScenarioConfig) -> HarnessReport {
         let runtime = Builder::new_current_thread()
             .enable_io()
-            .enable_time()
-            .start_paused(true)
             .build()
             .expect("the test runtime can be created");
         runtime.block_on(run_pairing(config, ResourceTracker::default()))
@@ -1049,7 +1025,7 @@ mod tests {
         assert!(report.state_trace.iter().any(|transition| {
             transition.from == "negotiating"
                 && transition.to == "idle"
-                && transition.at_millis == 100 + FIRST_MEDIA_FRAME_TIMEOUT_MILLIS
+                && transition.at_millis == 100 + FIRST_MEDIA_FRAME_TIMEOUT_MILLIS + 1
                 && transition.cause == Some("timeout")
         }));
         assert_eq!(

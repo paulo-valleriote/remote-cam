@@ -1,7 +1,7 @@
 use remotecam_harness::{
     HarnessReport, Outcome, ScenarioConfig, ScenarioKind, Verdict, run, run_with,
 };
-use remotecam_session_core::{SessionState, Timestamp};
+use remotecam_session_core::{FIRST_MEDIA_FRAME_TIMEOUT_MILLIS, SessionState, Timestamp};
 
 #[test]
 fn the_pairing_scenario_reaches_connected_and_passes() {
@@ -87,6 +87,14 @@ fn the_public_timeout_scenario_reports_cleanup_and_a_discarded_late_frame() {
     assert_eq!(report.outcome, Outcome::TimedOut);
     assert_eq!(report.observed_state, "idle");
     assert_eq!(report.verdict, Verdict::Pass);
+    assert_eq!(
+        report
+            .state_trace
+            .last()
+            .expect("timeout is recorded in the state trace")
+            .at_millis,
+        FIRST_MEDIA_FRAME_TIMEOUT_MILLIS + 1
+    );
     assert_eq!(
         report.late_frame_discarded,
         Some(remotecam_harness::DiscardedFrame {
