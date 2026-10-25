@@ -17,6 +17,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
+use std::{ffi::OsString, fmt, process::Command};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::runtime::Builder;
 use zeroize::{Zeroize, Zeroizing};
@@ -46,14 +47,23 @@ impl remotecam_pairing::certificate::CertificateRandomSource for HarnessCertific
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScenarioKind {
     Pairing,
+    PinMismatch,
     FirstFrameTimeout,
 }
 
 impl ScenarioKind {
     const fn as_str(self) -> &'static str {
         match self {
-            Self::Pairing => "pairing",
+            Self::Pairing => "pairing-happy-path",
+            Self::PinMismatch => "pin-mismatch-aborts",
             Self::FirstFrameTimeout => "first_frame_timeout",
+        }
+    }
+
+    const fn seed(self, seed: u64) -> u64 {
+        match self {
+            Self::PinMismatch => seed ^ 0xa5a5_5a5a_d3c1_b7e9,
+            Self::Pairing | Self::FirstFrameTimeout => seed,
         }
     }
 }
@@ -75,6 +85,100 @@ impl Default for ScenarioConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunOptions {
+    pub seed: u64,
+    pub clock_start_millis: u64,
+}
+
+impl Default for RunOptions {
+    fn default() -> Self {
+        Self {
+            seed: PAIRING_SEED,
+            clock_start_millis: PAIRING_CLOCK_START.as_millis(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HarnessError(String);
+
+impl fmt::Display for HarnessError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for HarnessError {}
+
+fn ensure_success(success: bool, message: &'static str) -> Result<(), HarnessError> {
+    if success {
+        Ok(())
+    } else {
+        Err(HarnessError(message.to_owned()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EnvironmentReport {
+    pub os: &'static str,
+    pub architecture: &'static str,
+    pub rustc_version: String,
+}
+
+impl EnvironmentReport {
+    fn current() -> Result<Self, HarnessError> {
+        let output = Command::new("rustc")
+            .arg("--version")
+            .output()
+            .map_err(|_| HarnessError("failed to execute rustc --version".to_owned()))?;
+        ensure_success(output.status.success(), "rustc --version failed")?;
+        let version = parse_rustc_version(&output.stdout)?;
+
+        Ok(Self {
+            os: std::env::consts::OS,
+            architecture: std::env::consts::ARCH,
+            rustc_version: version,
+        })
+    }
+}
+
+fn parse_rustc_version(output: &[u8]) -> Result<String, HarnessError> {
+    let output = String::from_utf8(output.to_vec())
+        .map_err(|_| HarnessError("rustc --version returned an invalid version".to_owned()))?;
+    let mut fields = output.split_whitespace();
+    if fields.next() != Some("rustc") {
+        return Err(HarnessError(
+            "rustc --version returned an invalid version".to_owned(),
+        ));
+    }
+    fields
+        .next()
+        .map(str::to_owned)
+        .ok_or_else(|| HarnessError("rustc --version returned an invalid version".to_owned()))
+}
+
+fn current_commit() -> Result<String, HarnessError> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--verify", "HEAD"])
+        .output()
+        .map_err(|_| HarnessError("failed to execute git rev-parse HEAD".to_owned()))?;
+    ensure_success(output.status.success(), "git rev-parse HEAD failed")?;
+
+    parse_commit(&output.stdout)
+}
+
+fn parse_commit(output: &[u8]) -> Result<String, HarnessError> {
+    let commit = String::from_utf8(output.to_vec())
+        .ok()
+        .map(|output| output.trim().to_owned())
+        .filter(|commit| {
+            matches!(commit.len(), 40 | 64) && commit.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+        .ok_or_else(|| HarnessError("git rev-parse HEAD returned an invalid commit".to_owned()))?;
+    Ok(commit)
+}
+
 /// The per-scenario outcome carried by the report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -94,9 +198,9 @@ pub struct Summary {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Outcome {
-    Connected,
+    Accepted,
+    Rejected,
     TimedOut,
-    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -150,10 +254,9 @@ impl Default for ResourceReport {
     }
 }
 
-/// The deterministic, machine-readable result of one harness run.
+/// The deterministic result of one scenario.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HarnessReport {
-    pub report_version: u32,
     pub scenario: &'static str,
     pub outcome: Outcome,
     pub observed_state: &'static str,
@@ -164,55 +267,189 @@ pub struct HarnessReport {
     pub late_frame_discarded: Option<DiscardedFrame>,
     pub resources: ResourceReport,
     pub verdict: Verdict,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub reason_code: Option<&'static str>,
-    pub summary: Summary,
 }
 
 impl HarnessReport {
-    /// Builds a report for a session state without a transport observation.
-    pub fn for_session_state(state: SessionState) -> Self {
-        let reason_code = (state != SessionState::Connected).then_some("internal_error");
-        Self::for_pairing_result(state, reason_code, Vec::new())
-    }
-
     fn for_pairing_result(
         state: SessionState,
         reason_code: Option<&'static str>,
         message_sequence: Vec<&'static str>,
     ) -> Self {
-        let passed = reason_code.is_none();
+        let outcome = if reason_code.is_some() {
+            Outcome::Rejected
+        } else {
+            Outcome::Accepted
+        };
         Self {
-            report_version: 2,
-            scenario: "pairing",
-            outcome: if passed {
-                Outcome::Connected
-            } else {
-                Outcome::Failed
-            },
+            scenario: ScenarioKind::Pairing.as_str(),
+            outcome,
             observed_state: state.as_str(),
             message_sequence,
             state_trace: Vec::new(),
             frames: Vec::new(),
             late_frame_discarded: None,
             resources: ResourceReport::default(),
-            verdict: if passed { Verdict::Pass } else { Verdict::Fail },
-            reason_code,
-            summary: Summary {
-                scenarios: 1,
-                passed: u32::from(passed),
-                failed: u32::from(!passed),
+            verdict: if outcome == Outcome::Accepted {
+                Verdict::Pass
+            } else {
+                Verdict::Fail
             },
+            reason_code,
         }
     }
 
-    fn invalid_qr_payload(state: SessionState) -> Self {
-        Self::for_pairing_result(state, Some("invalid_qr_payload"), Vec::new())
+    fn apply_scenario(&mut self, scenario: ScenarioKind) {
+        self.scenario = scenario.as_str();
+        let (expected_outcome, expected_reason_code) = match scenario {
+            ScenarioKind::Pairing => (Outcome::Accepted, None),
+            ScenarioKind::PinMismatch => (Outcome::Rejected, Some("certificate_pin_mismatch")),
+            ScenarioKind::FirstFrameTimeout => (Outcome::TimedOut, None),
+        };
+        self.verdict =
+            if self.outcome == expected_outcome && self.reason_code == expected_reason_code {
+                Verdict::Pass
+            } else {
+                Verdict::Fail
+            };
     }
+}
 
+struct ScenarioFailure {
+    scenario: ScenarioKind,
+    state: SessionState,
+    reason_code: &'static str,
+    message_sequence: Vec<&'static str>,
+}
+
+impl ScenarioFailure {
+    fn into_report(self) -> HarnessReport {
+        let mut report = HarnessReport::for_pairing_result(
+            self.state,
+            Some(self.reason_code),
+            self.message_sequence,
+        );
+        report.apply_scenario(self.scenario);
+        report
+    }
+}
+
+fn map_scenario_error<T, E>(
+    result: Result<T, E>,
+    scenario: ScenarioKind,
+    state: SessionState,
+    message_sequence: Vec<&'static str>,
+    reason_code: impl FnOnce(E) -> &'static str,
+) -> Result<T, ScenarioFailure> {
+    result.map_err(|error| ScenarioFailure {
+        scenario,
+        state,
+        reason_code: reason_code(error),
+        message_sequence,
+    })
+}
+
+fn failed_report(
+    scenario: ScenarioKind,
+    state: SessionState,
+    reason_code: &'static str,
+    message_sequence: Vec<&'static str>,
+) -> Result<HarnessReport, ScenarioFailure> {
+    Err(scenario_failure(
+        scenario,
+        state,
+        reason_code,
+        message_sequence,
+    ))
+}
+
+fn scenario_failure(
+    scenario: ScenarioKind,
+    state: SessionState,
+    reason_code: &'static str,
+    message_sequence: Vec<&'static str>,
+) -> ScenarioFailure {
+    ScenarioFailure {
+        scenario,
+        state,
+        reason_code,
+        message_sequence,
+    }
+}
+
+fn resolve_listener_address(
+    endpoints: &[Endpoint],
+    advertised_endpoint: &Endpoint,
+    listener_address: std::net::SocketAddr,
+) -> Result<std::net::SocketAddr, &'static str> {
+    let Some(endpoint) = endpoints.first() else {
+        return Err("invalid_qr_payload");
+    };
+    if endpoint.address_string().is_none() || endpoint != advertised_endpoint {
+        return Err("invalid_qr_payload");
+    }
+    Ok(listener_address)
+}
+
+fn pairing_material(
+    effects: &[Effect],
+) -> Result<&remotecam_session_core::PairingMaterial, &'static str> {
+    match effects {
+        [Effect::PresentPairing(material)] => Ok(material),
+        _ => Err("internal_error"),
+    }
+}
+
+/// The deterministic, machine-readable result of one harness run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RunReport {
+    pub report_version: u32,
+    pub contract_version: u32,
+    pub commit: String,
+    pub seed: u64,
+    pub clock_start_millis: u64,
+    pub environment: EnvironmentReport,
+    pub scenarios: Vec<HarnessReport>,
+    pub verdict: Verdict,
+    pub summary: Summary,
+}
+
+impl RunReport {
     /// Serialises the report as the single JSON line the harness prints.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
+    }
+
+    fn new(
+        options: RunOptions,
+        commit: String,
+        environment: EnvironmentReport,
+        scenarios: Vec<HarnessReport>,
+    ) -> Self {
+        let passed = scenarios
+            .iter()
+            .filter(|scenario| scenario.verdict == Verdict::Pass)
+            .count() as u32;
+        let failed = scenarios.len() as u32 - passed;
+        Self {
+            report_version: 3,
+            contract_version: 1,
+            commit,
+            seed: options.seed,
+            clock_start_millis: options.clock_start_millis,
+            environment,
+            scenarios,
+            verdict: if failed == 0 {
+                Verdict::Pass
+            } else {
+                Verdict::Fail
+            },
+            summary: Summary {
+                scenarios: passed + failed,
+                passed,
+                failed,
+            },
+        }
     }
 }
 
@@ -351,13 +588,86 @@ fn record_transition(
     }
 }
 
-/// Runs the deterministic pairing scenario through a loopback TLS listener.
-pub fn run() -> HarnessReport {
-    run_with(ScenarioConfig::default())
+/// Runs both deterministic report scenarios through the loopback TLS listener.
+pub fn run() -> Result<RunReport, HarnessError> {
+    run_with_options(RunOptions::default())
+}
+
+pub fn run_from_args(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<RunReport, HarnessError> {
+    let options = parse_run_options(arguments)?;
+    run_with_options(options)
+}
+
+pub fn run_with_options(options: RunOptions) -> Result<RunReport, HarnessError> {
+    let commit = current_commit()?;
+    let environment = EnvironmentReport::current()?;
+    let clock_start = Timestamp::from_millis(options.clock_start_millis);
+    let scenarios = [ScenarioKind::Pairing, ScenarioKind::PinMismatch]
+        .into_iter()
+        .map(|scenario| {
+            run_with(ScenarioConfig {
+                scenario,
+                seed: scenario.seed(options.seed),
+                clock_start,
+            })
+        })
+        .collect();
+
+    Ok(RunReport::new(options, commit, environment, scenarios))
+}
+
+fn parse_run_options(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<RunOptions, HarnessError> {
+    let mut options = RunOptions::default();
+    let mut seed_seen = false;
+    let mut clock_seen = false;
+    let mut arguments = arguments.into_iter();
+
+    while let Some(argument) = arguments.next() {
+        let argument = argument
+            .to_str()
+            .ok_or_else(|| HarnessError("arguments must be valid UTF-8".to_owned()))?;
+        let value = arguments
+            .next()
+            .ok_or_else(|| HarnessError(format!("missing value for {argument}")))?;
+        let value = value
+            .to_str()
+            .ok_or_else(|| HarnessError("arguments must be valid UTF-8".to_owned()))?;
+        match argument {
+            "--seed" if !seed_seen => {
+                options.seed = value
+                    .parse()
+                    .map_err(|_| HarnessError("invalid u64 value for --seed".to_owned()))?;
+                seed_seen = true;
+            }
+            "--clock-start-millis" if !clock_seen => {
+                options.clock_start_millis = value.parse().map_err(|_| {
+                    HarnessError("invalid u64 value for --clock-start-millis".to_owned())
+                })?;
+                clock_seen = true;
+            }
+            "--seed" | "--clock-start-millis" => {
+                return Err(HarnessError(format!("duplicate argument: {argument}")));
+            }
+            _ => return Err(HarnessError(format!("unknown argument: {argument}"))),
+        }
+    }
+
+    Ok(options)
 }
 
 pub fn run_with(config: ScenarioConfig) -> HarnessReport {
-    let runtime = match Builder::new_current_thread().enable_io().build() {
+    run_with_runtime(config, Builder::new_current_thread().enable_io().build())
+}
+
+fn run_with_runtime(
+    config: ScenarioConfig,
+    runtime: Result<tokio::runtime::Runtime, std::io::Error>,
+) -> HarnessReport {
+    let runtime = match runtime {
         Ok(runtime) => runtime,
         Err(_) => {
             let mut report = HarnessReport::for_pairing_result(
@@ -365,7 +675,7 @@ pub fn run_with(config: ScenarioConfig) -> HarnessReport {
                 Some("internal_error"),
                 Vec::new(),
             );
-            report.scenario = config.scenario.as_str();
+            report.apply_scenario(config.scenario);
             return report;
         }
     };
@@ -374,13 +684,32 @@ pub fn run_with(config: ScenarioConfig) -> HarnessReport {
 }
 
 async fn run_pairing(config: ScenarioConfig, resources: ResourceTracker) -> HarnessReport {
-    let mut report = run_pairing_inner(config, resources.clone()).await;
+    finish_pairing_result(
+        config,
+        resources.clone(),
+        run_pairing_inner(config, resources).await,
+    )
+}
+
+fn finish_pairing_result(
+    config: ScenarioConfig,
+    resources: ResourceTracker,
+    result: Result<HarnessReport, ScenarioFailure>,
+) -> HarnessReport {
+    let mut report = match result {
+        Ok(report) => report,
+        Err(failure) => failure.into_report(),
+    };
     report.scenario = config.scenario.as_str();
     report.resources = resources.snapshot();
+    report.apply_scenario(config.scenario);
     report
 }
 
-async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -> HarnessReport {
+async fn run_pairing_inner(
+    config: ScenarioConfig,
+    resources: ResourceTracker,
+) -> Result<HarnessReport, ScenarioFailure> {
     let clock = ManualClock::new(config.clock_start);
     let mut core = SessionCore::new(
         clock.clone(),
@@ -388,43 +717,32 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
         DESKTOP_DTLS_FINGERPRINT,
     );
 
-    let pairing_effects = match core.handle(SessionEvent::StartPairing) {
-        Ok(effects) => effects,
-        Err(error) => {
-            return HarnessReport::for_pairing_result(
-                core.state(),
-                Some(error.code().as_str()),
-                Vec::new(),
-            );
-        }
-    };
-    let [Effect::PresentPairing(material)] = pairing_effects.as_slice() else {
-        return HarnessReport::for_pairing_result(core.state(), Some("internal_error"), Vec::new());
-    };
+    let pairing_effects = map_scenario_error(
+        core.handle(SessionEvent::StartPairing),
+        config.scenario,
+        core.state(),
+        Vec::new(),
+        |error| error.code().as_str(),
+    )?;
+    let material = pairing_material(pairing_effects.as_slice())
+        .map_err(|reason| scenario_failure(config.scenario, core.state(), reason, Vec::new()))?;
 
     let mut certificate_random =
-        HarnessCertificateRandomSource(SeededRandomSource::new(CERTIFICATE_SEED));
-    let certificate =
-        match EphemeralCertificate::generate_with_random_source(&mut certificate_random) {
-            Ok(certificate) => certificate,
-            Err(_) => {
-                return HarnessReport::for_pairing_result(
-                    core.state(),
-                    Some("internal_error"),
-                    Vec::new(),
-                );
-            }
-        };
-    let listener = match PairingListener::bind_loopback(certificate).await {
-        Ok(listener) => Arc::new(listener),
-        Err(_) => {
-            return HarnessReport::for_pairing_result(
-                core.state(),
-                Some("internal_error"),
-                Vec::new(),
-            );
-        }
-    };
+        HarnessCertificateRandomSource(SeededRandomSource::new(config.seed ^ CERTIFICATE_SEED));
+    let certificate = map_scenario_error(
+        EphemeralCertificate::generate_with_random_source(&mut certificate_random),
+        config.scenario,
+        core.state(),
+        Vec::new(),
+        |_| "internal_error",
+    )?;
+    let listener = Arc::new(map_scenario_error(
+        PairingListener::bind_loopback(certificate).await,
+        config.scenario,
+        core.state(),
+        Vec::new(),
+        |_| "internal_error",
+    )?);
     let listener_guard = resources.listener();
 
     let listener_address = listener.local_addr();
@@ -432,56 +750,54 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
         match Endpoint::from_address(4, "192.168.1.42", listener_address.port()) {
             Some(endpoint) => endpoint,
             None => {
-                return HarnessReport::invalid_qr_payload(core.state());
-            }
-        };
-    let pairing_material = match listener.issue_material(PairingMaterialRequest::new(
-        material,
-        QR_EXPIRES_AT_UNIX,
-        vec![advertised_endpoint.clone()],
-    )) {
-        Ok(pairing_material) => pairing_material,
-        Err(_) => {
-            return HarnessReport::invalid_qr_payload(core.state());
-        }
-    };
-
-    let mut mobile_payload =
-        match QrPayload::decode(pairing_material.encoded_qr(), QR_CLOCK_START_UNIX) {
-            Ok(payload) => payload,
-            Err(error) => {
-                return HarnessReport::for_pairing_result(
+                return failed_report(
+                    config.scenario,
                     core.state(),
-                    Some(error.code.as_str()),
+                    "invalid_qr_payload",
                     Vec::new(),
                 );
             }
         };
+    let pairing_material = map_scenario_error(
+        listener.issue_material(PairingMaterialRequest::new(
+            material,
+            QR_EXPIRES_AT_UNIX,
+            vec![advertised_endpoint.clone()],
+        )),
+        config.scenario,
+        core.state(),
+        Vec::new(),
+        |_| "invalid_qr_payload",
+    )?;
+
+    let mut mobile_payload = map_scenario_error(
+        QrPayload::decode(pairing_material.encoded_qr(), QR_CLOCK_START_UNIX),
+        config.scenario,
+        core.state(),
+        Vec::new(),
+        |error| error.code.as_str(),
+    )?;
     let mobile_token = Zeroizing::new(mobile_payload.pairing_token);
     mobile_payload.pairing_token.zeroize();
-    let Some(endpoint) = mobile_payload.endpoints.first() else {
-        return HarnessReport::invalid_qr_payload(core.state());
-    };
-    if endpoint.address_string().is_none() {
-        return HarnessReport::invalid_qr_payload(core.state());
-    }
-    let address = if endpoint == &advertised_endpoint {
-        listener_address
-    } else {
-        return HarnessReport::invalid_qr_payload(core.state());
-    };
+    let address = resolve_listener_address(
+        &mobile_payload.endpoints,
+        &advertised_endpoint,
+        listener_address,
+    )
+    .map_err(|reason| scenario_failure(config.scenario, core.state(), reason, Vec::new()))?;
     let session_id = mobile_payload.session_id;
     let epoch = u64::from(mobile_payload.epoch);
-    let client = match PinnedClient::new(mobile_payload.tls_fingerprint) {
-        Ok(client) => client,
-        Err(error) => {
-            return HarnessReport::for_pairing_result(
-                core.state(),
-                Some(error.code().as_str()),
-                Vec::new(),
-            );
-        }
-    };
+    let mut pinned_fingerprint = mobile_payload.tls_fingerprint;
+    if config.scenario == ScenarioKind::PinMismatch {
+        pinned_fingerprint[0] ^= 0xff;
+    }
+    let client = map_scenario_error(
+        PinnedClient::new(pinned_fingerprint),
+        config.scenario,
+        core.state(),
+        Vec::new(),
+        |error| error.code().as_str(),
+    )?;
 
     let mut pair_message = SignalingMessage::Pair {
         token: *mobile_token,
@@ -492,16 +808,13 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
     if let SignalingMessage::Pair { token, .. } = &mut pair_message {
         token.zeroize();
     }
-    let pair_frame = match pair_frame {
-        Ok(frame) => Zeroizing::new(frame),
-        Err(_) => {
-            return HarnessReport::for_pairing_result(
-                core.state(),
-                Some("internal_error"),
-                Vec::new(),
-            );
-        }
-    };
+    let pair_frame = Zeroizing::new(map_scenario_error(
+        pair_frame,
+        config.scenario,
+        core.state(),
+        Vec::new(),
+        |_| "internal_error",
+    )?);
 
     let mut state_trace = Vec::new();
     record_transition(
@@ -513,9 +826,10 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
     );
     let task_guard = resources.task();
     let desktop_listener = Arc::clone(&listener);
+    let server_state_trace = state_trace.clone();
     let server = tokio::spawn(async move {
         let _task_guard = task_guard;
-        run_desktop(core, desktop_listener, state_trace).await
+        run_desktop(core, desktop_listener, server_state_trace).await
     });
     macro_rules! abort_server {
         ($report:expr) => {{
@@ -527,11 +841,31 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
     let mut mobile_channel = match client.connect(address).await {
         Ok(channel) => channel,
         Err(error) => {
+            if config.scenario == ScenarioKind::PinMismatch {
+                let client_reason = error.code().as_str();
+                let server_reason = server
+                    .await
+                    .map(|result| result.err().unwrap_or("internal_error"))
+                    .unwrap_or("internal_error");
+                let reason_code = if server_reason == client_reason {
+                    server_reason
+                } else {
+                    "internal_error"
+                };
+                let mut report = HarnessReport::for_pairing_result(
+                    SessionState::PairingReady,
+                    Some(reason_code),
+                    Vec::new(),
+                );
+                report.state_trace = state_trace;
+                return Ok(report);
+            }
             server.abort();
             let _ = server.await;
-            return HarnessReport::for_pairing_result(
+            return failed_report(
+                config.scenario,
                 SessionState::PairingReady,
-                Some(error.code().as_str()),
+                error.code().as_str(),
                 Vec::new(),
             );
         }
@@ -544,9 +878,10 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
         .await
         .is_err()
     {
-        abort_server!(HarnessReport::for_pairing_result(
+        abort_server!(failed_report(
+            config.scenario,
             SessionState::Handshaking,
-            Some("internal_error"),
+            "internal_error",
             message_sequence,
         ));
     }
@@ -555,51 +890,34 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
     let paired_frame = match read_signaling_frame(&mut mobile).await {
         Ok(frame) => frame,
         Err(reason_code) => {
-            abort_server!(HarnessReport::for_pairing_result(
+            abort_server!(failed_report(
+                config.scenario,
                 SessionState::Handshaking,
-                Some(reason_code),
+                reason_code,
                 message_sequence,
             ));
         }
     };
-    match parse_signaling(&paired_frame) {
-        Ok(SignalingMessage::Paired {
-            session_id: paired_session_id,
-            epoch: paired_epoch,
-            dtls_fingerprint,
-            accepted_limits,
-        }) if paired_session_id == session_id
-            && paired_epoch == epoch
-            && dtls_fingerprint == DESKTOP_DTLS_FINGERPRINT
-            && accepted_limits == Limits::new() =>
-        {
-            message_sequence.push("paired");
-        }
-        Ok(_) => {
-            abort_server!(HarnessReport::for_pairing_result(
-                SessionState::Handshaking,
-                Some("invalid_message"),
-                message_sequence,
-            ));
-        }
-        Err(error) => {
-            abort_server!(HarnessReport::for_pairing_result(
-                SessionState::Handshaking,
-                Some(error.code.as_str()),
-                message_sequence,
-            ));
-        }
+    if let Err(reason_code) =
+        validate_paired_frame(&paired_frame, session_id, epoch, DESKTOP_DTLS_FINGERPRINT)
+    {
+        abort_server!(failed_report(
+            config.scenario,
+            SessionState::Handshaking,
+            reason_code,
+            message_sequence,
+        ));
     }
+    message_sequence.push("paired");
 
     let offer_sdp = match Sdp::new(OFFER_SDP) {
         Ok(sdp) => sdp,
-        Err(_) => {
-            abort_server!(HarnessReport::for_pairing_result(
-                SessionState::Negotiating,
-                Some("internal_error"),
-                message_sequence,
-            ));
-        }
+        Err(_) => abort_server!(failed_report(
+            config.scenario,
+            SessionState::Negotiating,
+            "internal_error",
+            message_sequence,
+        )),
     };
     let offer_frame = match (SignalingMessage::Offer {
         epoch,
@@ -608,21 +926,21 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
     .encode()
     {
         Ok(frame) => frame,
-        Err(_) => {
-            abort_server!(HarnessReport::for_pairing_result(
-                SessionState::Negotiating,
-                Some("internal_error"),
-                message_sequence,
-            ));
-        }
+        Err(_) => abort_server!(failed_report(
+            config.scenario,
+            SessionState::Negotiating,
+            "internal_error",
+            message_sequence,
+        )),
     };
     if write_signaling_frame(&mut mobile, &offer_frame)
         .await
         .is_err()
     {
-        abort_server!(HarnessReport::for_pairing_result(
+        abort_server!(failed_report(
+            config.scenario,
             SessionState::Negotiating,
-            Some("internal_error"),
+            "internal_error",
             message_sequence,
         ));
     }
@@ -631,33 +949,23 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
     let answer_frame = match read_signaling_frame(&mut mobile).await {
         Ok(frame) => frame,
         Err(reason_code) => {
-            abort_server!(HarnessReport::for_pairing_result(
+            abort_server!(failed_report(
+                config.scenario,
                 SessionState::Negotiating,
-                Some(reason_code),
+                reason_code,
                 message_sequence,
             ));
         }
     };
-    match parse_signaling(&answer_frame) {
-        Ok(SignalingMessage::Answer {
-            epoch: answer_epoch,
-            ..
-        }) if answer_epoch == epoch => message_sequence.push("answer"),
-        Ok(_) => {
-            abort_server!(HarnessReport::for_pairing_result(
-                SessionState::Negotiating,
-                Some("invalid_message"),
-                message_sequence,
-            ));
-        }
-        Err(error) => {
-            abort_server!(HarnessReport::for_pairing_result(
-                SessionState::Negotiating,
-                Some(error.code.as_str()),
-                message_sequence,
-            ));
-        }
+    if let Err(reason_code) = validate_answer_frame(&answer_frame, epoch) {
+        abort_server!(failed_report(
+            config.scenario,
+            SessionState::Negotiating,
+            reason_code,
+            message_sequence,
+        ));
     }
+    message_sequence.push("answer");
 
     drop(mobile);
     let DesktopRun {
@@ -666,16 +974,18 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
     } = match server.await {
         Ok(Ok(desktop_run)) => desktop_run,
         Ok(Err(reason_code)) => {
-            return HarnessReport::for_pairing_result(
+            return failed_report(
+                config.scenario,
                 SessionState::Negotiating,
-                Some(reason_code),
+                reason_code,
                 message_sequence,
             );
         }
         Err(_) => {
-            return HarnessReport::for_pairing_result(
+            return failed_report(
+                config.scenario,
                 SessionState::Negotiating,
-                Some("internal_error"),
+                "internal_error",
                 message_sequence,
             );
         }
@@ -688,23 +998,25 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
     let mut media_port = SyntheticMediaPort::new(clock.clone(), config.seed, resources.clone());
     media_port.start();
     let mut frames = Vec::new();
-    match config.scenario {
-        ScenarioKind::Pairing => {
+    Ok(match config.scenario {
+        ScenarioKind::Pairing | ScenarioKind::PinMismatch => {
             for _ in 0..2 {
                 clock.advance(FRAME_INTERVAL_MILLIS);
                 let Some(frame) = media_port.next_frame() else {
-                    return HarnessReport::for_pairing_result(
+                    return failed_report(
+                        config.scenario,
                         core.state(),
-                        Some("internal_error"),
+                        "internal_error",
                         message_sequence,
                     );
                 };
                 if frame.sequence == 0 {
                     let previous_state = core.state();
                     if core.handle(SessionEvent::FirstMediaFrame(frame)).is_err() {
-                        return HarnessReport::for_pairing_result(
+                        return failed_report(
+                            config.scenario,
                             core.state(),
-                            Some("invalid_transition"),
+                            "invalid_transition",
                             message_sequence,
                         );
                     }
@@ -726,17 +1038,19 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
             let effects = match core.handle(SessionEvent::EndSession) {
                 Ok(effects) => effects,
                 Err(error) => {
-                    return HarnessReport::for_pairing_result(
+                    return failed_report(
+                        config.scenario,
                         core.state(),
-                        Some(error.code().as_str()),
+                        error.code().as_str(),
                         message_sequence,
                     );
                 }
             };
             if effects != [Effect::End] {
-                return HarnessReport::for_pairing_result(
+                return failed_report(
+                    config.scenario,
                     core.state(),
-                    Some("internal_error"),
+                    "internal_error",
                     message_sequence,
                 );
             }
@@ -760,17 +1074,19 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
             let effects = match core.handle(SessionEvent::FirstFrameTimedOut) {
                 Ok(effects) => effects,
                 Err(error) => {
-                    return HarnessReport::for_pairing_result(
+                    return failed_report(
+                        config.scenario,
                         core.state(),
-                        Some(error.code().as_str()),
+                        error.code().as_str(),
                         message_sequence,
                     );
                 }
             };
             if effects != [Effect::End] {
-                return HarnessReport::for_pairing_result(
+                return failed_report(
+                    config.scenario,
                     core.state(),
-                    Some("internal_error"),
+                    "internal_error",
                     message_sequence,
                 );
             }
@@ -792,9 +1108,10 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
                 .handle(SessionEvent::FirstMediaFrame(late_frame))
                 .is_ok()
             {
-                return HarnessReport::for_pairing_result(
+                return failed_report(
+                    config.scenario,
                     core.state(),
-                    Some("invalid_transition"),
+                    "invalid_transition",
                     message_sequence,
                 );
             }
@@ -810,7 +1127,7 @@ async fn run_pairing_inner(config: ScenarioConfig, resources: ResourceTracker) -
             });
             report
         }
-    }
+    })
 }
 
 struct DesktopRun<C: remotecam_session_core::Clock, R: RandomSource> {
@@ -945,9 +1262,412 @@ async fn write_signaling_frame(
     writer.flush().await.map_err(|_| "internal_error")
 }
 
+fn validate_paired_frame(
+    frame: &[u8],
+    session_id: [u8; 16],
+    epoch: u64,
+    fingerprint: [u8; 32],
+) -> Result<(), &'static str> {
+    match parse_signaling(frame) {
+        Ok(SignalingMessage::Paired {
+            session_id: paired_session_id,
+            epoch: paired_epoch,
+            dtls_fingerprint,
+            accepted_limits,
+        }) if paired_session_id == session_id
+            && paired_epoch == epoch
+            && dtls_fingerprint == fingerprint
+            && accepted_limits == Limits::new() =>
+        {
+            Ok(())
+        }
+        Ok(_) => Err("invalid_message"),
+        Err(error) => Err(error.code.as_str()),
+    }
+}
+
+fn validate_answer_frame(frame: &[u8], epoch: u64) -> Result<(), &'static str> {
+    match parse_signaling(frame) {
+        Ok(SignalingMessage::Answer {
+            epoch: answer_epoch,
+            ..
+        }) if answer_epoch == epoch => Ok(()),
+        Ok(_) => Err("invalid_message"),
+        Err(error) => Err(error.code.as_str()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_runtime() -> tokio::runtime::Runtime {
+        Builder::new_current_thread()
+            .enable_io()
+            .build()
+            .expect("the test runtime can be created")
+    }
+
+    async fn connected_test_desktop() -> (
+        tokio::task::JoinHandle<Result<DesktopRun<ManualClock, SeededRandomSource>, &'static str>>,
+        remotecam_pairing::ClientChannel,
+        Zeroizing<[u8; 32]>,
+    ) {
+        let certificate = EphemeralCertificate::generate().expect("certificate");
+        let fingerprint = certificate.fingerprint();
+        let listener = Arc::new(
+            PairingListener::bind_loopback(certificate)
+                .await
+                .expect("listener"),
+        );
+        let mut core = SessionCore::new(
+            ManualClock::new(Timestamp::ZERO),
+            SeededRandomSource::new(42),
+            DESKTOP_DTLS_FINGERPRINT,
+        );
+        let effects = core
+            .handle(SessionEvent::StartPairing)
+            .expect("pairing starts");
+        let [Effect::PresentPairing(material)] = effects.as_slice() else {
+            panic!("starting pairing presents pairing material");
+        };
+        let token = Zeroizing::new(*material.token().as_bytes());
+        let server = tokio::spawn(run_desktop(core, Arc::clone(&listener), Vec::new()));
+        let client = PinnedClient::new(fingerprint)
+            .expect("client")
+            .connect(listener.local_addr())
+            .await
+            .expect("TLS connection");
+        (server, client, token)
+    }
+
+    fn test_pair_frame(token: &[u8; 32]) -> Zeroizing<Vec<u8>> {
+        let mut message = SignalingMessage::Pair {
+            token: *token,
+            dtls_fingerprint: MOBILE_DTLS_FINGERPRINT,
+            limits: Limits::new(),
+        };
+        let frame = message.encode().expect("pairing frame");
+        if let SignalingMessage::Pair { token, .. } = &mut message {
+            token.zeroize();
+        }
+        Zeroizing::new(frame)
+    }
+
+    #[test]
+    fn metadata_parsers_reject_malformed_tool_output() {
+        assert_eq!(parse_rustc_version(b"rustc 1.99.1\n").unwrap(), "1.99.1");
+        assert!(parse_rustc_version(b"compiler 1.99.1").is_err());
+        assert!(parse_rustc_version(b"rustc").is_err());
+        assert!(parse_rustc_version(&[0xff]).is_err());
+
+        assert_eq!(
+            parse_commit(format!("{}\n", "a".repeat(40)).as_bytes()).unwrap(),
+            "a".repeat(40)
+        );
+        assert!(parse_commit(b"not-a-commit\n").is_err());
+        assert!(parse_commit(&[0xff]).is_err());
+    }
+
+    #[test]
+    fn failed_metadata_commands_return_explicit_errors() {
+        assert!(ensure_success(true, "command failed").is_ok());
+        assert_eq!(
+            ensure_success(false, "command failed")
+                .unwrap_err()
+                .to_string(),
+            "command failed"
+        );
+    }
+
+    #[test]
+    fn listener_address_resolution_rejects_missing_or_unadvertised_endpoints() {
+        let advertised = Endpoint::from_address(4, "192.168.1.42", 1234).expect("endpoint");
+        let other = Endpoint::from_address(4, "192.168.1.43", 1234).expect("endpoint");
+        let address = std::net::SocketAddr::from(([127, 0, 0, 1], 4321));
+
+        assert_eq!(
+            resolve_listener_address(&[], &advertised, address),
+            Err("invalid_qr_payload")
+        );
+        assert_eq!(
+            resolve_listener_address(&[other], &advertised, address),
+            Err("invalid_qr_payload")
+        );
+        assert_eq!(
+            resolve_listener_address(std::slice::from_ref(&advertised), &advertised, address),
+            Ok(address)
+        );
+    }
+
+    #[test]
+    fn pairing_effect_validation_requires_pairing_material() {
+        assert!(matches!(pairing_material(&[]), Err("internal_error")));
+        assert!(matches!(
+            pairing_material(&[Effect::End]),
+            Err("internal_error")
+        ));
+    }
+
+    #[test]
+    fn failed_scenarios_produce_a_failed_aggregate_report() {
+        let failure = map_scenario_error::<(), _>(
+            Err("bad pairing"),
+            ScenarioKind::PinMismatch,
+            SessionState::Idle,
+            vec!["pair"],
+            |_| "internal_error",
+        )
+        .unwrap_err();
+        assert_eq!(failure.reason_code, "internal_error");
+        assert_eq!(failure.message_sequence, ["pair"]);
+
+        let report_failure = failed_report(
+            ScenarioKind::PinMismatch,
+            SessionState::Idle,
+            "internal_error",
+            vec!["pair"],
+        )
+        .unwrap_err();
+        assert_eq!(report_failure.reason_code, failure.reason_code);
+        let scenario = report_failure.into_report();
+        assert_eq!(scenario.verdict, Verdict::Fail);
+        assert_eq!(scenario.scenario, "pin-mismatch-aborts");
+
+        let report = RunReport::new(
+            RunOptions::default(),
+            "a".repeat(40),
+            EnvironmentReport {
+                os: "test",
+                architecture: "test",
+                rustc_version: "test".to_owned(),
+            },
+            vec![scenario],
+        );
+        assert_eq!(report.verdict, Verdict::Fail);
+        assert_eq!(
+            report.summary,
+            Summary {
+                scenarios: 1,
+                passed: 0,
+                failed: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn failed_pairing_results_are_finalized_with_resource_counts() {
+        let report = finish_pairing_result(
+            ScenarioConfig {
+                scenario: ScenarioKind::PinMismatch,
+                seed: 0,
+                clock_start: Timestamp::ZERO,
+            },
+            ResourceTracker::default(),
+            failed_report(
+                ScenarioKind::PinMismatch,
+                SessionState::Idle,
+                "internal_error",
+                Vec::new(),
+            ),
+        );
+
+        assert_eq!(report.scenario, "pin-mismatch-aborts");
+        assert_eq!(report.reason_code, Some("internal_error"));
+        assert_eq!(report.verdict, Verdict::Fail);
+        assert_eq!(report.resources.listeners.created, 0);
+    }
+
+    #[test]
+    fn runtime_creation_failure_is_reported_as_a_scenario_failure() {
+        let report = run_with_runtime(
+            ScenarioConfig::default(),
+            Err(std::io::Error::other("test runtime failure")),
+        );
+
+        assert_eq!(report.outcome, Outcome::Rejected);
+        assert_eq!(report.reason_code, Some("internal_error"));
+        assert_eq!(report.verdict, Verdict::Fail);
+    }
+
+    #[test]
+    fn argument_parser_reports_invalid_clock_and_non_utf8_arguments() {
+        let error =
+            parse_run_options([OsString::from("--clock-start-millis"), OsString::from("x")])
+                .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "invalid u64 value for --clock-start-millis"
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            assert_eq!(
+                parse_run_options([OsString::from_vec(vec![0xff])])
+                    .unwrap_err()
+                    .to_string(),
+                "arguments must be valid UTF-8"
+            );
+            assert_eq!(
+                parse_run_options([OsString::from("--seed"), OsString::from_vec(vec![0xff]),])
+                    .unwrap_err()
+                    .to_string(),
+                "arguments must be valid UTF-8"
+            );
+        }
+    }
+
+    #[test]
+    fn signaling_frame_io_rejects_truncation_oversize_and_closed_peers() {
+        let runtime = Builder::new_current_thread()
+            .enable_io()
+            .build()
+            .expect("the test runtime can be created");
+        runtime.block_on(async {
+            let (writer, mut reader) = tokio::io::duplex(1);
+            drop(writer);
+            assert_eq!(
+                read_signaling_frame(&mut reader).await,
+                Err("invalid_message")
+            );
+
+            let (mut writer, mut reader) = tokio::io::duplex(MAX_SIGNALING_MESSAGE_BYTES + 2);
+            let mut oversized = vec![b'x'; MAX_SIGNALING_MESSAGE_BYTES + 1];
+            oversized.push(b'\n');
+            writer.write_all(&oversized).await.unwrap();
+            assert_eq!(
+                read_signaling_frame(&mut reader).await,
+                Err("invalid_message")
+            );
+
+            let (mut writer, reader) = tokio::io::duplex(1);
+            drop(reader);
+            assert_eq!(
+                write_signaling_frame(&mut writer, &[b'x'; MAX_SIGNALING_MESSAGE_BYTES + 1]).await,
+                Err("invalid_message")
+            );
+
+            let (mut writer, reader) = tokio::io::duplex(1);
+            drop(reader);
+            assert_eq!(
+                write_signaling_frame(&mut writer, b"frame").await,
+                Err("internal_error")
+            );
+
+            let (mut writer, mut reader) = tokio::io::duplex(5);
+            let reader_task = tokio::spawn(async move {
+                let mut frame = [0_u8; 5];
+                reader.read_exact(&mut frame).await.unwrap();
+                assert_eq!(&frame, b"frame");
+            });
+            assert_eq!(
+                write_signaling_frame(&mut writer, b"frame").await,
+                Err("internal_error")
+            );
+            reader_task.await.unwrap();
+        });
+    }
+
+    #[test]
+    fn response_validators_reject_mismatched_and_unparseable_messages() {
+        let paired = SignalingMessage::Paired {
+            session_id: [1; 16],
+            epoch: 2,
+            dtls_fingerprint: DESKTOP_DTLS_FINGERPRINT,
+            accepted_limits: Limits::new(),
+        };
+        let paired = paired.encode().expect("paired frame");
+        assert_eq!(
+            validate_paired_frame(&paired, [1; 16], 2, DESKTOP_DTLS_FINGERPRINT),
+            Ok(())
+        );
+        assert_eq!(
+            validate_paired_frame(&paired, [2; 16], 2, DESKTOP_DTLS_FINGERPRINT),
+            Err("invalid_message")
+        );
+        assert_eq!(
+            validate_paired_frame(b"not-json", [1; 16], 2, DESKTOP_DTLS_FINGERPRINT),
+            Err("invalid_message")
+        );
+
+        let answer = SignalingMessage::Answer {
+            epoch: 2,
+            sdp: Sdp::new(ANSWER_SDP).expect("answer SDP"),
+        };
+        let answer = answer.encode().expect("answer frame");
+        assert_eq!(validate_answer_frame(&answer, 2), Ok(()));
+        assert_eq!(validate_answer_frame(&answer, 3), Err("invalid_message"));
+        assert_eq!(
+            validate_answer_frame(b"not-json", 2),
+            Err("invalid_message")
+        );
+    }
+
+    #[test]
+    fn desktop_rejects_a_malformed_pairing_frame() {
+        test_runtime().block_on(async {
+            let (server, mut client, _) = connected_test_desktop().await;
+            write_signaling_frame(&mut client, b"not-json")
+                .await
+                .expect("frame write");
+
+            match server.await.expect("server task") {
+                Err(reason) => assert_eq!(reason, "protocol_violation"),
+                Ok(_) => panic!("malformed pairing unexpectedly succeeded"),
+            }
+        });
+    }
+
+    #[test]
+    fn desktop_rejects_an_offer_with_a_different_epoch() {
+        test_runtime().block_on(async {
+            let (server, mut client, token) = connected_test_desktop().await;
+            let pairing = test_pair_frame(&token);
+            write_signaling_frame(&mut client, &pairing)
+                .await
+                .expect("pairing write");
+            let mut client = BufReader::new(client);
+            let _paired = read_signaling_frame(&mut client)
+                .await
+                .expect("paired response");
+            let offer = SignalingMessage::Offer {
+                epoch: 999,
+                sdp: Sdp::new(OFFER_SDP).expect("offer SDP"),
+            };
+            write_signaling_frame(&mut client, &offer.encode().expect("offer frame"))
+                .await
+                .expect("offer write");
+
+            match server.await.expect("server task") {
+                Err(reason) => assert_eq!(reason, "invalid_message"),
+                Ok(_) => panic!("wrong-epoch offer unexpectedly succeeded"),
+            }
+        });
+    }
+
+    #[test]
+    fn desktop_rejects_an_unparseable_offer() {
+        test_runtime().block_on(async {
+            let (server, mut client, token) = connected_test_desktop().await;
+            let pairing = test_pair_frame(&token);
+            write_signaling_frame(&mut client, &pairing)
+                .await
+                .expect("pairing write");
+            let mut client = BufReader::new(client);
+            let _paired = read_signaling_frame(&mut client)
+                .await
+                .expect("paired response");
+            write_signaling_frame(&mut client, b"not-json")
+                .await
+                .expect("offer write");
+
+            match server.await.expect("server task") {
+                Err(reason) => assert_eq!(reason, "invalid_message"),
+                Ok(_) => panic!("unparseable offer unexpectedly succeeded"),
+            }
+        });
+    }
 
     fn run_virtual(config: ScenarioConfig) -> HarnessReport {
         let runtime = Builder::new_current_thread()
@@ -986,7 +1706,7 @@ mod tests {
         let config = ScenarioConfig::default();
         let report = run_virtual(config);
 
-        assert_eq!(report.outcome, Outcome::Connected);
+        assert_eq!(report.outcome, Outcome::Accepted);
         assert_eq!(report.observed_state, "ended");
         assert_eq!(
             report.frames,

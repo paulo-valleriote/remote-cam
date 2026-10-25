@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RemoteCam Harness Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_version",
+    "contract_version",
+    "commit",
+    "seed",
+    "clock_start_millis",
+    "environment",
+    "scenarios",
+    "verdict",
+    "summary"
+  ],
+  "properties": {
+    "report_version": {
+      "const": 3
+    },
+    "contract_version": {
+      "const": 1
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "clock_start_millis": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "environment": {
+      "$ref": "#/$defs/environment"
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/pairingHappyPath"
+        },
+        {
+          "$ref": "#/$defs/pinMismatchAborts"
+        }
+      ],
+      "items": false
+    },
+    "verdict": {
+      "enum": [
+        "pass",
+        "fail"
+      ]
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    }
+  },
+  "$defs": {
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "rustc_version"
+      ],
+      "properties": {
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rustc_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "scenarioBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario",
+        "outcome",
+        "observed_state",
+        "message_sequence",
+        "state_trace",
+        "frames",
+        "resources",
+        "verdict",
+        "reason_code"
+      ],
+      "properties": {
+        "scenario": {
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "accepted",
+            "rejected",
+            "timed_out"
+          ]
+        },
+        "observed_state": {
+          "enum": [
+            "idle",
+            "pairing_ready",
+            "handshaking",
+            "negotiating",
+            "connected",
+            "ended",
+            "superseded"
+          ]
+        },
+        "message_sequence": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "pair",
+              "paired",
+              "offer",
+              "answer"
+            ]
+          }
+        },
+        "state_trace": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/stateTransition"
+          }
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameObservation"
+          }
+        },
+        "late_frame_discarded": {
+          "$ref": "#/$defs/discardedFrame"
+        },
+        "resources": {
+          "$ref": "#/$defs/resources"
+        },
+        "verdict": {
+          "enum": [
+            "pass",
+            "fail"
+          ]
+        },
+        "reason_code": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "invalid_qr_payload",
+                "unsupported_qr_version",
+                "qr_expired",
+                "no_private_endpoint",
+                "desktop_unreachable",
+                "tls_handshake_failed",
+                "certificate_pin_mismatch",
+                "certificate_chain_rejected",
+                "tls_version_unsupported",
+                "token_invalid",
+                "token_expired",
+                "token_already_used",
+                "source_address_not_private",
+                "source_subnet_mismatch",
+                "rate_limited",
+                "listener_closed",
+                "superseded",
+                "protocol_violation",
+                "internal_error",
+                "ended_by_mobile",
+                "ended_by_desktop",
+                "timeout",
+                "media_failure",
+                "security_violation",
+                "invalid_message",
+                "unsupported_version"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "pairingHappyPath": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "properties": {
+            "scenario": {
+              "const": "pairing-happy-path"
+            },
+            "outcome": {
+              "enum": [
+                "accepted",
+                "rejected"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "pinMismatchAborts": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "properties": {
+            "scenario": {
+              "const": "pin-mismatch-aborts"
+            },
+            "outcome": {
+              "enum": [
+                "accepted",
+                "rejected"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "stateTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "at_millis"
+      ],
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "at_millis": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cause": {
+          "type": "string"
+        }
+      }
+    },
+    "frameObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "at_millis"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "at_millis": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "discardedFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "at_millis",
+        "reason"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "at_millis": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "listeners",
+        "connections",
+        "media_ports",
+        "tasks"
+      ],
+      "properties": {
+        "listeners": {
+          "$ref": "#/$defs/resourceCount"
+        },
+        "connections": {
+          "$ref": "#/$defs/resourceCount"
+        },
+        "media_ports": {
+          "$ref": "#/$defs/resourceCount"
+        },
+        "tasks": {
+          "$ref": "#/$defs/resourceCount"
+        }
+      }
+    },
+    "resourceCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "created",
+        "active_after_close"
+      ],
+      "properties": {
+        "created": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "active_after_close": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenarios",
+        "passed",
+        "failed"
+      ],
+      "properties": {
+        "scenarios": {
+          "const": 2
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        }
+      }
+    }
+  }
+}

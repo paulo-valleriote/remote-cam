@@ -1,0 +1,122 @@
+{
+  "report_version": 3,
+  "contract_version": 1,
+  "commit": "0000000000000000000000000000000000000000",
+  "seed": 0,
+  "clock_start_millis": 0,
+  "environment": {
+    "os": "linux",
+    "architecture": "x86_64",
+    "rustc_version": "1.99.1"
+  },
+  "scenarios": [
+    {
+      "scenario": "pairing-happy-path",
+      "outcome": "accepted",
+      "observed_state": "ended",
+      "message_sequence": [
+        "pair",
+        "paired",
+        "offer",
+        "answer"
+      ],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 0
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 0
+        },
+        {
+          "from": "handshaking",
+          "to": "negotiating",
+          "at_millis": 0
+        },
+        {
+          "from": "negotiating",
+          "to": "connected",
+          "at_millis": 33
+        },
+        {
+          "from": "connected",
+          "to": "ended",
+          "at_millis": 66
+        }
+      ],
+      "frames": [
+        {
+          "sequence": 0,
+          "at_millis": 33
+        },
+        {
+          "sequence": 1,
+          "at_millis": 66
+        }
+      ],
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 1,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": null
+    },
+    {
+      "scenario": "pin-mismatch-aborts",
+      "outcome": "rejected",
+      "observed_state": "pairing_ready",
+      "message_sequence": [],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 0
+        }
+      ],
+      "frames": [],
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 1,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": "certificate_pin_mismatch"
+    }
+  ],
+  "verdict": "pass",
+  "summary": {
+    "scenarios": 2,
+    "passed": 2,
+    "failed": 0
+  }
+}

@@ -15,6 +15,7 @@ decision was made and why.
 | [0007](0007-harness-location.md) | Product harness location and status |
 | [0008](0008-harness-dependency-baseline.md) | Session Core crate location and harness dependency baseline |
 | [0009](0009-pairing-crate-and-tls-baseline.md) | Pairing crate and TLS dependency baseline |
+| [0010](0010-harness-report-contract-and-coverage.md) | Versioned harness report schema and ≥90% Harness coverage gate |
 
 Add a new ADR by scanning this directory for the highest number and
 incrementing it. To revisit a decision, write a new ADR that supersedes the old
