@@ -195,5 +195,12 @@ fn media_cannot_start_before_the_first_pair_frame_is_authenticated() {
             .expect("negotiation completes after authentication"),
         vec![Effect::StartMedia]
     );
+    core.handle(SessionEvent::FirstMediaFrame(
+        remotecam_session_core::MediaFrame {
+            sequence: 0,
+            timestamp: remotecam_session_core::Timestamp::ZERO,
+        },
+    ))
+    .expect("the first frame completes connection establishment");
     assert_eq!(core.state(), SessionState::Connected);
 }

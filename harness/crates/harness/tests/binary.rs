@@ -24,7 +24,15 @@ fn the_headless_binary_emits_a_reproducible_exchange_report_under_a_watchdog() {
     let report: Value = serde_json::from_str(lines[0]).expect("the report is valid JSON");
     assert_eq!(report["verdict"], "pass");
     assert_eq!(report["scenario"], "pairing");
-    assert_eq!(report["observed_state"], "connected");
+    assert_eq!(report["outcome"], "connected");
+    assert_eq!(report["observed_state"], "ended");
+    assert!(
+        report["state_trace"]
+            .as_array()
+            .expect("the state trace is an array")
+            .iter()
+            .any(|transition| transition["to"] == "connected")
+    );
     assert_eq!(
         report["message_sequence"],
         serde_json::json!(["pair", "paired", "offer", "answer"])

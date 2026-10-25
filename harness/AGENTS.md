@@ -20,7 +20,7 @@
 - **Toolchain:** `harness/rust-toolchain.toml` — `1.99.1`, components `clippy` + `rustfmt`, profile `minimal`.
 - **Build and run:** `make harness` runs `cargo run --quiet --locked --package remotecam-harness` from inside `harness/`, so rustup honours the pinned toolchain; GNU `timeout` bounds execution externally.
 - **Dependency direction:** the harness consumes `desktop/crates/pairing`, `desktop/crates/session-core` and `desktop/crates/protocol` by relative path. It never reaches into `desktop/crates/app` and never defines the contract, which belongs to `protocol/`.
-- **Output:** one JSON line on stdout per run, containing the report version, scenario, observed state, the observed `pair` → `paired` → `offer` → `answer` sequence, per-scenario verdict, an optional failure reason code, and a summary. Exit code 0 means every scenario passed; 1 means at least one failed.
+- **Output:** one JSON line on stdout per run, containing the report version, scenario and outcome, observed state and state trace, the observed `pair` → `paired` → `offer` → `answer` sequence, frame sequence/timestamps, post-close resource counts, an optional discarded late frame or failure reason code, per-scenario verdict, and summary. Exit code 0 means every scenario passed; 1 means at least one failed.
 
 ## Harness-specific rules
 

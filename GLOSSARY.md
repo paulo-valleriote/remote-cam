@@ -11,7 +11,9 @@ wire vocabulary in `protocol/README.md`, `protocol/qr-payload.md` and
 | Term | Definition |
 | --- | --- |
 | **Session** | An ephemeral, authenticated link between one mobile device and one desktop, opened by scanning a QR and ended without persisted state. At most one session is active on a desktop at any moment (invariant I4). |
-| **Session Core** | The product subsystem that owns the signaling contract, the session state machine (`IDLE → PAIRING_READY → HANDSHAKING → NEGOTIATING → CONNECTED → ENDED`/`SUPERSEDED`), epoch handling, pairing validation and the API a harness drives. Behaviour is identical in the independent Rust and Kotlin implementations. |
+| **Session Core** | The product subsystem that owns the signaling contract, the session state machine (`IDLE → PAIRING_READY → HANDSHAKING → NEGOTIATING → CONNECTED → ENDED`/`SUPERSEDED`), epoch handling, pairing validation and the API a harness drives. `CONNECTED` requires an accepted `answer` and the first **Media Frame**; a first-frame timeout returns the current attempt to `IDLE` rather than ending a session. |
+| **Media Port** | The boundary through which the Session Core starts a media source and receives frame observations. |
+| **Media Frame** | A numbered media sample with the instant at which it was produced. |
 | **Pairing** | The act of establishing trust between a mobile device and a desktop: scan the desktop-displayed QR payload, complete a TLS 1.3 handshake against the exact pinned certificate, then authenticate with the single-use pairing token. Pairing is the only way a session starts. |
 | **Pairing Token** | The 256-bit single-use secret carried in the QR payload. It is generated per session, compared in constant time, invalidated on first successful use, and never persisted, logged or copied to the clipboard. |
 | **Epoch** | The monotonic 32-bit session generation assigned by the desktop when the QR is created. It is strictly greater than the epoch of the active session; a message carrying a lower epoch is discarded silently and counted as a protocol violation. See ADR-0004. |
