@@ -42,6 +42,7 @@ are listed in [`specs/001-f0-technical-spikes/tasks.md`](specs/001-f0-technical-
 | Python | 3.12 or later | `spikes/tools/` |
 | FFmpeg | 8.1 or later | gate measurements |
 | GNU Make | current | every documented command |
+| GNU coreutils | current | external `timeout` watchdog for the product harness |
 | Git | current | clone and review |
 
 On Windows, the Media Foundation crates additionally require the Windows 11 SDK
@@ -83,7 +84,7 @@ target below is documented here.
 | `make help` | List the available targets. |
 | `make install` | Install the Python measurement package and its development dependencies. |
 | `make build-desktop` | Build the Rust workspace in `desktop/`. |
-| `make harness` | Run the headless product harness end to end (one deterministic JSON line on stdout; exit code 0 means every scenario passed). |
+| `make harness` | Run the headless product harness end to end under an external watchdog (one deterministic JSON line on stdout; exit code 0 means every scenario passed). |
 | `make build-desktop-win` | Mirror the workspace to the Windows filesystem (`/mnt/c/Users/<user>/remotecam-win`) and build natively from WSL2; avoids the UNC filesystem error (see `docs/windows-build.md`). |
 | `make sync-desktop-win` | Mirror the working tree to the Windows filesystem without building (helper used by `build-desktop-win`). |
 | `make build-mobile` | Assemble the Android contract library (`mobile/protocol/build/outputs/aar`). |
@@ -147,19 +148,34 @@ package (ADR-0008).
 
 `make harness` runs the product-owned headless harness in `harness/`. It is a
 separate Cargo workspace pinned to Rust 1.99.1, so `make build-desktop` never
-compiles it. The harness drives the Session Core from
-`desktop/crates/session-core` through its public API and prints one
-deterministic JSON line per run. Exit code 0 means every scenario passed; exit
-code 1 means at least one failed.
+compiles it. The harness drives `desktop/crates/pairing`,
+`desktop/crates/session-core` and `desktop/crates/protocol` and prints one
+deterministic JSON line per run. GNU `timeout` externally bounds the command to
+120 seconds. Exit code 0 means every scenario passed; exit code 1 means at least
+one failed.
 
-The product harness runs a deterministic pairing scenario through the Session
-Core: the mobile's `pair` frame authenticates with the one-use token, the
-desktop responds with `paired`, and negotiation reaches `connected` before
-media starts. The report excludes the token and DTLS fingerprint. The injected
+The product harness generates and decodes a version 1 QR payload in memory,
+connects a synthetic mobile client to the loopback TLS 1.3 listener using the
+exact pinned certificate, and exchanges `pair`, `paired`, `offer` and `answer`
+over the authenticated channel. Since QR v1 excludes loopback addresses, the
+synthetic client routes the valid advertised private endpoint's port to the
+loopback listener. The run reaches `connected` without starting real media.
+The report includes the observed message sequence and excludes the pairing
+token and fingerprints. An integration test also verifies that a divergent QR
+pin is rejected after one connection attempt, with no fallback. The injected
 clock and RNG make the scenario reproducible. Nothing under `spikes/` is
 imported. A failed scenario includes its reason code in the report (FR-039,
 [ADR-0007](docs/adr/0007-harness-location.md),
-[ADR-0008](docs/adr/0008-harness-dependency-baseline.md)).
+[ADR-0008](docs/adr/0008-harness-dependency-baseline.md),
+[ADR-0009](docs/adr/0009-pairing-crate-and-tls-baseline.md)).
+The harness uses newline-delimited signaling messages on its TCP stream solely
+to delimit this local scenario; the versioned protocol contract is unchanged.
+
+Successful report line:
+
+```json
+{"report_version":1,"scenario":"pairing","observed_state":"connected","message_sequence":["pair","paired","offer","answer"],"verdict":"pass","summary":{"scenarios":1,"passed":1,"failed":0}}
+```
 
 ## Debugging
 

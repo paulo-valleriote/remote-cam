@@ -15,6 +15,7 @@ use tokio_rustls::server::TlsStream;
 
 use crate::certificate::EphemeralCertificate;
 use crate::error::{PairingError, classify_io_error};
+use crate::material::{MaterialError, PairingMaterial, PairingMaterialRequest};
 
 pub const ALPN_PROTOCOL: &[u8] = b"remotecam/1";
 
@@ -101,6 +102,13 @@ impl PairingListener {
 
     pub fn fingerprint(&self) -> [u8; 32] {
         self.fingerprint
+    }
+
+    pub fn issue_material(
+        &self,
+        request: PairingMaterialRequest<'_>,
+    ) -> Result<PairingMaterial, MaterialError> {
+        PairingMaterial::issue_with_fingerprint(request, self.fingerprint)
     }
 
     pub fn attempts(&self) -> u32 {
