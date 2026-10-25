@@ -69,10 +69,12 @@ direct external dependencies to the separate harness workspace:
 No TLS, certificate or hashing dependency is added to the harness workspace;
 those remain behind `remotecam-pairing` as decided in ADR-0009.
 
-TLS, certificate and runtime dependencies (`rustls`, `rcgen`, `sha2`, `tokio`)
-are **not** added here. The tasks that need them (REC-21 and the media
-substitute) add them with their own justification, so the scaffold does not
-carry anticipatory dependencies.
+At scaffold creation, TLS, certificate and runtime dependencies
+(`rustls`, `rcgen`, `sha2`, `tokio`) were not added to either workspace.
+REC-21 later added the TLS stack to the desktop workspace under ADR-0009.
+REC-23 adds a direct `tokio` dependency to the harness workspace for its
+loopback driver, justified above; TLS and certificate dependencies remain
+behind `remotecam-pairing`.
 
 ### Build isolation
 
