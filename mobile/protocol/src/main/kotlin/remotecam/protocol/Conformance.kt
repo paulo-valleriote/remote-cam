@@ -2,6 +2,7 @@ package remotecam.protocol
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -93,8 +94,8 @@ data class ConformanceReport(
 /** Executes the pinned vectors exactly as the Rust `conformance` binary does. */
 object Conformance {
     fun repositoryRoot(): Path {
-        System.getenv("REMOTECAM_REPO_ROOT")?.let { return Path.of(it) }
-        var current: Path? = Path.of(System.getProperty("user.dir")).toAbsolutePath()
+        System.getenv("REMOTECAM_REPO_ROOT")?.let { return Paths.get(it) }
+        var current: Path? = Paths.get(System.getProperty("user.dir")).toAbsolutePath()
         while (current != null) {
             if (Files.isDirectory(current.resolve("protocol/vectors"))) return current
             current = current.parent
