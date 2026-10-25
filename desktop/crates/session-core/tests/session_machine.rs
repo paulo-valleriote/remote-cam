@@ -7,10 +7,14 @@ use remotecam_session_core::{
 
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
 
-const HAPPY_PATH: [SessionEvent; 4] = [
+const HAPPY_PATH: [SessionEvent; 5] = [
     SessionEvent::StartPairing,
     SessionEvent::PeerConnected,
     SessionEvent::NegotiationCompleted,
+    SessionEvent::FirstMediaFrame(remotecam_session_core::MediaFrame {
+        sequence: 0,
+        timestamp: Timestamp::ZERO,
+    }),
     SessionEvent::EndSession,
 ];
 
@@ -59,8 +63,8 @@ fn core_in(
         SessionState::PairingReady => &HAPPY_PATH[..1],
         SessionState::Handshaking => &HAPPY_PATH[..2],
         SessionState::Negotiating => &HAPPY_PATH[..2],
-        SessionState::Connected => &HAPPY_PATH[..3],
-        SessionState::Ended => &HAPPY_PATH[..4],
+        SessionState::Connected => &HAPPY_PATH[..4],
+        SessionState::Ended => &HAPPY_PATH[..5],
     };
 
     let mut frame = None;
@@ -174,7 +178,7 @@ fn an_authenticated_pair_sends_paired_and_moves_to_negotiating() {
 }
 
 #[test]
-fn a_completed_negotiation_starts_media_and_connects() {
+fn completed_negotiation_starts_media_but_waits_for_the_first_frame() {
     let (mut core, clock) = core_in(SessionState::Negotiating, 7);
     clock.advance(40);
 
@@ -182,9 +186,79 @@ fn a_completed_negotiation_starts_media_and_connects() {
         .handle(SessionEvent::NegotiationCompleted)
         .expect("negotiation completes after offer and answer");
 
-    assert_eq!(core.state(), SessionState::Connected);
+    assert_eq!(core.state(), SessionState::Negotiating);
     assert_eq!(effects, vec![Effect::StartMedia]);
     assert_eq!(core.last_transition_at(), Timestamp::from_millis(40));
+}
+
+#[test]
+fn a_first_frame_at_the_deadline_moves_negotiating_to_connected() {
+    let (mut core, clock) = core_in(SessionState::Negotiating, 7);
+    core.handle(SessionEvent::NegotiationCompleted)
+        .expect("negotiation starts the media deadline");
+    clock.advance(3_000);
+
+    let effects = core
+        .handle(SessionEvent::FirstMediaFrame(
+            remotecam_session_core::MediaFrame {
+                sequence: 0,
+                timestamp: clock.now(),
+            },
+        ))
+        .expect("a frame at the deadline is still on time");
+
+    assert_eq!(core.state(), SessionState::Connected);
+    assert!(effects.is_empty());
+    assert_eq!(core.last_transition_at(), Timestamp::from_millis(3_000));
+}
+
+#[test]
+fn a_frame_after_the_deadline_is_rejected() {
+    let (mut core, clock) = core_in(SessionState::Negotiating, 7);
+    core.handle(SessionEvent::NegotiationCompleted)
+        .expect("negotiation starts the media deadline");
+    clock.advance(3_001);
+
+    let result = core.handle(SessionEvent::FirstMediaFrame(
+        remotecam_session_core::MediaFrame {
+            sequence: 0,
+            timestamp: clock.now(),
+        },
+    ));
+
+    assert!(result.is_err());
+    assert_eq!(core.state(), SessionState::Negotiating);
+}
+
+#[test]
+fn a_first_frame_timeout_before_the_deadline_is_rejected() {
+    let (mut core, clock) = core_in(SessionState::Negotiating, 7);
+    core.handle(SessionEvent::NegotiationCompleted)
+        .expect("negotiation starts the media deadline");
+    clock.advance(2_999);
+
+    let result = core.handle(SessionEvent::FirstFrameTimedOut);
+
+    assert!(result.is_err());
+    assert_eq!(core.state(), SessionState::Negotiating);
+}
+
+#[test]
+fn a_first_frame_timeout_resets_the_attempt_to_idle() {
+    let (mut core, clock) = core_in(SessionState::Negotiating, 7);
+    core.handle(SessionEvent::NegotiationCompleted)
+        .expect("negotiation starts the media deadline");
+    clock.advance(3_000);
+
+    let effects = core
+        .handle(SessionEvent::FirstFrameTimedOut)
+        .expect("a missing first frame returns the attempt to idle");
+
+    assert_eq!(core.state(), SessionState::Idle);
+    assert_eq!(effects, vec![Effect::End]);
+    assert_eq!(core.session_id(), None);
+    assert_eq!(core.epoch(), None);
+    assert_eq!(core.last_transition_at(), Timestamp::from_millis(3_000));
 }
 
 #[test]
@@ -227,7 +301,14 @@ fn the_happy_path_walks_every_state_in_order() {
             .expect("the matching token authenticates"),
     ]);
     states.push(core.state());
-    for event in [SessionEvent::NegotiationCompleted, SessionEvent::EndSession] {
+    for event in [
+        SessionEvent::NegotiationCompleted,
+        SessionEvent::FirstMediaFrame(remotecam_session_core::MediaFrame {
+            sequence: 0,
+            timestamp: Timestamp::ZERO,
+        }),
+        SessionEvent::EndSession,
+    ] {
         effects.push(core.handle(event).expect("the happy path is valid"));
         states.push(core.state());
     }
@@ -239,6 +320,7 @@ fn the_happy_path_walks_every_state_in_order() {
             SessionState::PairingReady,
             SessionState::Handshaking,
             SessionState::Negotiating,
+            SessionState::Negotiating,
             SessionState::Connected,
             SessionState::Ended,
         ]
@@ -248,7 +330,8 @@ fn the_happy_path_walks_every_state_in_order() {
     assert_eq!(effects[1], Vec::new());
     assert!(matches!(effects[2].as_slice(), [Effect::SendPaired { .. }]));
     assert_eq!(effects[3], vec![Effect::StartMedia]);
-    assert_eq!(effects[4], vec![Effect::End]);
+    assert!(effects[4].is_empty());
+    assert_eq!(effects[5], vec![Effect::End]);
 }
 
 #[test]
@@ -322,7 +405,14 @@ fn run_path(seed: u64, start_millis: u64) -> Trace {
     ]);
     timestamps.push(core.last_transition_at());
 
-    for event in [SessionEvent::NegotiationCompleted, SessionEvent::EndSession] {
+    for event in [
+        SessionEvent::NegotiationCompleted,
+        SessionEvent::FirstMediaFrame(remotecam_session_core::MediaFrame {
+            sequence: 0,
+            timestamp: Timestamp::ZERO,
+        }),
+        SessionEvent::EndSession,
+    ] {
         clock.advance(10);
         effects.push(core.handle(event).expect("the happy path is valid"));
         timestamps.push(core.last_transition_at());
@@ -361,6 +451,7 @@ fn the_injected_clock_start_shifts_every_transition_timestamp() {
             Timestamp::from_millis(1_030),
             Timestamp::from_millis(1_040),
             Timestamp::from_millis(1_050),
+            Timestamp::from_millis(1_060),
         ]
     );
 }

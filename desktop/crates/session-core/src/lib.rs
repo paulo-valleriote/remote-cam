@@ -55,6 +55,30 @@ impl Timestamp {
     }
 }
 
+/// The deadline for receiving the first media frame after signaling completes.
+pub const FIRST_MEDIA_FRAME_TIMEOUT_MILLIS: u64 = 3_000;
+
+/// Metadata for the first frame observed by the media port.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MediaFrame {
+    /// The frame's zero-based sequence number.
+    pub sequence: u64,
+    /// The injected-clock instant at which the frame was produced.
+    pub timestamp: Timestamp,
+}
+
+/// The media source boundary driven by an adapter after negotiation.
+pub trait MediaPort {
+    /// Starts the media source.
+    fn start(&mut self);
+
+    /// Returns the next frame observation, if one is available.
+    fn next_frame(&mut self) -> Option<MediaFrame>;
+
+    /// Stops the media source and releases its resources.
+    fn stop(&mut self);
+}
+
 /// The time source the Session Core reads. It is injected, never global.
 pub trait Clock {
     /// The current position of the clock.
@@ -126,6 +150,10 @@ pub enum SessionEvent {
     PeerConnected,
     /// Offer and answer completed negotiation.
     NegotiationCompleted,
+    /// The first frame arrived from the media port.
+    FirstMediaFrame(MediaFrame),
+    /// No first frame arrived before the media deadline.
+    FirstFrameTimedOut,
     /// One side ended an established session.
     EndSession,
 }
@@ -142,7 +170,7 @@ pub enum Effect {
         dtls_fingerprint: [u8; 32],
         accepted_limits: Limits,
     },
-    /// Start the media pipeline.
+    /// Start the media port after the answer has completed signaling.
     StartMedia,
     /// Release the session resources.
     End,
@@ -251,6 +279,7 @@ pub struct SessionCore<C: Clock, R: RandomSource> {
     pairing_token: Option<PairingToken>,
     desktop_dtls_fingerprint: [u8; 32],
     last_transition_at: Timestamp,
+    first_frame_deadline: Option<Timestamp>,
 }
 
 impl<C: Clock, R: RandomSource> SessionCore<C, R> {
@@ -265,6 +294,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             pairing_token: None,
             desktop_dtls_fingerprint,
             last_transition_at: Timestamp::ZERO,
+            first_frame_deadline: None,
         }
     }
 
@@ -386,8 +416,35 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             (SessionState::PairingReady, SessionEvent::PeerConnected) => {
                 Some((SessionState::Handshaking, Vec::new()))
             }
-            (SessionState::Negotiating, SessionEvent::NegotiationCompleted) => {
-                Some((SessionState::Connected, vec![Effect::StartMedia]))
+            (SessionState::Negotiating, SessionEvent::NegotiationCompleted)
+                if self.first_frame_deadline.is_none() =>
+            {
+                let now = self.clock.now();
+                self.first_frame_deadline = Some(Timestamp::from_millis(
+                    now.as_millis()
+                        .saturating_add(FIRST_MEDIA_FRAME_TIMEOUT_MILLIS),
+                ));
+                Some((SessionState::Negotiating, vec![Effect::StartMedia]))
+            }
+            (SessionState::Negotiating, SessionEvent::FirstMediaFrame(frame)) => {
+                let deadline = self.first_frame_deadline?;
+                if frame.timestamp <= deadline && self.clock.now() <= deadline {
+                    self.first_frame_deadline = None;
+                    Some((SessionState::Connected, Vec::new()))
+                } else {
+                    None
+                }
+            }
+            (SessionState::Negotiating, SessionEvent::FirstFrameTimedOut)
+                if self
+                    .first_frame_deadline
+                    .is_some_and(|deadline| self.clock.now() >= deadline) =>
+            {
+                self.first_frame_deadline = None;
+                self.session_id = None;
+                self.epoch = None;
+                self.pairing_token = None;
+                Some((SessionState::Idle, vec![Effect::End]))
             }
             (SessionState::Connected, SessionEvent::EndSession) => {
                 Some((SessionState::Ended, vec![Effect::End]))
