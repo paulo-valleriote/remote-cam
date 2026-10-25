@@ -1,79 +1,105 @@
 use remotecam_harness::{
-    HarnessReport, Outcome, ScenarioConfig, ScenarioKind, Verdict, run, run_with,
+    Outcome, RunOptions, ScenarioConfig, ScenarioKind, Verdict, run, run_with, run_with_options,
 };
-use remotecam_session_core::{FIRST_MEDIA_FRAME_TIMEOUT_MILLIS, SessionState, Timestamp};
+use remotecam_session_core::{FIRST_MEDIA_FRAME_TIMEOUT_MILLIS, Timestamp};
+use serde_json::Value;
+
+const REPORT_SCHEMA: &str = include_str!("../../../report.schema.json");
+const GOLDEN_REPORT: &str = include_str!("fixtures/report.json");
 
 #[test]
-fn the_pairing_scenario_reaches_connected_and_passes() {
-    let report = run();
+fn the_happy_path_and_pin_mismatch_scenarios_pass_with_expected_results() {
+    let report = run().expect("Git and the pinned Rust toolchain are available");
 
-    assert_eq!(report.scenario, "pairing");
-    assert_eq!(report.outcome, remotecam_harness::Outcome::Connected);
-    assert_eq!(report.observed_state, "ended");
+    assert_eq!(report.report_version, 3);
+    assert_eq!(report.contract_version, 1);
+    assert_eq!(report.scenarios.len(), 2);
+    assert_eq!(report.verdict, Verdict::Pass);
+    assert_eq!(report.summary.scenarios, 2);
+    assert_eq!(report.summary.passed, 2);
+    assert_eq!(report.summary.failed, 0);
+
+    let happy_path = &report.scenarios[0];
+    assert_eq!(happy_path.scenario, "pairing-happy-path");
+    assert_eq!(happy_path.outcome, Outcome::Accepted);
+    assert_eq!(happy_path.observed_state, "ended");
+    assert_eq!(happy_path.reason_code, None);
+    assert_eq!(happy_path.verdict, Verdict::Pass);
+    assert_eq!(
+        happy_path.message_sequence,
+        ["pair", "paired", "offer", "answer"]
+    );
     assert!(
-        report
+        happy_path
             .state_trace
             .iter()
             .any(|transition| transition.to == "connected")
     );
-    assert_eq!(report.verdict, Verdict::Pass);
-    assert_eq!(report.summary.scenarios, 1);
-    assert_eq!(report.summary.passed, 1);
-    assert_eq!(report.summary.failed, 0);
+
+    let pin_mismatch = &report.scenarios[1];
+    assert_eq!(pin_mismatch.scenario, "pin-mismatch-aborts");
+    assert_eq!(pin_mismatch.outcome, Outcome::Rejected);
+    assert_eq!(pin_mismatch.reason_code, Some("certificate_pin_mismatch"));
+    assert_eq!(pin_mismatch.verdict, Verdict::Pass);
+    assert!(pin_mismatch.message_sequence.is_empty());
+    assert_eq!(pin_mismatch.resources.connections.created, 0);
+    assert_eq!(pin_mismatch.resources.listeners.active_after_close, 0);
+    assert_eq!(pin_mismatch.resources.tasks.active_after_close, 0);
 }
 
 #[test]
-fn a_session_that_does_not_reach_connected_fails_the_scenario() {
-    let report = HarnessReport::for_session_state(SessionState::Ended);
+fn the_serialised_report_matches_the_versioned_golden_fixture() {
+    let report = run().expect("Git and the pinned Rust toolchain are available");
+    let actual: Value =
+        serde_json::from_str(&report.to_json().expect("report serialises")).unwrap();
+    let mut expected: Value = serde_json::from_str(GOLDEN_REPORT).unwrap();
 
-    assert_eq!(report.observed_state, "ended");
-    assert_eq!(report.verdict, Verdict::Fail);
-    assert_eq!(report.summary.scenarios, 1);
-    assert_eq!(report.summary.passed, 0);
-    assert_eq!(report.summary.failed, 1);
-    assert_eq!(report.reason_code, Some("internal_error"));
+    expected["commit"] = actual["commit"].clone();
+    expected["environment"] = actual["environment"].clone();
+
+    assert_eq!(actual, expected);
+    assert!(!report.to_json().unwrap().contains("pairing_token"));
+    assert!(!report.to_json().unwrap().contains("fingerprint"));
 }
 
 #[test]
-fn the_report_serialises_to_the_documented_json_line() {
-    let json = run().to_json().expect("the report is a plain JSON value");
+fn every_emitted_report_validates_against_the_versioned_schema() {
+    let report = run().expect("Git and the pinned Rust toolchain are available");
+    let schema: Value = serde_json::from_str(REPORT_SCHEMA).unwrap();
+    let validator = jsonschema::validator_for(&schema).expect("report schema is valid");
+    let instance: Value =
+        serde_json::from_str(&report.to_json().expect("report serialises")).unwrap();
 
-    assert_eq!(
-        json,
-        r#"{"report_version":2,"scenario":"pairing","outcome":"connected","observed_state":"ended","message_sequence":["pair","paired","offer","answer"],"state_trace":[{"from":"idle","to":"pairing_ready","at_millis":0},{"from":"pairing_ready","to":"handshaking","at_millis":0},{"from":"handshaking","to":"negotiating","at_millis":0},{"from":"negotiating","to":"connected","at_millis":33},{"from":"connected","to":"ended","at_millis":66}],"frames":[{"sequence":0,"at_millis":33},{"sequence":1,"at_millis":66}],"resources":{"listeners":{"created":1,"active_after_close":0},"connections":{"created":1,"active_after_close":0},"media_ports":{"created":1,"active_after_close":0},"tasks":{"created":1,"active_after_close":0}},"verdict":"pass","summary":{"scenarios":1,"passed":1,"failed":0}}"#
-    );
-    assert!(!json.contains("token"));
-    assert!(!json.contains("fingerprint"));
+    let errors: Vec<String> = validator
+        .iter_errors(&instance)
+        .map(|error| error.to_string())
+        .collect();
+    assert!(errors.is_empty(), "report schema errors: {errors:#?}");
 }
 
 #[test]
-fn the_same_state_produces_the_same_report() {
-    let first = HarnessReport::for_session_state(SessionState::Connected)
-        .to_json()
-        .expect("the report is a plain JSON value");
-    let second = HarnessReport::for_session_state(SessionState::Connected)
-        .to_json()
-        .expect("the report is a plain JSON value");
+fn repeated_runs_with_identical_inputs_differ_only_in_environment() {
+    let options = RunOptions {
+        seed: 42,
+        clock_start_millis: 100,
+    };
+    let first = run_with_options(options);
+    let second = run_with_options(options);
+    let first = serde_json::to_value(first.expect("first run succeeds")).unwrap();
+    let second = serde_json::to_value(second.expect("second run succeeds")).unwrap();
 
-    assert_eq!(first, second);
-}
-
-#[test]
-fn the_pairing_run_is_reproducible() {
-    let first = run().to_json().expect("the report is a plain JSON value");
-    let second = run().to_json().expect("the report is a plain JSON value");
-
-    assert_eq!(first, second);
-}
-
-#[test]
-fn the_pairing_run_observes_the_mobile_message_sequence() {
-    let report = run();
-
-    assert_eq!(
-        report.message_sequence,
-        ["pair", "paired", "offer", "answer"]
-    );
+    assert_eq!(first["commit"], second["commit"]);
+    let mut normalized_first = first;
+    let mut normalized_second = second;
+    normalized_first
+        .as_object_mut()
+        .unwrap()
+        .remove("environment");
+    normalized_second
+        .as_object_mut()
+        .unwrap()
+        .remove("environment");
+    assert_eq!(normalized_first, normalized_second);
 }
 
 #[test]
@@ -107,4 +133,26 @@ fn the_public_timeout_scenario_reports_cleanup_and_a_discarded_late_frame() {
     assert_eq!(report.resources.connections.active_after_close, 0);
     assert_eq!(report.resources.media_ports.active_after_close, 0);
     assert_eq!(report.resources.tasks.active_after_close, 0);
+}
+
+#[test]
+fn report_metadata_and_environment_have_the_approved_shape() {
+    let report = run().expect("Git and the pinned Rust toolchain are available");
+
+    assert_eq!(report.seed, 0);
+    assert_eq!(report.clock_start_millis, 0);
+    assert!(matches!(report.commit.len(), 40 | 64));
+    assert!(report.commit.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert!(!report.environment.os.is_empty());
+    assert!(!report.environment.architecture.is_empty());
+    assert!(!report.environment.rustc_version.is_empty());
+    let environment = serde_json::to_value(report.environment).unwrap();
+    let mut environment_keys: Vec<&str> = environment
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    environment_keys.sort_unstable();
+    assert_eq!(environment_keys, ["architecture", "os", "rustc_version"]);
 }

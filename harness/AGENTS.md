@@ -18,9 +18,9 @@
 - **Location:** top-level `harness/`, decided in ADR-0007. The F0 harnesses stay under `spikes/` and are disposable.
 - **Workspace:** `harness/Cargo.toml` (resolver 3, edition 2024, MSRV 1.92, version 0.1.0) with one member, `crates/harness`.
 - **Toolchain:** `harness/rust-toolchain.toml` — `1.99.1`, components `clippy` + `rustfmt`, profile `minimal`.
-- **Build and run:** `make harness` runs `cargo run --quiet --locked --package remotecam-harness` from inside `harness/`, so rustup honours the pinned toolchain; GNU `timeout` bounds execution externally.
+- **Build and run:** `make harness` runs `cargo run --quiet --locked --package remotecam-harness` from inside `harness/`, so rustup honours the pinned toolchain; GNU `timeout` bounds execution externally. `make harness HARNESS_ARGS="--seed 42 --clock-start-millis 100"` overrides the deterministic defaults.
 - **Dependency direction:** the harness consumes `desktop/crates/pairing`, `desktop/crates/session-core` and `desktop/crates/protocol` by relative path. It never reaches into `desktop/crates/app` and never defines the contract, which belongs to `protocol/`.
-- **Output:** one JSON line on stdout per run, containing the report version, scenario and outcome, observed state and state trace, the observed `pair` → `paired` → `offer` → `answer` sequence, frame sequence/timestamps, post-close resource counts, an optional discarded late frame or failure reason code, per-scenario verdict, and summary. Exit code 0 means every scenario passed; 1 means at least one failed.
+- **Output:** one JSON line on stdout per run, containing report version 3, protocol contract version 1, commit, seed, logical clock start, an allowlisted environment, the ordered `pairing-happy-path` and `pin-mismatch-aborts` results, diagnostic state/message/frame/resource observations, per-scenario verdict and reason code, and a summary. `harness/report.schema.json` is the report contract. Exit code 0 means both scenarios passed; 1 means at least one failed.
 
 ## Harness-specific rules
 
@@ -45,14 +45,15 @@
 ### 4. Determinism and observability
 
 - The clock and the random source are injected; the harness never reads the wall clock or a global RNG.
-- The same scenario with the same seed and the same injected clock start produces byte-identical output.
+- Runs with the same commit, seed and logical clock start produce byte-identical output except for the allowlisted `environment` block.
+- The report metadata reads the current commit with `git rev-parse HEAD` and the compiler version with `rustc --version`; failure to obtain either is explicit and produces no report.
 - The report is English-only JSON with no tokens, fingerprints, secrets or personal data.
 
 ### 5. Tests and lint
 
 - `make test` runs `cargo test --workspace` from inside `harness/`; `make lint` runs `rustfmt --check` and Clippy with `-D warnings` for the same workspace.
 - Tests exercise the public harness API and the binary's exit code and output, not private helpers.
-- The harness is not a delivered package, so the 90 % coverage gate stays on `remotecam-protocol`, `remotecam-session-core` and `mobile/protocol`; new harness logic still needs deterministic tests.
+- The harness is not shipped, but REC-25 requires ≥90% line coverage for `remotecam-harness`; `make coverage` enforces it alongside the delivered-package thresholds.
 
 ### 6. Before modifying
 

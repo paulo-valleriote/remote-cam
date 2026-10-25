@@ -16,14 +16,17 @@ test: ## Run the desktop, harness, Android and spike-tooling tests
 
 coverage: ## Report coverage for the delivered product packages (≥90% required; spikes/ exempt per T117)
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || { echo "error: cargo-llvm-cov is required; install it with 'cargo install cargo-llvm-cov'." >&2; exit 1; }
+	mkdir -p .coverage
 	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-protocol --summary-only > .coverage/rust_protocol_summary.txt
 	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-session-core --summary-only > .coverage/rust_session_core_summary.txt
 	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-pairing --summary-only > .coverage/rust_pairing_summary.txt
+	cd harness && $(CARGO) llvm-cov --package remotecam-harness --summary-only > ../.coverage/rust_harness_summary.txt
 	$(GRADLE) -p mobile :protocol:jacocoTestReport
 	python3 scripts/ci/coverage_gate.py \
 		--rust-summary .coverage/rust_protocol_summary.txt \
 		--rust-session-core-summary .coverage/rust_session_core_summary.txt \
 		--rust-pairing-summary .coverage/rust_pairing_summary.txt \
+		--rust-harness-summary .coverage/rust_harness_summary.txt \
 		--jacoco-report mobile/protocol/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
 
 lint: ## Check formatting and run the linters

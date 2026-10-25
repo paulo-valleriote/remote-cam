@@ -84,7 +84,8 @@ target below is documented here.
 | `make help` | List the available targets. |
 | `make install` | Install the Python measurement package and its development dependencies. |
 | `make build-desktop` | Build the Rust workspace in `desktop/`. |
-| `make harness` | Run the headless product harness end to end under an external watchdog (one deterministic JSON line on stdout; exit code 0 means every scenario passed). |
+| `make harness` | Run both headless product-harness scenarios under an external watchdog (one versioned JSON line on stdout; exit code 0 means both scenarios passed). |
+| `make harness HARNESS_ARGS="--seed 42 --clock-start-millis 100"` | Re-run the scenarios with explicit deterministic inputs. |
 | `make build-desktop-win` | Mirror the workspace to the Windows filesystem (`/mnt/c/Users/<user>/remotecam-win`) and build natively from WSL2; avoids the UNC filesystem error (see `docs/windows-build.md`). |
 | `make sync-desktop-win` | Mirror the working tree to the Windows filesystem without building (helper used by `build-desktop-win`). |
 | `make build-mobile` | Assemble the Android contract library (`mobile/protocol/build/outputs/aar`). |
@@ -138,59 +139,62 @@ GLOSSARY.md Shared domain vocabulary
 4. the Android contract module's unit tests with JUnit 5;
 5. `pytest` over the spike tooling.
 
-`make coverage` reports `cargo-llvm-cov` coverage for `remotecam-protocol` and
-`remotecam-session-core`, and the JaCoCo report for `mobile/protocol`. The 90 %
-threshold applies to those delivered product packages; `spikes/` is exempt as
-recorded in the plan's Complexity Tracking, and the harness is not a shipped
-package (ADR-0008).
+`make coverage` reports `cargo-llvm-cov` coverage for `remotecam-protocol`,
+`remotecam-session-core`, `remotecam-pairing` and `remotecam-harness`, and the
+JaCoCo report for `mobile/protocol`. The ≥90% line threshold applies to the
+delivered packages and, as a REC-25-specific gate, to the non-shipped Harness.
+`spikes/` remains exempt as recorded in the plan's Complexity Tracking.
 
 ## Product harness
 
-`make harness` runs the product-owned headless harness in `harness/`. It is a
-separate Cargo workspace pinned to Rust 1.99.1, so `make build-desktop` never
-compiles it. The harness drives `desktop/crates/pairing`,
-`desktop/crates/session-core` and `desktop/crates/protocol` and prints one
-deterministic JSON line per run. GNU `timeout` externally bounds the command to
-120 seconds. Exit code 0 means every scenario passed; exit code 1 means at least
-one failed.
+`make harness` runs the product-owned headless Harness in its separate Cargo
+workspace, pinned to Rust 1.99.1; `make build-desktop` never compiles it. The
+Harness drives `desktop/crates/pairing`, `desktop/crates/session-core` and
+`desktop/crates/protocol`, then prints one compact JSON line with
+`report_version: 3` and `contract_version: 1`. GNU `timeout` bounds execution
+to 120 seconds. Exit code 0 means both scenarios passed; exit code 1 means at
+least one scenario failed.
 
-The product harness generates and decodes a version 1 QR payload in memory,
-connects a synthetic mobile client to the loopback TLS 1.3 listener using the
-exact pinned certificate, and exchanges `pair`, `paired`, `offer` and `answer`
-over the authenticated channel. Since QR v1 excludes loopback addresses, the
-synthetic client routes the valid advertised private endpoint's port to the
-loopback listener. After `answer`, the harness supplies two deterministic,
-in-process synthetic frames at logical timestamps 33 ms apart. The Session Core
-reaches `connected` only after the first frame, then the session closes cleanly.
-The opaque version-1 answer is not parsed for media negotiation. The report
-includes the state trace, frame sequence/timestamps, and post-close resource
-counts; it excludes the pairing token, fingerprints, and frame payload bytes. The public
-`run_with` API also supports a first-frame-timeout scenario: it returns
-`outcome: timed_out` at `idle`, records a frame arriving 33 ms after the
-3-second deadline as discarded, and reports released resources. Scenario
-timing advances the injected logical clock without waiting on real timers. An
-integration test also verifies that a divergent QR pin is rejected after one
-connection attempt, with no fallback. The injected clock and RNG make the
-scenario reproducible. Nothing under `spikes/` is imported. A failed scenario includes
-its reason code in the report (FR-039,
+The report envelope contains the Git commit, seed, injected logical clock
+start, an allowlisted environment (`os`, `architecture`, `rustc_version`),
+ordered scenario results, verdict and summary. It excludes wall-clock time,
+hostnames, ephemeral ports, absolute paths, Pairing Tokens, certificate
+fingerprints and frame payloads. Failure to resolve the commit or run
+`rustc --version` is explicit and emits no report.
+
+The `pairing-happy-path` scenario decodes a version 1 QR payload, completes the
+loopback TLS 1.3 handshake with the exact pinned certificate, exchanges `pair`,
+`paired`, `offer` and `answer`, supplies two synthetic frames 33 logical
+milliseconds apart, then closes cleanly. The Session Core reaches `connected`
+only after the first frame. Its expected result is `verdict: pass`,
+`outcome: accepted`, `reason_code: null`.
+
+The `pin-mismatch-aborts` scenario presents the client with a deliberately
+different TLS pin. It expects the handshake to abort before the client sends
+the Pairing Token, with `verdict: pass`, `outcome: rejected` and
+`reason_code: certificate_pin_mismatch`. The reason code already belongs to
+protocol v1; the scenario adds no wire change.
+
+Pass `HARNESS_ARGS` to reproduce a run with chosen inputs:
+
+```bash
+make harness HARNESS_ARGS="--seed 42 --clock-start-millis 100"
+```
+
+Defaults are seed `0` and logical clock start `0`. Runs with the same commit,
+seed and clock start are byte-identical except for `environment`. The complete
+report shape is specified by [`harness/report.schema.json`](harness/report.schema.json)
+and checked in tests against the emitted JSON; the versioned golden fixture is
+[`report.json`](harness/crates/harness/tests/fixtures/report.json). The public
+`run_with` API retains the first-frame-timeout scenario for deterministic
+Session Core diagnostics; it is not part of the default two-scenario report.
+Nothing under `spikes/` is imported (FR-039,
 [ADR-0007](docs/adr/0007-harness-location.md),
 [ADR-0008](docs/adr/0008-harness-dependency-baseline.md),
-[ADR-0009](docs/adr/0009-pairing-crate-and-tls-baseline.md)).
+[ADR-0009](docs/adr/0009-pairing-crate-and-tls-baseline.md),
+[ADR-0010](docs/adr/0010-harness-report-contract-and-coverage.md)).
 The harness uses newline-delimited signaling messages on its TCP stream solely
 to delimit this local scenario; the versioned protocol contract is unchanged.
-
-Successful report line (`outcome: connected` means the state was reached; the
-final `observed_state` is `ended` after cleanup):
-
-```json
-{"report_version":2,"scenario":"pairing","outcome":"connected","observed_state":"ended","message_sequence":["pair","paired","offer","answer"],"state_trace":[{"from":"idle","to":"pairing_ready","at_millis":0},{"from":"pairing_ready","to":"handshaking","at_millis":0},{"from":"handshaking","to":"negotiating","at_millis":0},{"from":"negotiating","to":"connected","at_millis":33},{"from":"connected","to":"ended","at_millis":66}],"frames":[{"sequence":0,"at_millis":33},{"sequence":1,"at_millis":66}],"resources":{"listeners":{"created":1,"active_after_close":0},"connections":{"created":1,"active_after_close":0},"media_ports":{"created":1,"active_after_close":0},"tasks":{"created":1,"active_after_close":0}},"verdict":"pass","summary":{"scenarios":1,"passed":1,"failed":0}}
-```
-
-Timeout scenario report line:
-
-```json
-{"report_version":2,"scenario":"first_frame_timeout","outcome":"timed_out","observed_state":"idle","message_sequence":["pair","paired","offer","answer"],"state_trace":[{"from":"idle","to":"pairing_ready","at_millis":0},{"from":"pairing_ready","to":"handshaking","at_millis":0},{"from":"handshaking","to":"negotiating","at_millis":0},{"from":"negotiating","to":"idle","at_millis":3001,"cause":"timeout"}],"frames":[],"late_frame_discarded":{"sequence":0,"at_millis":3033,"reason":"timeout"},"resources":{"listeners":{"created":1,"active_after_close":0},"connections":{"created":1,"active_after_close":0},"media_ports":{"created":1,"active_after_close":0},"tasks":{"created":1,"active_after_close":0}},"verdict":"pass","summary":{"scenarios":1,"passed":1,"failed":0}}
-```
 
 ## Debugging
 

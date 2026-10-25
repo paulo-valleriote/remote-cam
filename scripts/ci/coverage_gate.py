@@ -1,10 +1,10 @@
-"""Coverage gate for the delivered product packages.
+"""Coverage gate for delivered packages and the product harness.
 
 Enforces ≥ 90 % line coverage for ``desktop/crates/protocol``,
 ``desktop/crates/session-core`` and ``desktop/crates/pairing`` (via
-``cargo-llvm-cov``) and ``mobile/protocol`` (via JaCoCo). ``spikes/`` and the
-product harness are exempt: the first is a recorded deviation (T117), the
-second is not a shipped package (ADR-0008).
+``cargo-llvm-cov``), the product harness (via ``cargo-llvm-cov``), and
+``mobile/protocol`` (via JaCoCo). ``spikes/`` is exempt as a recorded deviation
+(T117); the harness has its own REC-25 gate despite not being shipped.
 
 Usage::
 
@@ -12,9 +12,10 @@ Usage::
         --rust-summary <cargo-llvm-cov --summary-only output for remotecam-protocol> \
         --rust-session-core-summary <cargo-llvm-cov --summary-only output for remotecam-session-core> \
         --rust-pairing-summary <cargo-llvm-cov --summary-only output for remotecam-pairing> \
+        --rust-harness-summary <cargo-llvm-cov --summary-only output for remotecam-harness> \
         --jacoco-report <jacocoTestReport.xml>
 
-Exit status is 1 when any package is below 90 %.
+Exit status is 1 when any supplied package or the harness is below 90 %.
 """
 
 from __future__ import annotations
@@ -75,6 +76,10 @@ def main() -> int:
         help="Text output of `cargo llvm-cov --summary-only` for remotecam-pairing",
     )
     parser.add_argument(
+        "--rust-harness-summary",
+        help="Text output of `cargo llvm-cov --summary-only` for remotecam-harness",
+    )
+    parser.add_argument(
         "--jacoco-report",
         help="Path to JaCoCo XML report for mobile/protocol",
     )
@@ -86,6 +91,7 @@ def main() -> int:
         ("Rust protocol", args.rust_summary),
         ("Rust session core", args.rust_session_core_summary),
         ("Rust pairing", args.rust_pairing_summary),
+        ("Product harness", args.rust_harness_summary),
     ]
     for label, summary_path in rust_summaries:
         if not summary_path:
@@ -117,7 +123,7 @@ def main() -> int:
             print(failure, file=sys.stderr)
         return 1
 
-    print("Coverage gate PASSED: all delivered packages at or above 90%")
+    print("Coverage gate PASSED: all supplied packages at or above 90%")
     return 0
 
 
