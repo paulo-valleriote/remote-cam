@@ -1,7 +1,7 @@
 use std::fmt;
 
 use remotecam_protocol::{Endpoint, QrEncodeError, QrPayload};
-use remotecam_session_core::SessionId;
+use remotecam_session_core::{PairingMaterial as SessionPairingMaterial, SessionId};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::certificate::EphemeralCertificate;
@@ -55,6 +55,26 @@ pub struct PairingMaterial {
     encoded_qr: Zeroizing<Vec<u8>>,
 }
 
+pub struct PairingMaterialRequest<'a> {
+    session_material: &'a SessionPairingMaterial,
+    expires_at_unix: u64,
+    endpoints: Vec<Endpoint>,
+}
+
+impl<'a> PairingMaterialRequest<'a> {
+    pub fn new(
+        session_material: &'a SessionPairingMaterial,
+        expires_at_unix: u64,
+        endpoints: Vec<Endpoint>,
+    ) -> Self {
+        Self {
+            session_material,
+            expires_at_unix,
+            endpoints,
+        }
+    }
+}
+
 impl fmt::Debug for PairingMaterial {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -71,25 +91,21 @@ impl fmt::Debug for PairingMaterial {
 
 impl PairingMaterial {
     pub fn issue(
-        session_material: &remotecam_session_core::PairingMaterial,
+        request: PairingMaterialRequest<'_>,
         certificate: &EphemeralCertificate,
-        expires_at_unix: u64,
-        endpoints: Vec<Endpoint>,
     ) -> Result<Self, MaterialError> {
-        Self::issue_with_fingerprint(
-            session_material,
-            certificate.fingerprint(),
-            expires_at_unix,
-            endpoints,
-        )
+        Self::issue_with_fingerprint(request, certificate.fingerprint())
     }
 
     pub(crate) fn issue_with_fingerprint(
-        session_material: &remotecam_session_core::PairingMaterial,
+        request: PairingMaterialRequest<'_>,
         tls_fingerprint: [u8; 32],
-        expires_at_unix: u64,
-        endpoints: Vec<Endpoint>,
     ) -> Result<Self, MaterialError> {
+        let PairingMaterialRequest {
+            session_material,
+            expires_at_unix,
+            endpoints,
+        } = request;
         let session_id = session_material.session_id();
         let epoch =
             u32::try_from(session_material.epoch()).map_err(|_| MaterialError::InvalidEpoch)?;
@@ -142,7 +158,7 @@ impl PairingMaterial {
 
 #[cfg(test)]
 mod tests {
-    use super::{DESKTOP_CAPABILITIES, MaterialError, PairingMaterial};
+    use super::{DESKTOP_CAPABILITIES, MaterialError, PairingMaterial, PairingMaterialRequest};
     use crate::certificate::EphemeralCertificate;
     use remotecam_protocol::hex::encode_hex;
     use remotecam_protocol::{Endpoint, QrEncodeError, QrPayload};
@@ -173,17 +189,22 @@ mod tests {
 
     fn material(certificate: &EphemeralCertificate) -> PairingMaterial {
         let session_material = session_material();
-        PairingMaterial::issue(&session_material, certificate, EXPIRES_AT, endpoints())
-            .expect("material")
+        PairingMaterial::issue(
+            PairingMaterialRequest::new(&session_material, EXPIRES_AT, endpoints()),
+            certificate,
+        )
+        .expect("material")
     }
 
     #[test]
     fn the_encoded_qr_decodes_back_to_the_same_material() {
         let certificate = EphemeralCertificate::generate().expect("certificate");
         let session_material = session_material();
-        let material =
-            PairingMaterial::issue(&session_material, &certificate, EXPIRES_AT, endpoints())
-                .expect("material");
+        let material = PairingMaterial::issue(
+            PairingMaterialRequest::new(&session_material, EXPIRES_AT, endpoints()),
+            &certificate,
+        )
+        .expect("material");
 
         let decoded =
             QrPayload::decode(material.encoded_qr(), 1_900_000_000).expect("decoded payload");
@@ -238,9 +259,11 @@ mod tests {
     fn a_payload_without_endpoints_is_refused() {
         let certificate = EphemeralCertificate::generate().expect("certificate");
 
-        let error =
-            PairingMaterial::issue(&session_material(), &certificate, EXPIRES_AT, Vec::new())
-                .expect_err("an unreachable QR must be refused");
+        let error = PairingMaterial::issue(
+            PairingMaterialRequest::new(&session_material(), EXPIRES_AT, Vec::new()),
+            &certificate,
+        )
+        .expect_err("an unreachable QR must be refused");
 
         assert_eq!(error, MaterialError::Qr(QrEncodeError::NoEndpoints));
         assert!(error.to_string().contains("QR payload rejected"));

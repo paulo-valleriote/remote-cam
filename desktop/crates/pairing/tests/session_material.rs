@@ -1,4 +1,4 @@
-use remotecam_pairing::{EphemeralCertificate, PairingListener};
+use remotecam_pairing::{EphemeralCertificate, PairingListener, PairingMaterialRequest};
 use remotecam_protocol::signaling::{Limits, SignalingMessage};
 use remotecam_protocol::{Endpoint, QrPayload};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
@@ -28,7 +28,11 @@ async fn qr_material_authenticates_the_session_core_pairing() {
     let endpoint =
         Endpoint::from_address(4, "192.168.1.42", listener.local_addr().port()).expect("endpoint");
     let pairing_material = listener
-        .issue_material(session_material, EXPIRES_AT, vec![endpoint])
+        .issue_material(PairingMaterialRequest::new(
+            session_material,
+            EXPIRES_AT,
+            vec![endpoint],
+        ))
         .expect("pairing material");
     let payload =
         QrPayload::decode(pairing_material.encoded_qr(), 1_900_000_000).expect("QR payload");

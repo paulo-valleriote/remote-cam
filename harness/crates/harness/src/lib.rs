@@ -1,21 +1,25 @@
 //! The product harness: a headless driver for the RemoteCam pairing path.
 
-use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
-use remotecam_pairing::{EphemeralCertificate, PairingListener, PinnedClient};
+use remotecam_pairing::{
+    EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient,
+};
 use remotecam_protocol::signaling::{
     Limits, MAX_SIGNALING_MESSAGE_BYTES, Sdp, SignalingMessage, parse_signaling,
 };
 use remotecam_protocol::{Endpoint, QrPayload};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
-use remotecam_session_core::{Effect, SessionCore, SessionEvent, SessionState, Timestamp};
+use remotecam_session_core::{
+    Effect, RandomSource, SessionCore, SessionEvent, SessionState, Timestamp,
+};
 use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::runtime::Builder;
 use zeroize::{Zeroize, Zeroizing};
 
 const PAIRING_SEED: u64 = 0;
+const CERTIFICATE_SEED: u64 = 1;
 const PAIRING_CLOCK_START: Timestamp = Timestamp::ZERO;
 const QR_CLOCK_START_UNIX: u64 = 1_900_000_000;
 const QR_EXPIRES_AT_UNIX: u64 = 2_000_000_000;
@@ -23,6 +27,16 @@ const DESKTOP_DTLS_FINGERPRINT: [u8; 32] = [0x44; 32];
 const MOBILE_DTLS_FINGERPRINT: [u8; 32] = [0x55; 32];
 const OFFER_SDP: &str = "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\n";
 const ANSWER_SDP: &str = "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=recvonly\r\n";
+
+struct HarnessCertificateRandomSource(SeededRandomSource);
+
+impl RandomSource for HarnessCertificateRandomSource {
+    fn fill_bytes(&mut self, destination: &mut [u8]) {
+        self.0.fill_bytes(destination);
+    }
+}
+
+impl remotecam_pairing::certificate::CertificateRandomSource for HarnessCertificateRandomSource {}
 
 /// The per-scenario outcome carried by the report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -81,6 +95,10 @@ impl HarnessReport {
         }
     }
 
+    fn invalid_qr_payload(state: SessionState) -> Self {
+        Self::for_pairing_result(state, Some("invalid_qr_payload"), Vec::new())
+    }
+
     /// Serialises the report as the single JSON line the harness prints.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
@@ -123,16 +141,19 @@ async fn run_pairing() -> HarnessReport {
         return HarnessReport::for_pairing_result(core.state(), Some("internal_error"), Vec::new());
     };
 
-    let certificate = match EphemeralCertificate::generate() {
-        Ok(certificate) => certificate,
-        Err(_) => {
-            return HarnessReport::for_pairing_result(
-                core.state(),
-                Some("internal_error"),
-                Vec::new(),
-            );
-        }
-    };
+    let mut certificate_random =
+        HarnessCertificateRandomSource(SeededRandomSource::new(CERTIFICATE_SEED));
+    let certificate =
+        match EphemeralCertificate::generate_with_random_source(&mut certificate_random) {
+            Ok(certificate) => certificate,
+            Err(_) => {
+                return HarnessReport::for_pairing_result(
+                    core.state(),
+                    Some("internal_error"),
+                    Vec::new(),
+                );
+            }
+        };
     let listener = match PairingListener::bind_loopback(certificate).await {
         Ok(listener) => Arc::new(listener),
         Err(_) => {
@@ -144,28 +165,24 @@ async fn run_pairing() -> HarnessReport {
         }
     };
 
-    let address = listener.local_addr();
-    let endpoint = match Endpoint::from_address(4, "192.168.1.42", address.port()) {
-        Some(endpoint) => endpoint,
-        None => {
-            return HarnessReport::for_pairing_result(
-                core.state(),
-                Some("invalid_qr_payload"),
-                Vec::new(),
-            );
-        }
-    };
-    let pairing_material =
-        match listener.issue_material(material, QR_EXPIRES_AT_UNIX, vec![endpoint]) {
-            Ok(pairing_material) => pairing_material,
-            Err(_) => {
-                return HarnessReport::for_pairing_result(
-                    core.state(),
-                    Some("invalid_qr_payload"),
-                    Vec::new(),
-                );
+    let listener_address = listener.local_addr();
+    let advertised_endpoint =
+        match Endpoint::from_address(4, "192.168.1.42", listener_address.port()) {
+            Some(endpoint) => endpoint,
+            None => {
+                return HarnessReport::invalid_qr_payload(core.state());
             }
         };
+    let pairing_material = match listener.issue_material(PairingMaterialRequest::new(
+        material,
+        QR_EXPIRES_AT_UNIX,
+        vec![advertised_endpoint.clone()],
+    )) {
+        Ok(pairing_material) => pairing_material,
+        Err(_) => {
+            return HarnessReport::invalid_qr_payload(core.state());
+        }
+    };
 
     let mut mobile_payload =
         match QrPayload::decode(pairing_material.encoded_qr(), QR_CLOCK_START_UNIX) {
@@ -181,22 +198,16 @@ async fn run_pairing() -> HarnessReport {
     let mobile_token = Zeroizing::new(mobile_payload.pairing_token);
     mobile_payload.pairing_token.zeroize();
     let Some(endpoint) = mobile_payload.endpoints.first() else {
-        return HarnessReport::for_pairing_result(
-            core.state(),
-            Some("invalid_qr_payload"),
-            Vec::new(),
-        );
+        return HarnessReport::invalid_qr_payload(core.state());
     };
     if endpoint.address_string().is_none() {
-        return HarnessReport::for_pairing_result(
-            core.state(),
-            Some("invalid_qr_payload"),
-            Vec::new(),
-        );
+        return HarnessReport::invalid_qr_payload(core.state());
     }
-    // QR v1 excludes loopback addresses, so the synthetic client routes the
-    // decoded endpoint's port to the listener bound on the loopback interface.
-    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, endpoint.port));
+    let address = if endpoint == &advertised_endpoint {
+        listener_address
+    } else {
+        return HarnessReport::invalid_qr_payload(core.state());
+    };
     let session_id = mobile_payload.session_id;
     let epoch = u64::from(mobile_payload.epoch);
     let client = match PinnedClient::new(mobile_payload.tls_fingerprint) {

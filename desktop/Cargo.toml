@@ -24,5 +24,6 @@ rustls = "=0.23.46"
 tokio-rustls = "=0.26.6"
 rcgen = "=0.14.10"
 sha2 = "=0.11.1"
+p256 = { version = "=0.13.2", features = ["ecdsa", "pkcs8"] }
 subtle = "=2.6.1"
 zeroize = { version = "=1.9.1", features = ["derive"] }
