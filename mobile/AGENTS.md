@@ -17,7 +17,7 @@
 
 - **Gradle:** `gradle/libs.versions.toml` version catalog; `build.gradle.kts` (AGP 9.4.1, Kotlin 2.4.10); `compileSdk` 36; `minSdk` 29.
 - **Modules (1):** `:protocol` (the shared contract). The F0 `:core` and `:app` modules are quarantined.
-- **Build:** `make build-mobile` = `gradle -p mobile :protocol:assembleDebug`.
+- **Build:** `make build-mobile` = `mobile/gradlew -p mobile :protocol:assembleDebug`.
 - **Product app:** the capture/transmit application is built in F2, not in F1.
 
 ## Mobile-specific rules

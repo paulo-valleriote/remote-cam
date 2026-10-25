@@ -3,7 +3,7 @@ PYTHON ?= python3
 # before a recipe changes directory. Bare commands such as python3 pass through.
 PYTHON_BIN = $(if $(wildcard $(PYTHON)),$(abspath $(PYTHON)),$(PYTHON))
 CARGO ?= cargo
-GRADLE ?= gradle
+GRADLE ?= mobile/gradlew
 
 define need_script
 @test -f $(1) || { echo "error: $(1) is not implemented yet; see specs/001-f0-technical-spikes/tasks.md." >&2; exit 1; }
