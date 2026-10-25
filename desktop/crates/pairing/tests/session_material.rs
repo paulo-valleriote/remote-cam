@@ -1,4 +1,4 @@
-use remotecam_pairing::{EphemeralCertificate, PairingMaterial};
+use remotecam_pairing::{EphemeralCertificate, PairingListener};
 use remotecam_protocol::signaling::{Limits, SignalingMessage};
 use remotecam_protocol::{Endpoint, QrPayload};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
@@ -7,8 +7,8 @@ use remotecam_session_core::{Effect, PairingError, SessionCore, SessionEvent, Ti
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
 const EXPIRES_AT: u64 = 2_000_000_000;
 
-#[test]
-fn qr_material_authenticates_the_session_core_pairing() {
+#[tokio::test]
+async fn qr_material_authenticates_the_session_core_pairing() {
     let mut core = SessionCore::new(
         ManualClock::new(Timestamp::ZERO),
         SeededRandomSource::new(7),
@@ -21,17 +21,20 @@ fn qr_material_authenticates_the_session_core_pairing() {
         panic!("starting pairing presents session material");
     };
 
-    let certificate = EphemeralCertificate::generate().expect("certificate");
-    let pairing_material = PairingMaterial::issue(
-        session_material,
-        &certificate,
-        EXPIRES_AT,
-        vec![Endpoint::from_address(4, "192.168.1.42", 51820).expect("endpoint")],
-    )
-    .expect("pairing material");
+    let listener =
+        PairingListener::bind_loopback(EphemeralCertificate::generate().expect("certificate"))
+            .await
+            .expect("listener");
+    let endpoint =
+        Endpoint::from_address(4, "192.168.1.42", listener.local_addr().port()).expect("endpoint");
+    let pairing_material = listener
+        .issue_material(session_material, EXPIRES_AT, vec![endpoint])
+        .expect("pairing material");
     let payload =
         QrPayload::decode(pairing_material.encoded_qr(), 1_900_000_000).expect("QR payload");
 
+    assert_eq!(payload.tls_fingerprint, listener.fingerprint());
+    assert_eq!(payload.endpoints[0].port, listener.local_addr().port());
     assert_eq!(
         payload.session_id,
         *session_material.session_id().as_bytes()

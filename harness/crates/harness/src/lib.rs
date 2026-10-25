@@ -155,48 +155,29 @@ async fn run_pairing() -> HarnessReport {
             );
         }
     };
-    let epoch = match u32::try_from(material.epoch()) {
-        Ok(epoch) => epoch,
-        Err(_) => {
-            return HarnessReport::for_pairing_result(
-                core.state(),
-                Some("invalid_qr_payload"),
-                Vec::new(),
-            );
-        }
-    };
-    let mut qr_payload = QrPayload {
-        session_id: *material.session_id().as_bytes(),
-        epoch,
-        expires_at: QR_EXPIRES_AT_UNIX,
-        pairing_token: *material.token().as_bytes(),
-        tls_fingerprint: listener.fingerprint(),
-        capabilities: remotecam_pairing::DESKTOP_CAPABILITIES,
-        endpoints: vec![endpoint],
-    };
-    let encoded_qr = qr_payload.encode();
-    qr_payload.pairing_token.zeroize();
-    let encoded_qr = match encoded_qr {
-        Ok(encoded_qr) => Zeroizing::new(encoded_qr),
-        Err(_) => {
-            return HarnessReport::for_pairing_result(
-                core.state(),
-                Some("invalid_qr_payload"),
-                Vec::new(),
-            );
-        }
-    };
+    let pairing_material =
+        match listener.issue_material(material, QR_EXPIRES_AT_UNIX, vec![endpoint]) {
+            Ok(pairing_material) => pairing_material,
+            Err(_) => {
+                return HarnessReport::for_pairing_result(
+                    core.state(),
+                    Some("invalid_qr_payload"),
+                    Vec::new(),
+                );
+            }
+        };
 
-    let mut mobile_payload = match QrPayload::decode(&encoded_qr, QR_CLOCK_START_UNIX) {
-        Ok(payload) => payload,
-        Err(error) => {
-            return HarnessReport::for_pairing_result(
-                core.state(),
-                Some(error.code.as_str()),
-                Vec::new(),
-            );
-        }
-    };
+    let mut mobile_payload =
+        match QrPayload::decode(pairing_material.encoded_qr(), QR_CLOCK_START_UNIX) {
+            Ok(payload) => payload,
+            Err(error) => {
+                return HarnessReport::for_pairing_result(
+                    core.state(),
+                    Some(error.code.as_str()),
+                    Vec::new(),
+                );
+            }
+        };
     let mobile_token = Zeroizing::new(mobile_payload.pairing_token);
     mobile_payload.pairing_token.zeroize();
     let Some(endpoint) = mobile_payload.endpoints.first() else {

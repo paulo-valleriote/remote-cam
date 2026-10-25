@@ -5,7 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll};
 
-use remotecam_protocol::ReasonCode;
+use remotecam_protocol::{Endpoint, ReasonCode};
+use remotecam_session_core::PairingMaterial as SessionPairingMaterial;
 use rustls::server::ServerSessionMemoryCache;
 use rustls::{ProtocolVersion, ServerConfig};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -15,6 +16,7 @@ use tokio_rustls::server::TlsStream;
 
 use crate::certificate::EphemeralCertificate;
 use crate::error::{PairingError, classify_io_error};
+use crate::material::{MaterialError, PairingMaterial};
 
 pub const ALPN_PROTOCOL: &[u8] = b"remotecam/1";
 
@@ -101,6 +103,20 @@ impl PairingListener {
 
     pub fn fingerprint(&self) -> [u8; 32] {
         self.fingerprint
+    }
+
+    pub fn issue_material(
+        &self,
+        session_material: &SessionPairingMaterial,
+        expires_at_unix: u64,
+        endpoints: Vec<Endpoint>,
+    ) -> Result<PairingMaterial, MaterialError> {
+        PairingMaterial::issue_with_fingerprint(
+            session_material,
+            self.fingerprint,
+            expires_at_unix,
+            endpoints,
+        )
     }
 
     pub fn attempts(&self) -> u32 {

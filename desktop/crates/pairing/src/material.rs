@@ -76,10 +76,23 @@ impl PairingMaterial {
         expires_at_unix: u64,
         endpoints: Vec<Endpoint>,
     ) -> Result<Self, MaterialError> {
+        Self::issue_with_fingerprint(
+            session_material,
+            certificate.fingerprint(),
+            expires_at_unix,
+            endpoints,
+        )
+    }
+
+    pub(crate) fn issue_with_fingerprint(
+        session_material: &remotecam_session_core::PairingMaterial,
+        tls_fingerprint: [u8; 32],
+        expires_at_unix: u64,
+        endpoints: Vec<Endpoint>,
+    ) -> Result<Self, MaterialError> {
         let session_id = session_material.session_id();
         let epoch =
             u32::try_from(session_material.epoch()).map_err(|_| MaterialError::InvalidEpoch)?;
-        let tls_fingerprint = certificate.fingerprint();
 
         let mut payload = QrPayload {
             session_id: *session_id.as_bytes(),
