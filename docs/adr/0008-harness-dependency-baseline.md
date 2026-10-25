@@ -54,6 +54,21 @@ dependency ledger (`specs/001-f0-technical-spikes/research.md` §2). REC-18
 re-uses the pinned versions rather than introducing new ones; the ledger stays
 the historical record and this ADR is the harness-specific decision.
 
+### REC-23 loopback endpoint
+
+REC-23 adds direct path dependencies on `remotecam-pairing`,
+`remotecam-session-core` and `remotecam-protocol` so the harness can drive the
+existing TLS listener and the shared QR/signaling contracts. It also adds two
+direct external dependencies to the separate harness workspace:
+
+| Dependency | Version | Problem solved | Alternatives discarded | Maintenance cost | License |
+| --- | --- | --- | --- | --- | --- |
+| `tokio` | `=1.54.1` | Runs the pairing crate's async loopback listener and pinned client end to end | Blocking worker threads (more lifecycle and shutdown code); a fake transport (would not exercise TLS) | Low — same exact version already used by `remotecam-pairing` and justified in ADR-0009 | MIT |
+| `zeroize` | `=1.9.1` | Clears temporary copies of the QR pairing token and encoded `pair` frame | Manual volatile writes (easy to omit on error paths) | Low — same exact version already used by `remotecam-session-core` and `remotecam-pairing`, justified in ADR-0009 | Apache-2.0 OR MIT |
+
+No TLS, certificate or hashing dependency is added to the harness workspace;
+those remain behind `remotecam-pairing` as decided in ADR-0009.
+
 TLS, certificate and runtime dependencies (`rustls`, `rcgen`, `sha2`, `tokio`)
 are **not** added here. The tasks that need them (REC-21 and the media
 substitute) add them with their own justification, so the scaffold does not

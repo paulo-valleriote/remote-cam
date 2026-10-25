@@ -27,13 +27,11 @@ fn a_session_that_does_not_reach_connected_fails_the_scenario() {
 
 #[test]
 fn the_report_serialises_to_the_documented_json_line() {
-    let json = HarnessReport::for_session_state(SessionState::Connected)
-        .to_json()
-        .expect("the report is a plain JSON value");
+    let json = run().to_json().expect("the report is a plain JSON value");
 
     assert_eq!(
         json,
-        r#"{"report_version":1,"scenario":"pairing","observed_state":"connected","verdict":"pass","summary":{"scenarios":1,"passed":1,"failed":0}}"#
+        r#"{"report_version":1,"scenario":"pairing","observed_state":"connected","message_sequence":["pair","paired","offer","answer"],"verdict":"pass","summary":{"scenarios":1,"passed":1,"failed":0}}"#
     );
     assert!(!json.contains("token"));
     assert!(!json.contains("fingerprint"));
@@ -57,4 +55,14 @@ fn the_pairing_run_is_reproducible() {
     let second = run().to_json().expect("the report is a plain JSON value");
 
     assert_eq!(first, second);
+}
+
+#[test]
+fn the_pairing_run_observes_the_mobile_message_sequence() {
+    let report = run();
+
+    assert_eq!(
+        report.message_sequence,
+        ["pair", "paired", "offer", "answer"]
+    );
 }
