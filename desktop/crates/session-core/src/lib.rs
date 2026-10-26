@@ -350,7 +350,7 @@ pub struct SessionCore<C: Clock, R: RandomSource> {
     random: R,
     active: Option<SessionIdentity>,
     offer: Option<PendingOffer>,
-    retired: Option<SessionState>,
+    retired: bool,
     consumed_tokens: Vec<PairingToken>,
     desktop_dtls_fingerprint: [u8; 32],
     last_transition_at: Timestamp,
@@ -376,7 +376,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             random,
             active: None,
             offer: None,
-            retired: None,
+            retired: false,
             consumed_tokens: Vec::new(),
             desktop_dtls_fingerprint,
             last_transition_at: Timestamp::ZERO,
@@ -415,8 +415,9 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         self.current_identity().map(|identity| identity.epoch)
     }
 
+    /// The retired state of the predecessor replaced by the current session, if any.
     pub fn retired_state(&self) -> Option<SessionState> {
-        self.retired
+        self.retired.then_some(SessionState::Superseded)
     }
 
     /// The injected clock reading captured at the last accepted transition.
@@ -466,12 +467,12 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         }
 
         if !self.awaits_pair_frame() {
-            self.refuse_pairing_frame();
+            self.refuse_offer();
             return Err(PairingError::ProtocolViolation);
         }
 
         let Some((token, limits)) = presented else {
-            self.refuse_pairing_frame();
+            self.refuse_offer();
             return Err(PairingError::ProtocolViolation);
         };
 
@@ -482,19 +483,17 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             return Ok(effects);
         }
 
-        if !self
+        let Some(offer) = self
             .offer
-            .as_ref()
-            .is_some_and(|offer| offer.token.matches(token.as_bytes()))
-        {
+            .take_if(|offer| offer.token.matches(token.as_bytes()))
+        else {
             if self.state == SessionState::Connected {
-                self.refuse_pairing_frame();
+                self.refuse_offer();
             }
             return Err(PairingError::TokenInvalid);
-        }
+        };
 
-        let offer = self.offer.take().expect("a matching offer is pending");
-        Ok(self.take_over(offer, limits))
+        Ok(self.activate_offer(offer, limits))
     }
 
     fn current_identity(&self) -> Option<SessionIdentity> {
@@ -512,15 +511,14 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             .is_some_and(|offer| offer.peer_connected)
     }
 
-    fn take_over(&mut self, offer: PendingOffer, accepted_limits: Limits) -> Vec<Effect> {
+    fn activate_offer(&mut self, offer: PendingOffer, accepted_limits: Limits) -> Vec<Effect> {
         let mut effects = Vec::new();
-        self.retired = None;
-        if self.active.is_some() {
+        self.retired = self.active.is_some();
+        if self.retired {
             effects.push(Effect::SendClose {
                 reason: CloseCode::Superseded,
             });
             effects.push(Effect::End);
-            self.retired = Some(SessionState::Superseded);
         }
         self.consumed_tokens.push(offer.token);
         self.active = Some(offer.identity);
@@ -552,7 +550,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         }
     }
 
-    fn refuse_pairing_frame(&mut self) {
+    fn refuse_offer(&mut self) {
         if self.state != SessionState::Connected {
             self.state = SessionState::Ended;
         }
@@ -595,7 +593,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     fn clear_pairing(&mut self) {
         self.offer = None;
         self.active = None;
-        self.retired = None;
+        self.retired = false;
     }
 
     fn begin_pairing(&mut self) -> Option<PairingMaterial> {
@@ -625,33 +623,26 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
 
     fn transition(&mut self, event: SessionEvent) -> Option<(SessionState, Vec<Effect>)> {
         match (self.state, event) {
-            (SessionState::Idle, SessionEvent::StartPairing) => {
+            (SessionState::Idle | SessionState::Connected, SessionEvent::StartPairing) => {
                 let material = self.begin_pairing()?;
-                Some((
-                    SessionState::PairingReady,
-                    vec![Effect::PresentPairing(material)],
-                ))
+                let next = match self.state {
+                    SessionState::Idle => SessionState::PairingReady,
+                    _ => SessionState::Connected,
+                };
+                Some((next, vec![Effect::PresentPairing(material)]))
             }
-            (SessionState::Connected, SessionEvent::StartPairing) => {
-                let material = self.begin_pairing()?;
-                Some((
-                    SessionState::Connected,
-                    vec![Effect::PresentPairing(material)],
-                ))
-            }
-            (SessionState::PairingReady, SessionEvent::PeerConnected) => {
+            (SessionState::PairingReady | SessionState::Connected, SessionEvent::PeerConnected)
+                if self.state == SessionState::PairingReady || self.offer.is_some() =>
+            {
                 if self.pairing_window_closed() {
                     return Some(self.retire_expired_pairing(ReasonCode::QrExpired));
                 }
                 self.mark_peer_connected();
-                Some((SessionState::Handshaking, Vec::new()))
-            }
-            (SessionState::Connected, SessionEvent::PeerConnected) if self.offer.is_some() => {
-                if self.pairing_window_closed() {
-                    return Some(self.retire_expired_pairing(ReasonCode::QrExpired));
-                }
-                self.mark_peer_connected();
-                Some((SessionState::Connected, Vec::new()))
+                let next = match self.state {
+                    SessionState::PairingReady => SessionState::Handshaking,
+                    _ => SessionState::Connected,
+                };
+                Some((next, Vec::new()))
             }
             (SessionState::Negotiating, SessionEvent::NegotiationCompleted)
                 if self.first_frame_deadline.is_none() =>

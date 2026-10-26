@@ -1,8 +1,12 @@
-use remotecam_protocol::signaling::{Limits, SignalingMessage};
+#[allow(dead_code)]
+mod common;
+
+use common::pair_frame;
+use remotecam_protocol::signaling::Limits;
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
 use remotecam_session_core::{
-    Clock, Effect, PairingMaterial, RandomSource, SessionCore, SessionEvent, SessionId,
-    SessionState, Timestamp, TransitionErrorCode,
+    Clock, Effect, RandomSource, SessionCore, SessionEvent, SessionId, SessionState, Timestamp,
+    TransitionErrorCode,
 };
 
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
@@ -35,22 +39,12 @@ fn authenticate(core: &mut SessionCore<ManualClock, SeededRandomSource>) -> Vec<
     let [Effect::PresentPairing(material)] = effects.as_slice() else {
         panic!("starting pairing presents its material");
     };
-    let frame = pair_frame(material);
+    let frame = pair_frame(*material.token().as_bytes());
 
     core.handle(SessionEvent::PeerConnected)
         .expect("the peer may connect while pairing is ready");
     core.authenticate_first_frame(&frame)
         .expect("the matching token authenticates")
-}
-
-fn pair_frame(material: &PairingMaterial) -> Vec<u8> {
-    SignalingMessage::Pair {
-        token: *material.token().as_bytes(),
-        dtls_fingerprint: [0x55; 32],
-        limits: Limits::new(),
-    }
-    .encode()
-    .expect("the pair message is valid")
 }
 
 fn core_in(
@@ -75,7 +69,7 @@ fn core_in(
             let [Effect::PresentPairing(material)] = effects.as_slice() else {
                 panic!("starting pairing presents its material");
             };
-            frame = Some(pair_frame(material));
+            frame = Some(pair_frame(*material.token().as_bytes()));
             continue;
         }
         if *event == SessionEvent::NegotiationCompleted {
@@ -288,7 +282,7 @@ fn the_happy_path_walks_every_state_in_order() {
     let [Effect::PresentPairing(material)] = start_effects.as_slice() else {
         panic!("starting pairing presents its material");
     };
-    let frame = pair_frame(material);
+    let frame = pair_frame(*material.token().as_bytes());
     effects.push(start_effects);
     states.push(core.state());
 
@@ -388,7 +382,7 @@ fn run_path(seed: u64, start_millis: u64) -> Trace {
     let [Effect::PresentPairing(material)] = start_effects.as_slice() else {
         panic!("starting pairing presents its material");
     };
-    let frame = pair_frame(material);
+    let frame = pair_frame(*material.token().as_bytes());
     effects.push(start_effects);
     timestamps.push(core.last_transition_at());
 
