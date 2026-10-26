@@ -487,6 +487,9 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             .as_ref()
             .is_some_and(|offer| offer.token.matches(token.as_bytes()))
         {
+            if self.state == SessionState::Connected {
+                self.refuse_pairing_frame();
+            }
             return Err(PairingError::TokenInvalid);
         }
 
@@ -697,11 +700,14 @@ mod tests {
     use remotecam_protocol::ReasonCode;
     use remotecam_protocol::signaling::{Limits, SignalingMessage};
 
+    const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
+    const PEER_FINGERPRINT: [u8; 32] = [0x55; 32];
+
     fn connected_with_pending_successor() -> SessionCore<ManualClock, SeededRandomSource> {
         let mut core = SessionCore::new(
             ManualClock::new(Timestamp::ZERO),
             SeededRandomSource::new(7),
-            [0x44; 32],
+            DESKTOP_FINGERPRINT,
         );
         let Some(Effect::PresentPairing(material)) = core
             .handle(SessionEvent::StartPairing)
@@ -714,7 +720,7 @@ mod tests {
             .expect("the first peer can connect");
         let frame = SignalingMessage::Pair {
             token: *material.token().as_bytes(),
-            dtls_fingerprint: [0x55; 32],
+            dtls_fingerprint: PEER_FINGERPRINT,
             limits: Limits::new(),
         }
         .encode()

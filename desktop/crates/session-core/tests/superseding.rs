@@ -3,7 +3,7 @@ use remotecam_protocol::signaling::{CloseCode, Limits, SignalingMessage};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
 use remotecam_session_core::{
     Effect, MediaFrame, PAIRING_WINDOW_MILLIS, PairingError, PairingMaterial, SessionCore,
-    SessionEvent, SessionId, SessionState, Timestamp, TransitionError,
+    SessionEvent, SessionId, SessionState, Timestamp, TransitionErrorCode,
 };
 
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
@@ -83,6 +83,16 @@ fn connected_core() -> (Core, ManualClock, Offer) {
         .expect("the first peer authenticates");
     media_flowing(&mut core);
     (core, clock, first)
+}
+
+/// A successor QR that was discarded cannot accept a peer any more.
+fn assert_successor_connect_refused(core: &mut Core) {
+    let refusal = core
+        .handle(SessionEvent::PeerConnected)
+        .expect_err("the discarded successor qr accepts no peer");
+
+    assert_eq!(refusal.code(), TransitionErrorCode::InvalidTransition);
+    assert_eq!(core.state(), SessionState::Connected);
 }
 
 #[test]
@@ -166,6 +176,7 @@ fn a_wrong_token_for_the_successor_leaves_the_predecessor_connected() {
     assert_eq!(error, PairingError::TokenInvalid);
     assert_eq!(core.state(), SessionState::Connected);
     assert_eq!(core.retired_state(), None);
+    assert_successor_connect_refused(&mut core);
 }
 
 #[test]
@@ -179,10 +190,7 @@ fn a_pair_frame_before_the_successor_connects_does_not_end_the_predecessor() {
 
     assert_eq!(error, PairingError::ProtocolViolation);
     assert_eq!(core.state(), SessionState::Connected);
-    assert!(matches!(
-        core.handle(SessionEvent::PeerConnected),
-        Err(TransitionError::InvalidTransition { .. })
-    ));
+    assert_successor_connect_refused(&mut core);
 }
 
 #[test]
@@ -200,10 +208,7 @@ fn an_invalid_frame_from_the_successor_discards_its_qr_and_keeps_the_predecessor
     assert_eq!(core.state(), SessionState::Connected);
     assert_eq!(core.session_id(), Some(first.session_id));
     assert_eq!(core.retired_state(), None);
-    assert!(matches!(
-        core.handle(SessionEvent::PeerConnected),
-        Err(TransitionError::InvalidTransition { .. })
-    ));
+    assert_successor_connect_refused(&mut core);
 }
 
 #[test]
