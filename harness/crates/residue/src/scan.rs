@@ -40,6 +40,8 @@ impl Needle {
 pub struct Sweep {
     pub findings: BTreeSet<&'static str>,
     pub bytes_scanned: u64,
+    /// Writable regions the kernel refused to read; a sweep with any of these is not complete.
+    pub unreadable_regions: u64,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -52,6 +54,8 @@ pub struct TreeSweep {
 pub struct StoreSweep {
     pub name: &'static str,
     pub findings: BTreeSet<&'static str>,
+    /// The store exists but could not be read, so an empty `findings` proves nothing.
+    pub unreadable: bool,
 }
 
 pub struct Scanner {
@@ -61,6 +65,11 @@ pub struct Scanner {
 impl Scanner {
     pub fn new(needles: Vec<Needle>) -> Self {
         Self { needles }
+    }
+
+    /// Bytes of one needle, used to plant a known secret for a positive control.
+    pub fn sample(&self) -> Option<&[u8]> {
+        self.needles.first().map(|needle| needle.bytes.as_slice())
     }
 
     /// Scans every writable mapping of a live process: heap, stack and anonymous memory.
@@ -75,13 +84,18 @@ impl Scanner {
                 let wanted = usize::try_from(end - address)
                     .map_or(CHUNK_BYTES, |left| left.min(CHUNK_BYTES));
                 match memory.read_at(&mut buffer[..wanted], address) {
-                    Ok(0) | Err(_) => break,
+                    Ok(0) => break,
+                    Err(_) => {
+                        scan.note_unreadable_region();
+                        break;
+                    }
                     Ok(read) => {
                         scan.feed(&buffer[..read]);
                         address += read as u64;
                     }
                 }
             }
+            scan.break_stream();
         }
         Ok(scan.finish())
     }
@@ -128,12 +142,13 @@ impl Scanner {
     pub fn sweep_credential_stores(&self, home: &Path) -> Vec<StoreSweep> {
         CREDENTIAL_STORES
             .iter()
-            .map(|&(name, relative)| StoreSweep {
-                name,
-                findings: self
-                    .sweep_tree(&home.join(relative))
-                    .map(|tree| tree.sweep.findings)
-                    .unwrap_or_default(),
+            .map(|&(name, relative)| {
+                let swept = self.sweep_tree(&home.join(relative));
+                StoreSweep {
+                    name,
+                    unreadable: swept.is_err(),
+                    findings: swept.map(|tree| tree.sweep.findings).unwrap_or_default(),
+                }
             })
             .collect()
     }
@@ -173,6 +188,10 @@ impl StreamScan<'_> {
         }
         let keep_from = self.carry.len().saturating_sub(self.overlap);
         self.carry.drain(..keep_from);
+    }
+
+    pub fn note_unreadable_region(&mut self) {
+        self.sweep.unreadable_regions += 1;
     }
 
     /// Ends the current source so the next chunk cannot extend a needle from the previous one.

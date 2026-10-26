@@ -58,7 +58,7 @@
 ### 6. Residue inspection (`crates/residue`)
 
 - `make residue` is the single command of the zero-persistence method (REC-15, ADR-0017) and writes `docs/evidence/f1/rec-15-zero-persistence-linux.json`. It spawns itself as a probe in a sandboxed `HOME`/`XDG_*`/`TMPDIR`, then sweeps memory, state and credential stores at `live-control`, `session-end`, `process-exit` and `restart`.
-- Both controls are part of the verdict: `live-control` must find the secrets and the canary leak must be detected. A green run without them is a broken method.
+- The controls are part of the verdict: `live-control` must find the secrets, the credential-store sweep must find a planted secret, the canary leak must be detected, and no memory region or store may be unreadable. A green run without them is a broken method. The TLS ticket scope is `swept: false` with its unit test as `basis`.
 - The method is the one C-02 requires on the reference devices; the Linux evidence does not close that device run.
 - The binary installs `remotecam_scrub::ZeroizingAllocator`; it is outside the REC-25 coverage gate (`remotecam-harness` only).
 

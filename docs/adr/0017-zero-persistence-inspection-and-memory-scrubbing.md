@@ -28,12 +28,19 @@ declares what each inspection swept (D-33).
 
 - The inspector derives the searched secrets from the seeds; the probe never holds a
   copy beyond the session.
-- **Positive control.** `live-control` must find the secrets in the running session;
-  otherwise the method is not sensitive and the run fails.
+- **Positive controls.** `live-control` must find the certificate, key, QR payload,
+  fingerprint and token (raw and hex) in the running session. The credential-store
+  sweep must also find a secret planted in a scratch home, because the sandboxed
+  probe can never write to the real one. Otherwise the run fails.
 - **Negative control.** A canary probe leaks on purpose (file and memory); the run
   fails unless both are detected.
-- TLS tickets are not scanned for: none are issued. That scope is a configuration
-  invariant, asserted by `server_config_issues_no_tickets_and_keeps_no_resumable_session`.
+- **Completeness.** An unreadable memory region or credential store fails the
+  inspection instead of counting as clean; the report carries the counts.
+- **TLS tickets** are not scanned for: none are issued. The scope is reported as
+  `swept: false`, `method: unit_test`, with the test that asserts it as `basis`
+  (`server_config_issues_no_tickets_and_keeps_no_resumable_session`).
+- The report states `platform: linux` and `device_run: open`: the C-02 run on the
+  reference devices is not part of it.
 - Exit code 0 means no residue and both controls held. The report is deterministic
   and is versioned at `docs/evidence/f1/rec-15-zero-persistence-linux.json`.
 

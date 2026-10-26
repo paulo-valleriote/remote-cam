@@ -85,6 +85,8 @@ fn the_method_sees_the_secrets_while_the_session_is_live() {
     for label in [
         "certificate_der",
         "private_key_limbs",
+        "pairing_token",
+        "pairing_token_hex",
         "qr_payload",
         "tls_fingerprint",
     ] {
@@ -153,4 +155,49 @@ fn an_unknown_argument_exits_with_usage_status() {
 
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn the_report_states_the_platform_and_that_the_device_run_is_open() {
+    let report = report(&residue(&[]));
+
+    assert_eq!(report["platform"], "linux");
+    assert_eq!(report["device_run"], "open");
+}
+
+#[test]
+fn the_credential_store_sweep_proves_it_can_find_a_planted_secret() {
+    let report = report(&residue(&[]));
+
+    for case in ["live-control", "session-end", "process-exit", "restart"] {
+        let stores = scope(inspection(&report, case), "credential_stores");
+        assert_eq!(stores["control_detected"], true, "{case}");
+        assert_eq!(stores["unreadable_stores"], 0, "{case}");
+    }
+}
+
+#[test]
+fn the_ticket_scope_is_declared_as_a_unit_test_basis_not_a_sweep() {
+    let report = report(&residue(&[]));
+
+    for case in ["live-control", "session-end", "process-exit", "restart"] {
+        let tickets = scope(inspection(&report, case), "tls_ticket_state");
+        assert_eq!(tickets["swept"], false, "{case}");
+        assert_eq!(tickets["method"], "unit_test", "{case}");
+        assert_eq!(
+            tickets["basis"],
+            "remotecam-pairing::listener::tests::server_config_issues_no_tickets_and_keeps_no_resumable_session",
+            "{case}"
+        );
+    }
+}
+
+#[test]
+fn the_memory_sweep_reports_that_every_region_was_readable() {
+    let report = report(&residue(&[]));
+
+    for case in ["live-control", "session-end", "restart"] {
+        let memory = scope(inspection(&report, case), "process_memory");
+        assert_eq!(memory["unreadable_regions"], 0, "{case}");
+    }
 }

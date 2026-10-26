@@ -11,6 +11,8 @@ use crate::probe::{END, ENDED, EXIT, IDLE, LIVE, Mode};
 use crate::report::{Canary, Expectation, Inspection, Report, ScopeResult};
 use crate::scan::Scanner;
 
+const TICKET_BASIS: &str = "remotecam-pairing::listener::tests::server_config_issues_no_tickets_and_keeps_no_resumable_session";
+
 pub struct Options {
     pub seed: u64,
     /// The real home directory, whose credential stores are swept.
@@ -131,58 +133,55 @@ fn memory_scope(scanner: &Scanner, probe: Option<&Probe>) -> io::Result<ScopeRes
     let sweep = probe
         .map(|probe| scanner.sweep_process_memory(probe.pid()))
         .transpose()?;
-    Ok(ScopeResult {
-        scope: "process_memory",
-        method: "scan",
-        swept: sweep.is_some(),
-        findings: sweep
-            .map(|sweep| sweep.findings.into_iter().collect())
-            .unwrap_or_default(),
-        files: None,
-        stores: Vec::new(),
-    })
+    let mut scope = ScopeResult::new("process_memory", "scan", sweep.is_some());
+    if let Some(sweep) = sweep {
+        scope.unreadable_regions = Some(sweep.unreadable_regions);
+        scope.findings = sweep.findings.into_iter().collect();
+    }
+    Ok(scope)
 }
 
 fn state_scope(scanner: &Scanner, sandbox: &Sandbox) -> io::Result<ScopeResult> {
     let tree = scanner.sweep_tree(&sandbox.root)?;
-    Ok(ScopeResult {
-        scope: "state_directory",
-        method: "scan",
-        swept: true,
-        findings: tree.sweep.findings.into_iter().collect(),
-        files: Some(tree.files),
-        stores: Vec::new(),
-    })
+    let mut scope = ScopeResult::new("state_directory", "scan", true);
+    scope.files = Some(tree.files);
+    scope.findings = tree.sweep.findings.into_iter().collect();
+    Ok(scope)
 }
 
-fn stores_scope(scanner: &Scanner, home: &Path) -> ScopeResult {
+/// The real home cannot be written by the sandboxed probe, so a clean sweep there only means
+/// something if the same sweep finds a secret planted in a scratch home (the control).
+fn stores_scope(scanner: &Scanner, home: &Path) -> io::Result<ScopeResult> {
     let stores = scanner.sweep_credential_stores(home);
-    ScopeResult {
-        scope: "credential_stores",
-        method: "scan",
-        swept: true,
-        findings: stores
-            .iter()
-            .flat_map(|store| store.findings.iter().copied())
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .collect(),
-        files: None,
-        stores: stores.iter().map(|store| store.name).collect(),
-    }
+    let mut scope = ScopeResult::new("credential_stores", "scan", true);
+    scope.findings = stores
+        .iter()
+        .flat_map(|store| store.findings.iter().copied())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    scope.stores = stores.iter().map(|store| store.name).collect();
+    scope.unreadable_stores = Some(stores.iter().filter(|store| store.unreadable).count() as u64);
+    scope.control_detected = Some(credential_control(scanner)?);
+    Ok(scope)
 }
 
-/// TLS tickets are never issued, so there is nothing to scan for; the invariant is asserted
-/// by the pairing crate's own tests (`server_config_issues_no_tickets`).
+fn credential_control(scanner: &Scanner) -> io::Result<bool> {
+    let scratch = Sandbox::create("control")?;
+    let home = scratch.path("home");
+    fs::write(home.join(".netrc"), scanner.sample().unwrap_or_default())?;
+    Ok(scanner
+        .sweep_credential_stores(&home)
+        .iter()
+        .any(|store| !store.findings.is_empty()))
+}
+
+/// TLS tickets are never issued, so there is nothing to scan for at run time. The invariant
+/// is asserted by a unit test of the pairing crate, which this report names as its basis.
 fn ticket_scope() -> ScopeResult {
-    ScopeResult {
-        scope: "tls_ticket_state",
-        method: "configuration_invariant",
-        swept: true,
-        findings: Vec::new(),
-        files: None,
-        stores: Vec::new(),
-    }
+    let mut scope = ScopeResult::new("tls_ticket_state", "unit_test", false);
+    scope.basis = Some(TICKET_BASIS);
+    scope
 }
 
 fn inspect(
@@ -199,7 +198,7 @@ fn inspect(
         vec![
             memory_scope(scanner, probe)?,
             state_scope(scanner, sandbox)?,
-            stores_scope(scanner, &options.home),
+            stores_scope(scanner, &options.home)?,
             ticket_scope(),
         ],
     ))
