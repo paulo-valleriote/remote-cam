@@ -1157,28 +1157,39 @@ where
     C: remotecam_session_core::Clock + Send + 'static,
     R: remotecam_session_core::RandomSource + Send + 'static,
 {
+    let mut peer_transition = Ok(());
     let channel = listener
-        .accept()
+        .accept_admitted(|| {
+            let previous_state = core.state();
+            let effects = match core.handle(SessionEvent::PeerConnected) {
+                Ok(effects) => effects,
+                Err(error) => {
+                    peer_transition = Err(error.code().as_str());
+                    return None;
+                }
+            };
+            record_transition(
+                &mut state_trace,
+                previous_state,
+                core.state(),
+                core.last_transition_at(),
+                None,
+            );
+            if effects.contains(&Effect::StartMedia) {
+                peer_transition = Err("internal_error");
+            }
+            match effects.as_slice() {
+                [Effect::RejectPeer { reason }, ..] => Some(*reason),
+                _ => None,
+            }
+        })
         .await
         .map_err(|error| error.code().as_str())?;
+    peer_transition?;
     if !channel.is_tls13() {
         return Err("tls_version_unsupported");
     }
 
-    let previous_state = core.state();
-    let peer_effects = core
-        .handle(SessionEvent::PeerConnected)
-        .map_err(|error| error.code().as_str())?;
-    record_transition(
-        &mut state_trace,
-        previous_state,
-        core.state(),
-        core.last_transition_at(),
-        None,
-    );
-    if peer_effects.contains(&Effect::StartMedia) {
-        return Err("internal_error");
-    }
     let mut desktop = BufReader::new(channel);
     let pair_frame = read_signaling_frame(&mut desktop).await?;
     let previous_state = core.state();
@@ -1321,6 +1332,7 @@ fn validate_answer_frame(frame: &[u8], epoch: u64) -> Result<(), &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use remotecam_session_core::PAIRING_WINDOW_MILLIS;
 
     fn test_runtime() -> tokio::runtime::Runtime {
         Builder::new_current_thread()
@@ -1636,6 +1648,43 @@ mod tests {
             match server.await.expect("server task") {
                 Err(reason) => assert_eq!(reason, "protocol_violation"),
                 Ok(_) => panic!("malformed pairing unexpectedly succeeded"),
+            }
+        });
+    }
+
+    #[test]
+    fn desktop_refuses_a_peer_after_the_qr_window_before_the_handshake() {
+        test_runtime().block_on(async {
+            let listener = Arc::new(
+                PairingListener::bind_loopback(
+                    EphemeralCertificate::generate().expect("certificate"),
+                )
+                .await
+                .expect("listener"),
+            );
+            let clock = ManualClock::new(Timestamp::ZERO);
+            let mut core = SessionCore::new(
+                clock.clone(),
+                SeededRandomSource::new(42),
+                DESKTOP_DTLS_FINGERPRINT,
+            );
+            core.handle(SessionEvent::StartPairing)
+                .expect("pairing starts");
+            clock.advance(PAIRING_WINDOW_MILLIS);
+            let server = tokio::spawn(run_desktop(core, Arc::clone(&listener), Vec::new()));
+
+            let mut peer = tokio::net::TcpStream::connect(listener.local_addr())
+                .await
+                .expect("tcp connect");
+            let mut received = Vec::new();
+            peer.read_to_end(&mut received)
+                .await
+                .expect("the refused peer sees a close");
+
+            assert!(received.is_empty());
+            match server.await.expect("server task") {
+                Err(reason) => assert_eq!(reason, "qr_expired"),
+                Ok(_) => panic!("an expired qr unexpectedly reached the handshake"),
             }
         });
     }
