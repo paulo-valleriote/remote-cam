@@ -293,7 +293,7 @@ sequenceDiagram
 | --- | --- |
 | Celular A conectado; usuário escaneia QR de outro desktop | App A encerra a sessão local imediatamente (para captura, fecha transporte) e inicia a nova sessão. Não há confirmação bloqueante. |
 | Celular B escaneia um QR válido do desktop que já atende A | Desktop valida o token, confirma que o `epoch` do novo QR é maior que o da sessão ativa, envia `close { superseded }` a A, destrói o estado de A e só então conclui o pareamento de B. Sobreposição de mídia é proibida. |
-| Replay of the same QR | Rejected (single-use token + expiry). With an active session the code is `superseded`; with none, `token_already_used` (ADR-0013). A first frame that does not reuse a consumed token, with an active session and no pending QR: `protocol_violation`, session unchanged. |
+| Replay do mesmo QR | Rejeitado (token de uso único + expiração). Com sessão ativa, o código é `superseded`; sem sessão ativa, `token_already_used` (ADR-0013). Primeiro frame que não reapresenta token consumido, com sessão ativa e sem QR pendente: `protocol_violation`, sessão inalterada. |
 | Mensagem com `epoch` inferior ao atual | Descartada silenciosamente e contabilizada como violação de protocolo. |
 | Duas conexões simultâneas | A segunda só é aceita após o encerramento da primeira; o listener serializa as tentativas. |
 
