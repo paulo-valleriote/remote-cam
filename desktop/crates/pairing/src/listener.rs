@@ -21,6 +21,8 @@ use crate::material::{MaterialError, PairingMaterial, PairingMaterialRequest, Un
 
 pub const ALPN_PROTOCOL: &[u8] = b"remotecam/1";
 
+const CONSECUTIVE_FAILURE_LIMIT: u32 = 10;
+
 #[derive(Debug)]
 pub enum ListenerError {
     Tls(rustls::Error),
@@ -62,6 +64,7 @@ pub struct PairingListener {
     fingerprint: [u8; 32],
     local_addr: SocketAddr,
     attempts: AtomicU32,
+    consecutive_failures: AtomicU32,
     closed: AtomicBool,
 }
 
@@ -92,6 +95,7 @@ impl PairingListener {
             fingerprint,
             local_addr,
             attempts: AtomicU32::new(0),
+            consecutive_failures: AtomicU32::new(0),
             closed: AtomicBool::new(false),
         })
     }
@@ -160,6 +164,19 @@ impl PairingListener {
 
     pub async fn handshake(&self, socket: TcpStream) -> Result<ServerChannel, PairingError> {
         let socket = self.refuse_if_closed(socket)?;
+        match self.negotiate(socket).await {
+            Ok(channel) => {
+                self.consecutive_failures.store(0, Ordering::SeqCst);
+                Ok(channel)
+            }
+            Err(error) => {
+                self.record_failure();
+                Err(error)
+            }
+        }
+    }
+
+    async fn negotiate(&self, socket: TcpStream) -> Result<ServerChannel, PairingError> {
         let stream = self
             .acceptor
             .accept(socket)
@@ -172,6 +189,13 @@ impl PairingListener {
             ));
         }
         Ok(ServerChannel { inner: stream })
+    }
+
+    fn record_failure(&self) {
+        let failures = self.consecutive_failures.fetch_add(1, Ordering::SeqCst) + 1;
+        if failures >= CONSECUTIVE_FAILURE_LIMIT {
+            self.close();
+        }
     }
 }
 

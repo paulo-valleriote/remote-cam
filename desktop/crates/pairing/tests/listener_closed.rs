@@ -70,6 +70,11 @@ async fn closing_between_accept_and_handshake_still_refuses_the_peer() {
 #[tokio::test]
 async fn an_open_listener_keeps_admitting_peers() {
     let listener = listener().await;
+
+    admit_one(&listener).await;
+}
+
+async fn admit_one(listener: &PairingListener) {
     let address = listener.local_addr();
     let fingerprint = listener.fingerprint();
     let peer = tokio::spawn(async move {
@@ -83,4 +88,71 @@ async fn an_open_listener_keeps_admitting_peers() {
     listener.accept().await.expect("an open listener admits");
 
     assert!(peer.await.expect("peer task"));
+}
+
+async fn fail_one_handshake(listener: &PairingListener) {
+    let address = listener.local_addr();
+    let peer = tokio::spawn(async move {
+        PinnedClient::new([0; 32])
+            .expect("client")
+            .connect(address)
+            .await
+    });
+
+    listener
+        .accept()
+        .await
+        .expect_err("a divergent pin fails the handshake");
+
+    assert!(peer.await.expect("peer task").is_err());
+}
+
+#[tokio::test]
+async fn ten_consecutive_failed_handshakes_close_the_listener() {
+    let listener = listener().await;
+    let address = listener.local_addr();
+    for _ in 0..10 {
+        fail_one_handshake(&listener).await;
+    }
+
+    let peer = tokio::spawn(async move {
+        let mut socket = TcpStream::connect(address).await.expect("tcp connect");
+        let mut received = Vec::new();
+        socket
+            .read_to_end(&mut received)
+            .await
+            .expect("the refused peer sees a close");
+        received
+    });
+    let error = listener
+        .accept()
+        .await
+        .expect_err("the tenth failure closed the listener");
+
+    assert_eq!(error.code(), ReasonCode::ListenerClosed);
+    assert!(peer.await.expect("peer task").is_empty());
+}
+
+#[tokio::test]
+async fn nine_failures_keep_the_listener_open() {
+    let listener = listener().await;
+    for _ in 0..9 {
+        fail_one_handshake(&listener).await;
+    }
+
+    admit_one(&listener).await;
+}
+
+#[tokio::test]
+async fn a_successful_handshake_resets_the_failure_count() {
+    let listener = listener().await;
+    for _ in 0..9 {
+        fail_one_handshake(&listener).await;
+    }
+    admit_one(&listener).await;
+    for _ in 0..9 {
+        fail_one_handshake(&listener).await;
+    }
+
+    admit_one(&listener).await;
 }
