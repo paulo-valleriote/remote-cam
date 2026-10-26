@@ -1,3 +1,7 @@
+#[allow(dead_code)]
+mod common;
+
+use common::pair_frame;
 use remotecam_protocol::signaling::{Limits, SignalingMessage};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
 use remotecam_session_core::{
@@ -30,16 +34,6 @@ fn core_in_handshaking() -> (
         .expect("the peer can connect for pairing");
 
     (core, session_id, token)
-}
-
-fn pair_frame(token: [u8; 32]) -> Vec<u8> {
-    SignalingMessage::Pair {
-        token,
-        dtls_fingerprint: [0x55; 32],
-        limits: Limits::new(),
-    }
-    .encode()
-    .expect("the pair message is valid")
 }
 
 #[test]

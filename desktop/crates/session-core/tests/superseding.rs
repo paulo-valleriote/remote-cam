@@ -1,5 +1,9 @@
+#[allow(dead_code)]
+mod common;
+
+use common::{PEER_FINGERPRINT, pair_frame, pair_frame_from_peer};
 use remotecam_protocol::ReasonCode;
-use remotecam_protocol::signaling::{CloseCode, Limits, SignalingMessage};
+use remotecam_protocol::signaling::{CloseCode, Limits};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
 use remotecam_session_core::{
     Effect, MediaFrame, PAIRING_WINDOW_MILLIS, PairingError, PairingMaterial, SessionCore,
@@ -7,7 +11,6 @@ use remotecam_session_core::{
 };
 
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
-const PEER_FINGERPRINT: [u8; 32] = [0x55; 32];
 const RIVAL_PEER_FINGERPRINT: [u8; 32] = [0x66; 32];
 
 type Core = SessionCore<ManualClock, SeededRandomSource>;
@@ -28,7 +31,7 @@ impl Offer {
     }
 
     fn pair_frame(&self) -> Vec<u8> {
-        pair_frame_with_token(self.token)
+        pair_frame(self.token)
     }
 }
 
@@ -47,20 +50,6 @@ fn present_pairing(core: &mut Core) -> Offer {
         panic!("starting pairing presents its material");
     };
     Offer::of(&material)
-}
-
-fn pair_frame_with_token(token: [u8; 32]) -> Vec<u8> {
-    pair_frame_from_peer(token, PEER_FINGERPRINT)
-}
-
-fn pair_frame_from_peer(token: [u8; 32], dtls_fingerprint: [u8; 32]) -> Vec<u8> {
-    SignalingMessage::Pair {
-        token,
-        dtls_fingerprint,
-        limits: Limits::new(),
-    }
-    .encode()
-    .expect("the pair message is valid")
 }
 
 fn media_flowing(core: &mut Core) {
@@ -170,7 +159,7 @@ fn a_wrong_token_for_the_successor_leaves_the_predecessor_connected() {
     wrong[0] ^= 1;
 
     let error = core
-        .authenticate_first_frame(&pair_frame_with_token(wrong))
+        .authenticate_first_frame(&pair_frame(wrong))
         .expect_err("a token that is not the successor's is refused");
 
     assert_eq!(error, PairingError::TokenInvalid);

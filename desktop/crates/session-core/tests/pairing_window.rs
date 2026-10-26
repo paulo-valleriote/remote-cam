@@ -1,5 +1,8 @@
+#[allow(dead_code)]
+mod common;
+
+use common::pair_frame;
 use remotecam_protocol::ReasonCode;
-use remotecam_protocol::signaling::{Limits, SignalingMessage};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource, epoch_source_starting_at};
 use remotecam_session_core::{
     Effect, EpochSource, FIRST_MEDIA_FRAME_TIMEOUT_MILLIS, PAIRING_WINDOW_MILLIS, PairingError,
@@ -23,16 +26,6 @@ fn start(core: &mut SessionCore<ManualClock, SeededRandomSource>) -> PairingMate
         panic!("starting pairing presents its material");
     };
     material
-}
-
-fn pair_frame(material: &PairingMaterial) -> Vec<u8> {
-    SignalingMessage::Pair {
-        token: *material.token().as_bytes(),
-        dtls_fingerprint: [0x55; 32],
-        limits: Limits::new(),
-    }
-    .encode()
-    .expect("the pair message is valid")
 }
 
 fn assert_refused_and_replaced(
@@ -87,7 +80,7 @@ fn an_expired_token_is_refused_at_authentication_and_replaced() {
     clock.advance(PAIRING_WINDOW_MILLIS);
 
     let effects = core
-        .authenticate_first_frame(&pair_frame(&first))
+        .authenticate_first_frame(&pair_frame(*first.token().as_bytes()))
         .expect("an expired token is answered, not rejected as a pairing error");
 
     assert_refused_and_replaced(effects, ReasonCode::TokenExpired, 2);
@@ -103,7 +96,7 @@ fn a_clock_that_moves_backwards_does_not_invalidate_a_new_session() {
     core.handle(SessionEvent::PeerConnected)
         .expect("a backwards clock keeps the window open");
     let effects = core
-        .authenticate_first_frame(&pair_frame(&material))
+        .authenticate_first_frame(&pair_frame(*material.token().as_bytes()))
         .expect("the matching token authenticates");
 
     assert_eq!(core.state(), SessionState::Negotiating);
@@ -143,7 +136,7 @@ fn a_consumed_token_is_refused_with_token_already_used_after_the_session_ends() 
     let material = start(&mut core);
     core.handle(SessionEvent::PeerConnected)
         .expect("the qr is still valid when the peer connects");
-    core.authenticate_first_frame(&pair_frame(&material))
+    core.authenticate_first_frame(&pair_frame(*material.token().as_bytes()))
         .expect("the matching token authenticates");
     core.handle(SessionEvent::NegotiationCompleted)
         .expect("negotiation starts the first-frame timer");
@@ -151,7 +144,7 @@ fn a_consumed_token_is_refused_with_token_already_used_after_the_session_ends() 
     core.handle(SessionEvent::FirstFrameTimedOut)
         .expect("the first frame never arrived");
 
-    let refusal = core.authenticate_first_frame(&pair_frame(&material));
+    let refusal = core.authenticate_first_frame(&pair_frame(*material.token().as_bytes()));
 
     assert_eq!(refusal, Err(PairingError::TokenAlreadyUsed));
     assert_eq!(core.state(), SessionState::Idle);
