@@ -183,7 +183,7 @@ injected logical clock and a fixed expected result (see ADR-0012):
 - `token-expiry-refused`: a valid QR whose token is presented after the window
   closed is refused with `token_expired`.
 - `single-use-refused`: a second use of a token, while the first session is
-  still negotiating, is refused with `token_already_used`.
+  still negotiating, is refused with `superseded`.
 - `replay-refused`: a captured QR replayed after its session timed out is
   refused with `token_already_used`.
 - `stale-epoch-discarded`: a frame with an epoch older than the active session
