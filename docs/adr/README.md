@@ -17,6 +17,7 @@ decision was made and why.
 | [0009](0009-pairing-crate-and-tls-baseline.md) | Pairing crate and TLS dependency baseline |
 | [0010](0010-harness-report-contract-and-coverage.md) | Versioned harness report schema and ≥90% Harness coverage gate |
 | [0011](0011-pre-handshake-refusal-closes-without-reason-frame.md) | Pre-handshake refusals close the socket without a reason frame |
+| [0012](0012-rec-10-acceptance-scenarios-and-report-v4.md) | REC-10 acceptance scenarios and harness report version 4 |
 
 Add a new ADR by scanning this directory for the highest number and
 incrementing it. To revisit a decision, write a new ADR that supersedes the old

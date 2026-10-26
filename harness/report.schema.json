@@ -16,7 +16,7 @@
   ],
   "properties": {
     "report_version": {
-      "const": 3
+      "const": 4
     },
     "contract_version": {
       "const": 1
@@ -40,14 +40,35 @@
     },
     "scenarios": {
       "type": "array",
-      "minItems": 2,
-      "maxItems": 2,
+      "minItems": 9,
+      "maxItems": 9,
       "prefixItems": [
         {
           "$ref": "#/$defs/pairingHappyPath"
         },
         {
           "$ref": "#/$defs/pinMismatchAborts"
+        },
+        {
+          "$ref": "#/$defs/qrExpiryRefused"
+        },
+        {
+          "$ref": "#/$defs/tokenExpiryRefused"
+        },
+        {
+          "$ref": "#/$defs/singleUseRefused"
+        },
+        {
+          "$ref": "#/$defs/replayRefused"
+        },
+        {
+          "$ref": "#/$defs/staleEpochDiscarded"
+        },
+        {
+          "$ref": "#/$defs/clockBackwardsWindow"
+        },
+        {
+          "$ref": "#/$defs/regenerationAfterRefusal"
         }
       ],
       "items": false
@@ -193,6 +214,18 @@
               ]
             }
           ]
+        },
+        "issued_epochs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "protocol_violations": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },
@@ -358,19 +391,180 @@
       ],
       "properties": {
         "scenarios": {
-          "const": 2
+          "const": 9
         },
         "passed": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 2
+          "maximum": 9
         },
         "failed": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 2
+          "maximum": 9
         }
       }
+    },
+    "qrExpiryRefused": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "properties": {
+            "scenario": {
+              "const": "qr-expiry-refused"
+            },
+            "outcome": {
+              "const": "rejected"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": "qr_expired"
+            }
+          }
+        }
+      ]
+    },
+    "tokenExpiryRefused": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "properties": {
+            "scenario": {
+              "const": "token-expiry-refused"
+            },
+            "outcome": {
+              "const": "rejected"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": "token_expired"
+            }
+          }
+        }
+      ]
+    },
+    "singleUseRefused": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "properties": {
+            "scenario": {
+              "const": "single-use-refused"
+            },
+            "outcome": {
+              "const": "rejected"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": "token_already_used"
+            }
+          }
+        }
+      ]
+    },
+    "replayRefused": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "properties": {
+            "scenario": {
+              "const": "replay-refused"
+            },
+            "outcome": {
+              "const": "rejected"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": "token_already_used"
+            }
+          }
+        }
+      ]
+    },
+    "staleEpochDiscarded": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "properties": {
+            "scenario": {
+              "const": "stale-epoch-discarded"
+            },
+            "outcome": {
+              "const": "accepted"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": null
+            }
+          }
+        }
+      ]
+    },
+    "clockBackwardsWindow": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "properties": {
+            "scenario": {
+              "const": "clock-backwards-window"
+            },
+            "outcome": {
+              "const": "rejected"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": "token_expired"
+            }
+          }
+        }
+      ]
+    },
+    "regenerationAfterRefusal": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "properties": {
+            "scenario": {
+              "const": "regeneration-after-refusal"
+            },
+            "outcome": {
+              "const": "accepted"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": null
+            }
+          }
+        }
+      ]
     }
   }
 }

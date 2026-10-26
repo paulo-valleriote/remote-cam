@@ -8,15 +8,15 @@ const REPORT_SCHEMA: &str = include_str!("../../../report.schema.json");
 const GOLDEN_REPORT: &str = include_str!("fixtures/report.json");
 
 #[test]
-fn the_happy_path_and_pin_mismatch_scenarios_pass_with_expected_results() {
+fn the_reported_scenarios_pass_with_expected_results() {
     let report = run().expect("Git and the pinned Rust toolchain are available");
 
-    assert_eq!(report.report_version, 3);
+    assert_eq!(report.report_version, 4);
     assert_eq!(report.contract_version, 1);
-    assert_eq!(report.scenarios.len(), 2);
+    assert_eq!(report.scenarios.len(), 9);
     assert_eq!(report.verdict, Verdict::Pass);
-    assert_eq!(report.summary.scenarios, 2);
-    assert_eq!(report.summary.passed, 2);
+    assert_eq!(report.summary.scenarios, 9);
+    assert_eq!(report.summary.passed, 9);
     assert_eq!(report.summary.failed, 0);
 
     let happy_path = &report.scenarios[0];
@@ -183,4 +183,80 @@ fn report_metadata_and_environment_have_the_approved_shape() {
         .collect();
     environment_keys.sort_unstable();
     assert_eq!(environment_keys, ["architecture", "os", "rustc_version"]);
+}
+
+#[test]
+fn every_rec_10_acceptance_scenario_reports_its_refusal_contract() {
+    let report = run().expect("Git and the pinned Rust toolchain are available");
+    type Expectation = (
+        &'static str,
+        Outcome,
+        Option<&'static str>,
+        &'static [&'static str],
+        &'static [u64],
+    );
+    let expected: [Expectation; 7] = [
+        (
+            "qr-expiry-refused",
+            Outcome::Rejected,
+            Some("qr_expired"),
+            &[],
+            &[1, 2],
+        ),
+        (
+            "token-expiry-refused",
+            Outcome::Rejected,
+            Some("token_expired"),
+            &["pair"],
+            &[1, 2],
+        ),
+        (
+            "single-use-refused",
+            Outcome::Rejected,
+            Some("token_already_used"),
+            &["pair"],
+            &[1],
+        ),
+        (
+            "replay-refused",
+            Outcome::Rejected,
+            Some("token_already_used"),
+            &["pair"],
+            &[1, 2],
+        ),
+        (
+            "stale-epoch-discarded",
+            Outcome::Accepted,
+            None,
+            &["pair", "paired", "offer", "answer"],
+            &[1, 2],
+        ),
+        (
+            "clock-backwards-window",
+            Outcome::Rejected,
+            Some("token_expired"),
+            &["pair"],
+            &[1, 2],
+        ),
+        (
+            "regeneration-after-refusal",
+            Outcome::Accepted,
+            None,
+            &["pair", "paired", "offer", "answer"],
+            &[1, 2],
+        ),
+    ];
+
+    assert_eq!(report.scenarios.len(), 9);
+    for (scenario, (name, outcome, reason, messages, epochs)) in
+        report.scenarios[2..].iter().zip(expected)
+    {
+        assert_eq!(scenario.scenario, name);
+        assert_eq!(scenario.outcome, outcome, "{name}");
+        assert_eq!(scenario.reason_code, reason, "{name}");
+        assert_eq!(scenario.message_sequence, messages, "{name}");
+        assert_eq!(scenario.issued_epochs, epochs, "{name}");
+        assert_eq!(scenario.verdict, Verdict::Pass, "{name}");
+    }
+    assert_eq!(report.scenarios[6].protocol_violations, Some(1));
 }

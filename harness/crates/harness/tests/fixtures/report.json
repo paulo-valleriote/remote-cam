@@ -1,5 +1,5 @@
 {
-  "report_version": 3,
+  "report_version": 4,
   "contract_version": 1,
   "commit": "0000000000000000000000000000000000000000",
   "seed": 0,
@@ -111,12 +111,393 @@
       },
       "verdict": "pass",
       "reason_code": "certificate_pin_mismatch"
+    },
+    {
+      "scenario": "qr-expiry-refused",
+      "outcome": "rejected",
+      "observed_state": "pairing_ready",
+      "message_sequence": [],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 0
+        }
+      ],
+      "frames": [],
+      "issued_epochs": [
+        1,
+        2
+      ],
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 0,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": "qr_expired"
+    },
+    {
+      "scenario": "token-expiry-refused",
+      "outcome": "rejected",
+      "observed_state": "pairing_ready",
+      "message_sequence": [
+        "pair"
+      ],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 0
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 0
+        },
+        {
+          "from": "handshaking",
+          "to": "pairing_ready",
+          "at_millis": 120000
+        }
+      ],
+      "frames": [],
+      "issued_epochs": [
+        1,
+        2
+      ],
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 0,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": "token_expired"
+    },
+    {
+      "scenario": "single-use-refused",
+      "outcome": "rejected",
+      "observed_state": "negotiating",
+      "message_sequence": [
+        "pair"
+      ],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 0
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 0
+        },
+        {
+          "from": "handshaking",
+          "to": "negotiating",
+          "at_millis": 0
+        }
+      ],
+      "frames": [],
+      "issued_epochs": [
+        1
+      ],
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 0,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": "token_already_used"
+    },
+    {
+      "scenario": "replay-refused",
+      "outcome": "rejected",
+      "observed_state": "handshaking",
+      "message_sequence": [
+        "pair"
+      ],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 0
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 0
+        },
+        {
+          "from": "handshaking",
+          "to": "negotiating",
+          "at_millis": 0
+        },
+        {
+          "from": "negotiating",
+          "to": "idle",
+          "at_millis": 3001,
+          "cause": "timeout"
+        },
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 3001
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 3001
+        }
+      ],
+      "frames": [],
+      "issued_epochs": [
+        1,
+        2
+      ],
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 0,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": "token_already_used"
+    },
+    {
+      "scenario": "stale-epoch-discarded",
+      "outcome": "accepted",
+      "observed_state": "negotiating",
+      "message_sequence": [
+        "pair",
+        "paired",
+        "offer",
+        "answer"
+      ],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 0
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 0
+        },
+        {
+          "from": "handshaking",
+          "to": "negotiating",
+          "at_millis": 0
+        },
+        {
+          "from": "negotiating",
+          "to": "idle",
+          "at_millis": 3001,
+          "cause": "timeout"
+        },
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 3001
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 3001
+        },
+        {
+          "from": "handshaking",
+          "to": "negotiating",
+          "at_millis": 3001
+        }
+      ],
+      "frames": [],
+      "issued_epochs": [
+        1,
+        2
+      ],
+      "protocol_violations": 1,
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 0,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": null
+    },
+    {
+      "scenario": "clock-backwards-window",
+      "outcome": "rejected",
+      "observed_state": "pairing_ready",
+      "message_sequence": [
+        "pair"
+      ],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 10000
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 129999
+        },
+        {
+          "from": "handshaking",
+          "to": "pairing_ready",
+          "at_millis": 130000
+        }
+      ],
+      "frames": [],
+      "issued_epochs": [
+        1,
+        2
+      ],
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 0,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": "token_expired"
+    },
+    {
+      "scenario": "regeneration-after-refusal",
+      "outcome": "accepted",
+      "observed_state": "negotiating",
+      "message_sequence": [
+        "pair",
+        "paired",
+        "offer",
+        "answer"
+      ],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 0
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 120000
+        },
+        {
+          "from": "handshaking",
+          "to": "negotiating",
+          "at_millis": 120000
+        }
+      ],
+      "frames": [],
+      "issued_epochs": [
+        1,
+        2
+      ],
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 0,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 0,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": null
     }
   ],
   "verdict": "pass",
   "summary": {
-    "scenarios": 2,
-    "passed": 2,
+    "scenarios": 9,
+    "passed": 9,
     "failed": 0
   }
 }
