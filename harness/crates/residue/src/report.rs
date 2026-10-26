@@ -27,9 +27,20 @@ pub enum Verdict {
     Fail,
 }
 
+/// What an inspection looks at. The wire name is the variant in snake_case, so a scope cannot be
+/// misspelled between the builders in `inspect` and the verdict below.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scope {
+    ProcessMemory,
+    StateDirectory,
+    CredentialStores,
+    TlsTicketState,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ScopeResult {
-    pub scope: &'static str,
+    pub scope: Scope,
     pub method: &'static str,
     pub swept: bool,
     pub findings: Vec<&'static str>,
@@ -52,7 +63,7 @@ pub struct ScopeResult {
 }
 
 impl ScopeResult {
-    pub fn new(scope: &'static str, method: &'static str, swept: bool) -> Self {
+    pub fn new(scope: Scope, method: &'static str, swept: bool) -> Self {
         Self {
             scope,
             method,
@@ -91,16 +102,10 @@ impl Inspection {
     }
 }
 
-/// Scope names are shared by the builders in `inspect` and the verdict below.
-pub const PROCESS_MEMORY: &str = "process_memory";
-pub const STATE_DIRECTORY: &str = "state_directory";
-pub const CREDENTIAL_STORES: &str = "credential_stores";
-pub const TLS_TICKET_STATE: &str = "tls_ticket_state";
-
 fn live_control_verdict(scopes: &[ScopeResult]) -> Verdict {
     let seen = scopes
         .iter()
-        .find(|scope| scope.scope == PROCESS_MEMORY)
+        .find(|scope| scope.scope == Scope::ProcessMemory)
         .map(|scope| &scope.findings);
     let sensitive = seen.is_some_and(|seen| LIVE_REQUIRED.iter().all(|label| seen.contains(label)));
     if sensitive {
