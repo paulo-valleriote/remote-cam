@@ -30,9 +30,12 @@ impl<C: AsyncRead + AsyncWrite + Unpin> ActiveSession<C> {
         let mut successor = Some(successor);
         for effect in effects {
             match effect {
-                Effect::SendClose { reason } => {
+                Effect::SendClose {
+                    reason: CloseCode::Superseded,
+                } => {
                     if let Some(channel) = self.channel.as_mut() {
-                        let _ = timeout_at(deadline, send_close(channel, reason)).await;
+                        let _ =
+                            timeout_at(deadline, send_close(channel, CloseCode::Superseded)).await;
                     }
                 }
                 Effect::End => self.retire(deadline).await,

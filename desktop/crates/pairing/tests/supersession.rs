@@ -294,6 +294,37 @@ async fn a_successor_paired_without_end_still_retires_the_predecessor_first() {
 }
 
 #[tokio::test]
+async fn a_close_that_is_not_superseded_is_refused_before_anything_is_written() {
+    let log = Log::default();
+    let (first, _) = Recorder::new("first", &log);
+    let (second, second_handle) = Recorder::new("second", &log);
+    let mut session = ActiveSession::new();
+    session
+        .apply(vec![paired(1, 1)], first)
+        .await
+        .expect("the first peer is paired");
+    log.lock().unwrap().clear();
+
+    let error = session
+        .apply(
+            vec![
+                Effect::SendClose {
+                    reason: CloseCode::EndedByDesktop,
+                },
+                paired(2, 2),
+            ],
+            second,
+        )
+        .await
+        .expect_err("only a superseded close is part of replacing the session");
+
+    assert_eq!(error.code(), ReasonCode::InternalError);
+    assert!(second_handle.dropped());
+    assert_eq!(events(&log), vec![("second", "drop".to_owned())]);
+    assert!(session.is_occupied());
+}
+
+#[tokio::test]
 async fn effects_the_session_does_not_own_are_refused() {
     let log = Log::default();
     let (peer, _) = Recorder::new("peer", &log);
