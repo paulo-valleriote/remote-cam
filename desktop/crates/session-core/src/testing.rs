@@ -7,7 +7,9 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::{Clock, RandomSource, Timestamp};
+use std::sync::Mutex;
+
+use crate::{Clock, EpochSource, RandomSource, Timestamp};
 
 /// A clock that only moves when the caller advances it.
 ///
@@ -70,4 +72,9 @@ impl RandomSource for SeededRandomSource {
             chunk.copy_from_slice(&value[..chunk.len()]);
         }
     }
+}
+
+/// Creates an epoch sequence whose next issued epoch is `first`.
+pub fn epoch_source_starting_at(first: u32) -> EpochSource {
+    EpochSource(Arc::new(Mutex::new(first)))
 }

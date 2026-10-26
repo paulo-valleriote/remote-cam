@@ -1,6 +1,6 @@
 use remotecam_protocol::ReasonCode;
 use remotecam_protocol::signaling::{Limits, SignalingMessage};
-use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
+use remotecam_session_core::testing::{ManualClock, SeededRandomSource, epoch_source_starting_at};
 use remotecam_session_core::{
     Effect, EpochSource, FIRST_MEDIA_FRAME_TIMEOUT_MILLIS, PAIRING_WINDOW_MILLIS, PairingError,
     PairingMaterial, SessionCore, SessionEvent, SessionState, Timestamp,
@@ -176,4 +176,26 @@ fn cores_sharing_one_epoch_source_never_reuse_an_epoch() {
 
     assert_eq!(start(&mut first).epoch(), 1);
     assert_eq!(start(&mut second).epoch(), 2);
+}
+
+#[test]
+fn a_spent_epoch_range_refuses_new_material_without_leaving_idle() {
+    let epochs = epoch_source_starting_at(u32::MAX - 1);
+    let clock = ManualClock::new(Timestamp::ZERO);
+    let mut last_issued = SessionCore::with_epoch_source(
+        clock.clone(),
+        SeededRandomSource::new(7),
+        DESKTOP_FINGERPRINT,
+        epochs.clone(),
+    );
+    let mut refused = SessionCore::with_epoch_source(
+        clock,
+        SeededRandomSource::new(8),
+        DESKTOP_FINGERPRINT,
+        epochs,
+    );
+
+    assert_eq!(start(&mut last_issued).epoch(), u32::MAX - 1);
+    assert!(refused.handle(SessionEvent::StartPairing).is_err());
+    assert_eq!(refused.state(), SessionState::Idle);
 }
