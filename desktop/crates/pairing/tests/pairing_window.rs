@@ -1,5 +1,5 @@
 use remotecam_pairing::{
-    EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient,
+    EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient, UnixClock,
 };
 use remotecam_protocol::signaling::{Limits, SignalingMessage};
 use remotecam_protocol::{Endpoint, ReasonCode};
@@ -13,7 +13,15 @@ use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
-const EXPIRES_AT: u64 = 2_000_000_000;
+const CREATED_AT_UNIX: u64 = 1_900_000_000;
+
+struct FixedUnixClock(u64);
+
+impl UnixClock for FixedUnixClock {
+    fn now_unix(&self) -> u64 {
+        self.0
+    }
+}
 
 type Core = SessionCore<ManualClock, SeededRandomSource>;
 
@@ -45,11 +53,10 @@ async fn fixture() -> Fixture {
     let endpoint =
         Endpoint::from_address(4, "192.168.1.42", listener.local_addr().port()).expect("endpoint");
     listener
-        .issue_material(PairingMaterialRequest::new(
-            &session_material,
-            EXPIRES_AT,
-            vec![endpoint],
-        ))
+        .issue_material(
+            PairingMaterialRequest::new(&session_material, vec![endpoint]),
+            &FixedUnixClock(CREATED_AT_UNIX),
+        )
         .expect("pairing material");
     Fixture {
         core,

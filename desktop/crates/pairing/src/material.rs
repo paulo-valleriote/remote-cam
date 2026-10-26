@@ -1,10 +1,29 @@
 use std::fmt;
 
 use remotecam_protocol::{Endpoint, QrEncodeError, QrPayload};
-use remotecam_session_core::{PairingMaterial as SessionPairingMaterial, SessionId};
+use remotecam_session_core::{
+    PAIRING_WINDOW_MILLIS, PairingMaterial as SessionPairingMaterial, SessionId,
+};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::certificate::EphemeralCertificate;
+
+const QR_VALIDITY_SECONDS: u64 = PAIRING_WINDOW_MILLIS / 1_000;
+
+pub trait UnixClock {
+    fn now_unix(&self) -> u64;
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemUnixClock;
+
+impl UnixClock for SystemUnixClock {
+    fn now_unix(&self) -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_secs())
+    }
+}
 
 fn encode_qr_payload(payload: &mut QrPayload) -> Result<Zeroizing<Vec<u8>>, QrEncodeError> {
     let encoded = payload.encode();
@@ -52,19 +71,13 @@ pub struct PairingMaterial {
 
 pub struct PairingMaterialRequest<'a> {
     session_material: &'a SessionPairingMaterial,
-    expires_at_unix: u64,
     endpoints: Vec<Endpoint>,
 }
 
 impl<'a> PairingMaterialRequest<'a> {
-    pub fn new(
-        session_material: &'a SessionPairingMaterial,
-        expires_at_unix: u64,
-        endpoints: Vec<Endpoint>,
-    ) -> Self {
+    pub fn new(session_material: &'a SessionPairingMaterial, endpoints: Vec<Endpoint>) -> Self {
         Self {
             session_material,
-            expires_at_unix,
             endpoints,
         }
     }
@@ -88,20 +101,22 @@ impl PairingMaterial {
     pub fn issue(
         request: PairingMaterialRequest<'_>,
         certificate: &EphemeralCertificate,
+        clock: &impl UnixClock,
     ) -> Result<Self, MaterialError> {
-        Self::issue_with_fingerprint(request, certificate.fingerprint())
+        Self::issue_with_fingerprint(request, certificate.fingerprint(), clock)
     }
 
     pub(crate) fn issue_with_fingerprint(
         request: PairingMaterialRequest<'_>,
         tls_fingerprint: [u8; 32],
+        clock: &impl UnixClock,
     ) -> Result<Self, MaterialError> {
         let PairingMaterialRequest {
             session_material,
-            expires_at_unix,
             endpoints,
         } = request;
         let session_id = session_material.session_id();
+        let expires_at_unix = clock.now_unix().saturating_add(QR_VALIDITY_SECONDS);
 
         let mut payload = QrPayload {
             session_id: *session_id.as_bytes(),
@@ -151,7 +166,10 @@ impl PairingMaterial {
 
 #[cfg(test)]
 mod tests {
-    use super::{DESKTOP_CAPABILITIES, MaterialError, PairingMaterial, PairingMaterialRequest};
+    use super::{
+        DESKTOP_CAPABILITIES, MaterialError, PAIRING_WINDOW_MILLIS, PairingMaterial,
+        PairingMaterialRequest, UnixClock,
+    };
     use crate::certificate::EphemeralCertificate;
     use remotecam_protocol::hex::encode_hex;
     use remotecam_protocol::{Endpoint, QrEncodeError, QrPayload};
@@ -159,7 +177,15 @@ mod tests {
     use remotecam_session_core::{Effect, SessionCore, SessionEvent, Timestamp};
     use zeroize::Zeroizing;
 
-    const EXPIRES_AT: u64 = 2_000_000_000;
+    const CREATED_AT_UNIX: u64 = 1_900_000_000;
+
+    struct FixedUnixClock(u64);
+
+    impl UnixClock for FixedUnixClock {
+        fn now_unix(&self) -> u64 {
+            self.0
+        }
+    }
 
     fn endpoints() -> Vec<Endpoint> {
         vec![Endpoint::from_address(4, "192.168.1.42", 51820).expect("endpoint")]
@@ -183,10 +209,23 @@ mod tests {
     fn material(certificate: &EphemeralCertificate) -> PairingMaterial {
         let session_material = session_material();
         PairingMaterial::issue(
-            PairingMaterialRequest::new(&session_material, EXPIRES_AT, endpoints()),
+            PairingMaterialRequest::new(&session_material, endpoints()),
             certificate,
+            &FixedUnixClock(CREATED_AT_UNIX),
         )
         .expect("material")
+    }
+
+    #[test]
+    fn the_qr_expires_one_pairing_window_after_its_creation() {
+        let certificate = EphemeralCertificate::generate().expect("certificate");
+        let material = material(&certificate);
+
+        assert_eq!(
+            material.expires_at_unix(),
+            CREATED_AT_UNIX + PAIRING_WINDOW_MILLIS / 1_000
+        );
+        assert_eq!(material.expires_at_unix(), CREATED_AT_UNIX + 120);
     }
 
     #[test]
@@ -194,13 +233,14 @@ mod tests {
         let certificate = EphemeralCertificate::generate().expect("certificate");
         let session_material = session_material();
         let material = PairingMaterial::issue(
-            PairingMaterialRequest::new(&session_material, EXPIRES_AT, endpoints()),
+            PairingMaterialRequest::new(&session_material, endpoints()),
             &certificate,
+            &FixedUnixClock(CREATED_AT_UNIX),
         )
         .expect("material");
 
         let decoded =
-            QrPayload::decode(material.encoded_qr(), 1_900_000_000).expect("decoded payload");
+            QrPayload::decode(material.encoded_qr(), CREATED_AT_UNIX).expect("decoded payload");
 
         assert_eq!(
             decoded.session_id,
@@ -228,7 +268,7 @@ mod tests {
         let mut payload = QrPayload {
             session_id: [1; 16],
             epoch: 1,
-            expires_at: EXPIRES_AT,
+            expires_at: CREATED_AT_UNIX + 120,
             pairing_token: [0xab; 32],
             tls_fingerprint: [2; 32],
             capabilities: DESKTOP_CAPABILITIES,
@@ -253,8 +293,9 @@ mod tests {
         let certificate = EphemeralCertificate::generate().expect("certificate");
 
         let error = PairingMaterial::issue(
-            PairingMaterialRequest::new(&session_material(), EXPIRES_AT, Vec::new()),
+            PairingMaterialRequest::new(&session_material(), Vec::new()),
             &certificate,
+            &FixedUnixClock(CREATED_AT_UNIX),
         )
         .expect_err("an unreachable QR must be refused");
 
@@ -267,7 +308,7 @@ mod tests {
         let certificate = EphemeralCertificate::generate().expect("certificate");
         let material = material(&certificate);
         let payload =
-            QrPayload::decode(material.encoded_qr(), 1_900_000_000).expect("decoded payload");
+            QrPayload::decode(material.encoded_qr(), CREATED_AT_UNIX).expect("decoded payload");
         let token = encode_hex(&payload.pairing_token);
         let fingerprint = encode_hex(&material.tls_fingerprint());
 

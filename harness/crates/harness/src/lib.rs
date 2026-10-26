@@ -1,5 +1,5 @@
 use remotecam_pairing::{
-    EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient,
+    EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient, UnixClock,
 };
 use remotecam_protocol::signaling::{
     Limits, MAX_SIGNALING_MESSAGE_BYTES, Sdp, SignalingMessage, parse_signaling,
@@ -26,10 +26,17 @@ const PAIRING_CLOCK_START: Timestamp = Timestamp::ZERO;
 const FRAME_INTERVAL_MILLIS: u64 = 33;
 const SYNTHETIC_FRAME_PAYLOAD_BYTES: usize = 16;
 const QR_CLOCK_START_UNIX: u64 = 1_900_000_000;
-const QR_EXPIRES_AT_UNIX: u64 = 2_000_000_000;
 const DESKTOP_DTLS_FINGERPRINT: [u8; 32] = [0x44; 32];
 const MOBILE_DTLS_FINGERPRINT: [u8; 32] = [0x55; 32];
 const OFFER_SDP: &str = "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\n";
+
+struct HarnessUnixClock;
+
+impl UnixClock for HarnessUnixClock {
+    fn now_unix(&self) -> u64 {
+        QR_CLOCK_START_UNIX
+    }
+}
 const ANSWER_SDP: &str = "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=recvonly\r\n";
 
 struct HarnessCertificateRandomSource(SeededRandomSource);
@@ -772,11 +779,10 @@ async fn run_pairing_inner(
             }
         };
     let pairing_material = map_scenario_error(
-        listener.issue_material(PairingMaterialRequest::new(
-            material,
-            QR_EXPIRES_AT_UNIX,
-            vec![advertised_endpoint.clone()],
-        )),
+        listener.issue_material(
+            PairingMaterialRequest::new(material, vec![advertised_endpoint.clone()]),
+            &HarnessUnixClock,
+        ),
         config.scenario,
         core.state(),
         Vec::new(),
