@@ -461,7 +461,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         if self.state == SessionState::Negotiating
             || (self.state == SessionState::Connected && self.pending_qr.is_none())
         {
-            return Err(PairingError::TokenAlreadyUsed);
+            return Err(PairingError::ProtocolViolation);
         }
 
         if !self.awaits_pair_frame() {

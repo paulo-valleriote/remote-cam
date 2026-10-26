@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-10-26
 - **Amends:** ADR-0012 (the `single-use-refused` expectation only)
-- **Amended by:** REC-38 (a peer that connects with no pending QR while a session is active is refused as `superseded` before the handshake)
+- **Amended by:** REC-38 (a peer that connects with no pending QR while a session is active is refused as `superseded` before the handshake), REC-46 (a first frame that reuses no consumed token while a session is active is `protocol_violation`)
 
 ## Context
 
@@ -89,3 +89,25 @@ still `NEGOTIATING`. Under REC-37 that replay is the race's losing attempt.
   (250 ms). A predecessor that is gone or does not read never delays the
   successor past that budget; the predecessor is then dropped and the successor
   is paired.
+
+## Amendment (REC-46)
+
+- A first frame that does not reuse a consumed token, presented in
+  `NEGOTIATING` or in `CONNECTED` with no pending QR (a token never issued, a
+  frame that is not `pair`, a frame that does not parse), is refused with
+  `PairingError::ProtocolViolation` (`ReasonCode::ProtocolViolation`). It was
+  `token_already_used` before, which claimed a consumption that did not happen.
+- The refusal changes no state and does not discard anything: the active
+  session, its identity and `retired_state()` are unchanged. Falling through to
+  the generic path is not an option, because `refuse_pairing` would end a
+  `NEGOTIATING` session.
+- `protocol_violation` is not a security event, so this refusal no longer
+  reaches the security section of the local diagnostic. Same trade-off as
+  REC-43: nothing consumes a counter today, and the structured log record with
+  `reason_code=protocol_violation` is the only trace. Reopen when that section
+  is designed.
+- No wire change (ADR-0002): `protocol_violation` is already in the closed set.
+  The harness has no scenario for this case and the report is unchanged.
+  The listener already refuses a late peer before the handshake (REC-38),
+  so the path is reached only by a peer that connected before the race was
+  decided, or by a direct driver of the core.
