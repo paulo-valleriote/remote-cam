@@ -46,6 +46,9 @@ still `NEGOTIATING`. Under REC-37 that replay is the race's losing attempt.
 
 - A reader of `state()` alone never sees `SUPERSEDED`. Adapters that must report
   the predecessor's end use `retired_state()` and the emitted effects.
+- `retired_state()` has no consumer outside the tests yet. It stays as the
+  adapter API named above (REC-44 decision). Removing it needs a new ADR. A
+  harness consumer is added when the diagnostic needs the predecessor's end.
 - `token_already_used` is a security event in `protocol/` (`is_security_event`).
   A consumed-token replay during an active session is now `superseded`, a
   user-actionable pairing rejection, so it no longer reaches the security
