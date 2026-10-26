@@ -405,12 +405,12 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         self.state
     }
 
-    /// The identity of the pairing in progress, if one has started.
+    /// The identity of the active session, or of the pending pairing when none is active.
     pub fn session_id(&self) -> Option<SessionId> {
         self.current_identity().map(|identity| identity.session_id)
     }
 
-    /// The generation assigned to the current pairing, if one has started.
+    /// The generation of the active session, or of the pending pairing when none is active.
     pub fn epoch(&self) -> Option<u32> {
         self.current_identity().map(|identity| identity.epoch)
     }

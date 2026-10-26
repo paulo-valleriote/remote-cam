@@ -67,6 +67,5 @@ still `NEGOTIATING`. Under REC-37 that replay is the race's losing attempt.
 - The glossary entry for the state machine (`ENDED/SUPERSEDED`) should say that
   `SUPERSEDED` is the predecessor's terminal state, not a resting state of the
   core.
-- No wire change (ADR-0002). ADR-0005 is unchanged.
-- The Jira REC-37 description and the spec tables still need to match this ADR;
-  they are not edited by this change.
+- No wire change (ADR-0002). ADR-0005's decision is unchanged; it only gains an
+  Amended by pointer to this ADR.
