@@ -14,11 +14,11 @@ rustls.workspace = true
 sha2.workspace = true
 p256.workspace = true
 subtle.workspace = true
-tokio = { workspace = true, features = ["io-util", "net", "rt"] }
+tokio = { workspace = true, features = ["io-util", "net", "rt", "time"] }
 tokio-rustls.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
 rustls.workspace = true
-tokio = { workspace = true, features = ["io-util", "macros", "net", "rt"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "test-util", "time"] }
 tokio-rustls.workspace = true

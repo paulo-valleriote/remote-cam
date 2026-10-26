@@ -6,13 +6,16 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll};
 
 use remotecam_protocol::ReasonCode;
+use remotecam_protocol::signaling::CloseCode;
 use rustls::server::ServerSessionMemoryCache;
 use rustls::{ProtocolVersion, ServerConfig};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::time::timeout;
 use tokio_rustls::TlsAcceptor;
 use tokio_rustls::server::TlsStream;
 
+use crate::active::{SUPERSEDE_BUDGET, send_close};
 use crate::certificate::EphemeralCertificate;
 use crate::error::{PairingError, classify_io_error};
 use crate::material::{MaterialError, PairingMaterial, PairingMaterialRequest, UnixClock};
@@ -187,7 +190,18 @@ impl ServerChannel {
         self.inner.get_ref().0.peer_addr()
     }
 
+    /// Refuses the peer after the handshake.
+    ///
+    /// A peer that lost the race for the session is told so with `close { superseded }`.
+    /// Any other refusal closes the channel without a frame.
     pub async fn reject(mut self, reason: ReasonCode) -> PairingError {
+        if reason == ReasonCode::Superseded {
+            let _ = timeout(
+                SUPERSEDE_BUDGET,
+                send_close(&mut self, CloseCode::Superseded),
+            )
+            .await;
+        }
         let _ = self.shutdown().await;
         PairingError::new(reason, "peer refused after the handshake")
     }
