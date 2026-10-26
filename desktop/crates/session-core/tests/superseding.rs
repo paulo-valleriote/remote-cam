@@ -58,7 +58,6 @@ fn pair_frame_with_token(token: [u8; 32]) -> Vec<u8> {
     .expect("the pair message is valid")
 }
 
-/// A core whose first peer is authenticated and whose session is `Connected`.
 fn connected_core() -> (Core, ManualClock, Offer) {
     let (mut core, clock) = core_at(0);
     let first = present_pairing(&mut core);
