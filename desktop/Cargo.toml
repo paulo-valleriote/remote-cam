@@ -5,6 +5,7 @@ members = [
     "crates/app",
     "crates/session-core",
     "crates/pairing",
+    "crates/scrub",
 ]
 
 [workspace.package]

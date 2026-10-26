@@ -355,6 +355,18 @@ mod tests {
     use crate::certificate::EphemeralCertificate;
 
     #[test]
+    fn server_config_issues_no_tickets_and_keeps_no_resumable_session() {
+        let certificate = EphemeralCertificate::generate().expect("certificate");
+
+        let (config, _fingerprint) = server_config(certificate).expect("configuration");
+
+        assert_eq!(config.send_tls13_tickets, 0);
+        assert!(!config.ticketer.enabled());
+        config.session_storage.put(vec![1], vec![2]);
+        assert!(config.session_storage.get(&[1]).is_none());
+    }
+
+    #[test]
     fn listener_errors_name_the_failing_stage() {
         let io = ListenerError::Io(std::io::Error::other("port in use"));
         let tls = ListenerError::Tls(rustls::Error::General("bad configuration".into()));

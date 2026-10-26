@@ -97,7 +97,20 @@ impl fmt::Debug for PairingMaterial {
     }
 }
 
+impl Drop for PairingMaterial {
+    fn drop(&mut self) {
+        self.wipe();
+    }
+}
+
 impl PairingMaterial {
+    /// Clears what the session must not leave behind. `Drop` calls it, so a value that lived
+    /// inline on a stack frame does not leave its fingerprint in the dead frame.
+    fn wipe(&mut self) {
+        self.tls_fingerprint.zeroize();
+        self.encoded_qr.zeroize();
+    }
+
     pub fn issue(
         request: PairingMaterialRequest<'_>,
         certificate: &EphemeralCertificate,
@@ -301,6 +314,17 @@ mod tests {
 
         assert_eq!(error, MaterialError::Qr(QrEncodeError::NoEndpoints));
         assert!(error.to_string().contains("QR payload rejected"));
+    }
+
+    #[test]
+    fn wiping_clears_the_fingerprint_and_the_encoded_qr() {
+        let certificate = EphemeralCertificate::generate().expect("certificate");
+        let mut material = material(&certificate);
+
+        material.wipe();
+
+        assert_eq!(material.tls_fingerprint(), [0; 32]);
+        assert!(material.encoded_qr().iter().all(|byte| *byte == 0));
     }
 
     #[test]

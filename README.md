@@ -86,6 +86,7 @@ target below is documented here.
 | `make build-desktop` | Build the Rust workspace in `desktop/`. |
 | `make harness` | Run both headless product-harness scenarios under an external watchdog (one versioned JSON line on stdout; exit code 0 means both scenarios passed). |
 | `make harness HARNESS_ARGS="--seed 42 --clock-start-millis 100"` | Re-run the scenarios with explicit deterministic inputs. |
+| `make residue` | Run the residue inspection (REC-15): a complete pairing, the session end, the process exit and a restart are each swept for the token, key, fingerprint, certificate and QR payload in process memory, state directories and credential stores; a deliberate leak must be detected. Writes `docs/evidence/f1/rec-15-zero-persistence-linux.json` and exits 1 on any residue. |
 | `make build-desktop-win` | Mirror the workspace to the Windows filesystem (`/mnt/c/Users/<user>/remotecam-win`) and build natively from WSL2; avoids the UNC filesystem error (see `docs/windows-build.md`). |
 | `make sync-desktop-win` | Mirror the working tree to the Windows filesystem without building (helper used by `build-desktop-win`). |
 | `make build-mobile` | Assemble the Android contract library (`mobile/protocol/build/outputs/aar`). |
