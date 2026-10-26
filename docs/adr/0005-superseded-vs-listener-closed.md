@@ -2,6 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-10-24
+- **Amended by:** ADR-0013 (`SUPERSEDED` is the predecessor's retired state; a consumed token presented during an active session is `superseded`, not a security event)
 
 ## Context
 
