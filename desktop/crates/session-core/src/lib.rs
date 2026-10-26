@@ -689,8 +689,63 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PairingError, SessionState, TransitionError, TransitionErrorCode};
+    use super::{
+        Effect, MediaFrame, PairingError, SessionCore, SessionEvent, SessionState, Timestamp,
+        TransitionError, TransitionErrorCode,
+    };
+    use crate::testing::{ManualClock, SeededRandomSource};
     use remotecam_protocol::ReasonCode;
+    use remotecam_protocol::signaling::{Limits, SignalingMessage};
+
+    fn connected_with_pending_successor() -> SessionCore<ManualClock, SeededRandomSource> {
+        let mut core = SessionCore::new(
+            ManualClock::new(Timestamp::ZERO),
+            SeededRandomSource::new(7),
+            [0x44; 32],
+        );
+        let Some(Effect::PresentPairing(material)) = core
+            .handle(SessionEvent::StartPairing)
+            .expect("starting pairing is valid")
+            .pop()
+        else {
+            panic!("starting pairing presents its material");
+        };
+        core.handle(SessionEvent::PeerConnected)
+            .expect("the first peer can connect");
+        let frame = SignalingMessage::Pair {
+            token: *material.token().as_bytes(),
+            dtls_fingerprint: [0x55; 32],
+            limits: Limits::new(),
+        }
+        .encode()
+        .expect("the pair message is valid");
+        core.authenticate_first_frame(&frame)
+            .expect("the first peer authenticates");
+        core.handle(SessionEvent::NegotiationCompleted)
+            .expect("negotiation completes");
+        core.handle(SessionEvent::FirstMediaFrame(MediaFrame {
+            sequence: 0,
+            timestamp: Timestamp::ZERO,
+        }))
+        .expect("the first frame arrives on time");
+        core.handle(SessionEvent::StartPairing)
+            .expect("a connected core accepts a successor pairing");
+        core
+    }
+
+    #[test]
+    fn ending_a_connected_session_discards_the_pending_successor_offer() {
+        let mut core = connected_with_pending_successor();
+        assert!(core.offer.is_some());
+
+        let effects = core
+            .handle(SessionEvent::EndSession)
+            .expect("a connected session can end");
+
+        assert_eq!(effects, vec![Effect::End]);
+        assert_eq!(core.state(), SessionState::Ended);
+        assert!(core.offer.is_none());
+    }
 
     #[test]
     fn pairing_failures_map_to_the_closed_reason_codes() {

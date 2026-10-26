@@ -3,7 +3,7 @@ use remotecam_protocol::signaling::{CloseCode, Limits, SignalingMessage};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
 use remotecam_session_core::{
     Effect, MediaFrame, PAIRING_WINDOW_MILLIS, PairingError, PairingMaterial, SessionCore,
-    SessionEvent, SessionId, SessionState, Timestamp,
+    SessionEvent, SessionId, SessionState, Timestamp, TransitionError,
 };
 
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
@@ -179,6 +179,31 @@ fn a_pair_frame_before_the_successor_connects_does_not_end_the_predecessor() {
 
     assert_eq!(error, PairingError::ProtocolViolation);
     assert_eq!(core.state(), SessionState::Connected);
+    assert!(matches!(
+        core.handle(SessionEvent::PeerConnected),
+        Err(TransitionError::InvalidTransition { .. })
+    ));
+}
+
+#[test]
+fn an_invalid_frame_from_the_successor_discards_its_qr_and_keeps_the_predecessor_connected() {
+    let (mut core, _clock, first) = connected_core();
+    present_pairing(&mut core);
+    core.handle(SessionEvent::PeerConnected)
+        .expect("the successor peer can connect");
+
+    let error = core
+        .authenticate_first_frame(b"not a signaling frame")
+        .expect_err("a frame that does not parse is refused");
+
+    assert_eq!(error, PairingError::ProtocolViolation);
+    assert_eq!(core.state(), SessionState::Connected);
+    assert_eq!(core.session_id(), Some(first.session_id));
+    assert_eq!(core.retired_state(), None);
+    assert!(matches!(
+        core.handle(SessionEvent::PeerConnected),
+        Err(TransitionError::InvalidTransition { .. })
+    ));
 }
 
 #[test]
