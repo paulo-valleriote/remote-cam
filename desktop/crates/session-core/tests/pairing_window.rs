@@ -180,7 +180,7 @@ fn cores_sharing_one_epoch_source_never_reuse_an_epoch() {
 
 #[test]
 fn a_spent_epoch_range_refuses_new_material_without_leaving_idle() {
-    let epochs = epoch_source_starting_at(u32::MAX - 1);
+    let epochs = epoch_source_starting_at(u32::MAX);
     let clock = ManualClock::new(Timestamp::ZERO);
     let mut last_issued = SessionCore::with_epoch_source(
         clock.clone(),
@@ -195,7 +195,7 @@ fn a_spent_epoch_range_refuses_new_material_without_leaving_idle() {
         epochs,
     );
 
-    assert_eq!(start(&mut last_issued).epoch(), u32::MAX - 1);
+    assert_eq!(start(&mut last_issued).epoch(), u32::MAX);
     assert!(refused.handle(SessionEvent::StartPairing).is_err());
     assert_eq!(refused.state(), SessionState::Idle);
 }
