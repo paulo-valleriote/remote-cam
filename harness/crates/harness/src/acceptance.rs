@@ -393,7 +393,7 @@ async fn mobile_exchange(
     messages.push("paired");
 
     if let Some(epoch) = stale_offer_epoch {
-        let Ok(stale_sdp) = Sdp::new(OFFER_SDP) else {
+        let Ok(stale_sdp) = OfferSdp::new(OFFER_SDP) else {
             return messages;
         };
         let Ok(stale_frame) = (SignalingMessage::Offer {
@@ -411,7 +411,7 @@ async fn mobile_exchange(
         }
     }
 
-    let Ok(offer_sdp) = Sdp::new(OFFER_SDP) else {
+    let Ok(offer_sdp) = OfferSdp::new(OFFER_SDP) else {
         return messages;
     };
     let Ok(offer_frame) = (SignalingMessage::Offer {

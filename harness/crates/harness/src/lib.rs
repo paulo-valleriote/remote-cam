@@ -3,7 +3,7 @@ use remotecam_pairing::{
 };
 use remotecam_protocol::ReasonCode;
 use remotecam_protocol::signaling::{
-    Limits, MAX_SIGNALING_MESSAGE_BYTES, Sdp, SignalingMessage, parse_signaling,
+    AnswerSdp, Limits, MAX_SIGNALING_MESSAGE_BYTES, OfferSdp, SignalingMessage, parse_signaling,
 };
 use remotecam_protocol::{Endpoint, QrPayload};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
@@ -1015,7 +1015,7 @@ async fn run_pairing_inner(
     }
     message_sequence.push("paired");
 
-    let offer_sdp = match Sdp::new(OFFER_SDP) {
+    let offer_sdp = match OfferSdp::new(OFFER_SDP) {
         Ok(sdp) => sdp,
         Err(_) => abort_server!(failed_report(
             config.scenario,
@@ -1356,7 +1356,7 @@ where
 
     read_offer_frame(&mut desktop, core).await?;
 
-    let answer_sdp = Sdp::new(ANSWER_SDP).map_err(|_| "internal_error")?;
+    let answer_sdp = AnswerSdp::new(ANSWER_SDP).map_err(|_| "internal_error")?;
     let answer_frame = SignalingMessage::Answer {
         epoch: u64::from(core.epoch().ok_or("invalid_transition")?),
         sdp: answer_sdp,
@@ -1771,7 +1771,7 @@ mod tests {
 
         let answer = SignalingMessage::Answer {
             epoch: 2,
-            sdp: Sdp::new(ANSWER_SDP).expect("answer SDP"),
+            sdp: AnswerSdp::new(ANSWER_SDP).expect("answer SDP"),
         };
         let answer = answer.encode().expect("answer frame");
         assert_eq!(validate_answer_frame(&answer, 2), Ok(()));
@@ -1848,7 +1848,7 @@ mod tests {
                 .expect("paired response");
             let offer = SignalingMessage::Offer {
                 epoch: 999,
-                sdp: Sdp::new(OFFER_SDP).expect("offer SDP"),
+                sdp: OfferSdp::new(OFFER_SDP).expect("offer SDP"),
             };
             write_signaling_frame(&mut client, &offer.encode().expect("offer frame"))
                 .await

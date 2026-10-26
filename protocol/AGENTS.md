@@ -53,8 +53,9 @@
 
 - **Canonical encoder:** each implementation emits frames in one place — Rust `SignalingMessage::encode()` in `desktop/crates/protocol/src/signaling.rs`, Kotlin `SignalingEncoder`. Both mirror the frozen v1 schema; the encoder performs no version negotiation.
 - **Canonical order:** `version`, `type`, then the fields of the message in schema declaration order, with no whitespace. Optional fields that were never supplied are omitted. The order is pinned by `signaling/encoding.json`, not left to a map implementation.
-- **Validated values:** `Limits`, `Sdp`, `Candidates`, `Stats`, `CloseCode`, `ErrorCode` and `ErrorText` reject out-of-contract values at construction. Parsing and application code share those constructors, so a message that exists as a typed value re-parses to itself and no code path can emit an invalid message.
+- **Validated values:** `Limits`, `OfferSdp`, `AnswerSdp`, `Candidates`, `Stats`, `CloseCode`, `ErrorCode` and `ErrorText` reject out-of-contract values at construction. Parsing and application code share those constructors, so a message that exists as a typed value re-parses to itself and no code path can emit an invalid message.
 - **Size:** `encode()` refuses a frame above `MAX_MESSAGE_BYTES = 16 KiB` (`EncodeError::FrameTooLarge`). A validated message can still be refused when JSON escaping grows the frame past the cap.
+- **Refusals:** the validation order and the code of each refusal are in ADR-0015. `OfferSdp` accepts only `sendonly`/`inactive` audio and video sections, `AnswerSdp` only `recvonly`/`inactive`; data channels and non-host, non-UDP or non-private `a=candidate` lines are `invalid_message`. Kotlin enforces none of the SDP policy until REC-14.
 - **Parity:** Rust executes the encoding vectors today; the Kotlin encoder joins the same vectors with REC-14.
 - **Wire freeze:** ADR-0002 still applies. Adding a message type, field or ordering rule is a version decision, not an implementation change.
 

@@ -17,7 +17,7 @@ pub async fn read_frame(
     let length = u32::from_be_bytes(prefix) as usize;
     if length > MAX_SIGNALING_MESSAGE_BYTES {
         return Err(PairingError::new(
-            ReasonCode::InvalidMessage,
+            ReasonCode::SecurityViolation,
             "the frame exceeds the signaling limit",
         ));
     }
@@ -119,7 +119,7 @@ mod tests {
         let error = read_frame(&mut right)
             .await
             .expect_err("over the limit is refused on read");
-        assert_eq!(error.code(), ReasonCode::InvalidMessage);
+        assert_eq!(error.code(), ReasonCode::SecurityViolation);
     }
 
     #[tokio::test]

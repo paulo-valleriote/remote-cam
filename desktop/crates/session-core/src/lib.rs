@@ -6,7 +6,9 @@ use std::sync::{Mutex, PoisonError};
 use std::time::Instant;
 
 use remotecam_protocol::ReasonCode;
-use remotecam_protocol::signaling::{CloseCode, Limits, SignalingMessage, parse_signaling};
+use remotecam_protocol::signaling::{
+    CloseCode, Limits, MAX_SIGNALING_MESSAGE_BYTES, SignalingMessage, parse_signaling,
+};
 use zeroize::Zeroize;
 
 pub mod testing;
@@ -266,6 +268,7 @@ pub enum PairingError {
     TokenInvalid,
     TokenAlreadyUsed,
     Superseded,
+    SecurityViolation,
 }
 
 impl PairingError {
@@ -276,7 +279,40 @@ impl PairingError {
             Self::TokenInvalid => ReasonCode::TokenInvalid,
             Self::TokenAlreadyUsed => ReasonCode::TokenAlreadyUsed,
             Self::Superseded => ReasonCode::Superseded,
+            Self::SecurityViolation => ReasonCode::SecurityViolation,
         }
+    }
+}
+
+/// A refused inbound signaling frame: exactly one closed reason code and the
+/// effects the adapter must perform because of it.
+#[derive(Debug, PartialEq, Eq)]
+pub struct SignalingRefusal {
+    code: ReasonCode,
+    effects: Vec<Effect>,
+}
+
+impl SignalingRefusal {
+    fn keeping_session(code: ReasonCode) -> Self {
+        Self {
+            code,
+            effects: Vec::new(),
+        }
+    }
+
+    fn ending_session(code: ReasonCode, reason: CloseCode) -> Self {
+        Self {
+            code,
+            effects: vec![Effect::SendClose { reason }, Effect::End],
+        }
+    }
+
+    pub const fn code(&self) -> ReasonCode {
+        self.code
+    }
+
+    pub fn effects(&self) -> &[Effect] {
+        &self.effects
     }
 }
 
@@ -440,6 +476,11 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
 
     /// Authenticates the required first signaling frame from a connected peer.
     pub fn authenticate_first_frame(&mut self, frame: &[u8]) -> Result<Vec<Effect>, PairingError> {
+        if frame.len() > MAX_SIGNALING_MESSAGE_BYTES {
+            self.refuse_pairing();
+            return Err(PairingError::SecurityViolation);
+        }
+
         let presented = match parse_signaling(frame) {
             Ok(SignalingMessage::Pair {
                 mut token, limits, ..
@@ -492,6 +533,49 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         };
 
         Ok(self.activate_pairing(pending_qr, limits))
+    }
+
+    /// Admits one inbound signaling frame, in the validation order of ADR-0015.
+    pub fn admit_signaling_frame(
+        &mut self,
+        frame: &[u8],
+    ) -> Result<SignalingMessage, SignalingRefusal> {
+        let established = matches!(
+            self.state,
+            SessionState::Negotiating | SessionState::Connected
+        );
+        if frame.len() > MAX_SIGNALING_MESSAGE_BYTES {
+            if !established {
+                return Err(SignalingRefusal::keeping_session(
+                    ReasonCode::SecurityViolation,
+                ));
+            }
+            self.pending_qr = None;
+            self.state = SessionState::Ended;
+            self.last_transition_at = self.clock.now();
+            return Err(SignalingRefusal::ending_session(
+                ReasonCode::SecurityViolation,
+                CloseCode::SecurityViolation,
+            ));
+        }
+        if !established {
+            return Err(SignalingRefusal::keeping_session(
+                ReasonCode::ProtocolViolation,
+            ));
+        }
+        let message = parse_signaling(frame)
+            .map_err(|error| SignalingRefusal::keeping_session(error.code))?;
+        match message {
+            SignalingMessage::Pair { .. } => Err(SignalingRefusal::keeping_session(
+                ReasonCode::ProtocolViolation,
+            )),
+            SignalingMessage::Paired { .. }
+            | SignalingMessage::Answer { .. }
+            | SignalingMessage::Error { .. } => Err(SignalingRefusal::keeping_session(
+                ReasonCode::InvalidMessage,
+            )),
+            accepted => Ok(accepted),
+        }
     }
 
     fn current_identity(&self) -> Option<SessionIdentity> {

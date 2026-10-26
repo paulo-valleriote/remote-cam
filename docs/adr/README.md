@@ -20,6 +20,7 @@ decision was made and why.
 | [0012](0012-rec-10-acceptance-scenarios-and-report-v4.md) | REC-10 acceptance scenarios and harness report version 4 |
 | [0013](0013-superseded-as-retired-state.md) | `SUPERSEDED` is the predecessor's retired state, not a resting state |
 | [0014](0014-length-prefixed-signaling-frames.md) | Signaling frames on the pairing channel are length-prefixed |
+| [0015](0015-signaling-refusal-order-and-codes.md) | Signaling refusals follow one validation order and carry one code |
 
 Add a new ADR by scanning this directory for the highest number and
 incrementing it. To revisit a decision, write a new ADR that supersedes the old
