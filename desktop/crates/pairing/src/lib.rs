@@ -10,5 +10,5 @@ pub use certificate::{
 };
 pub use client::{ClientChannel, PinnedClient};
 pub use error::{PairingError, classify_io_error, classify_rustls_error};
-pub use listener::{ALPN_PROTOCOL, ListenerError, PairingListener, ServerChannel};
+pub use listener::{ALPN_PROTOCOL, ListenerError, PairingListener, ServerChannel, reject_socket};
 pub use material::{DESKTOP_CAPABILITIES, MaterialError, PairingMaterial, PairingMaterialRequest};
