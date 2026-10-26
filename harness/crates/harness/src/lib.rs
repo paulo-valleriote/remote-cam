@@ -1211,7 +1211,7 @@ where
     };
     let paired_frame = SignalingMessage::Paired {
         session_id: *session_id.as_bytes(),
-        epoch,
+        epoch: u64::from(epoch),
         dtls_fingerprint,
         accepted_limits,
     }
@@ -1223,14 +1223,14 @@ where
     match parse_signaling(&offer_frame) {
         Ok(SignalingMessage::Offer {
             epoch: offer_epoch, ..
-        }) if core.epoch() == Some(offer_epoch) => {}
+        }) if core.epoch().map(u64::from) == Some(offer_epoch) => {}
         Ok(_) => return Err("invalid_message"),
         Err(error) => return Err(error.code.as_str()),
     }
 
     let answer_sdp = Sdp::new(ANSWER_SDP).map_err(|_| "internal_error")?;
     let answer_frame = SignalingMessage::Answer {
-        epoch: core.epoch().ok_or("invalid_transition")?,
+        epoch: u64::from(core.epoch().ok_or("invalid_transition")?),
         sdp: answer_sdp,
     }
     .encode()

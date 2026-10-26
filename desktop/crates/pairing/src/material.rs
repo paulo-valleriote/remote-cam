@@ -16,16 +16,12 @@ pub const DESKTOP_CAPABILITIES: u16 = 0x003f;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MaterialError {
-    InvalidEpoch,
     Qr(QrEncodeError),
 }
 
 impl fmt::Display for MaterialError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidEpoch => {
-                formatter.write_str("session epoch exceeds the QR payload version 1 range")
-            }
             Self::Qr(error) => write!(formatter, "QR payload rejected: {error:?}"),
         }
     }
@@ -35,7 +31,6 @@ impl std::error::Error for MaterialError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Qr(error) => Some(error),
-            Self::InvalidEpoch => None,
         }
     }
 }
@@ -107,12 +102,10 @@ impl PairingMaterial {
             endpoints,
         } = request;
         let session_id = session_material.session_id();
-        let epoch =
-            u32::try_from(session_material.epoch()).map_err(|_| MaterialError::InvalidEpoch)?;
 
         let mut payload = QrPayload {
             session_id: *session_id.as_bytes(),
-            epoch,
+            epoch: session_material.epoch(),
             expires_at: expires_at_unix,
             pairing_token: *session_material.token().as_bytes(),
             tls_fingerprint,
@@ -123,7 +116,7 @@ impl PairingMaterial {
 
         Ok(Self {
             session_id,
-            epoch,
+            epoch: session_material.epoch(),
             expires_at_unix,
             endpoints,
             tls_fingerprint,

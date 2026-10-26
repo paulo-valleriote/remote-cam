@@ -116,11 +116,20 @@ impl PairingListener {
     }
 
     pub async fn accept(&self) -> Result<ServerChannel, PairingError> {
-        let socket = self.accept_socket().await?;
-        self.handshake(socket).await
+        self.accept_admitted(|| None).await
     }
 
-    /// Accepts the next TCP peer without starting TLS, so it can be refused before the handshake.
+    pub async fn accept_admitted(
+        &self,
+        refusal: impl FnOnce() -> Option<ReasonCode>,
+    ) -> Result<ServerChannel, PairingError> {
+        let socket = self.accept_socket().await?;
+        match refusal() {
+            Some(reason) => Err(reject_socket(socket, reason)),
+            None => self.handshake(socket).await,
+        }
+    }
+
     pub async fn accept_socket(&self) -> Result<TcpStream, PairingError> {
         let (stream, _peer) = self.listener.accept().await.map_err(|error| {
             PairingError::new(ReasonCode::DesktopUnreachable, error.to_string())
@@ -129,7 +138,6 @@ impl PairingListener {
         Ok(stream)
     }
 
-    /// Runs the TLS 1.3 handshake with the dedicated ALPN protocol on an accepted socket.
     pub async fn handshake(&self, socket: TcpStream) -> Result<ServerChannel, PairingError> {
         let stream = self
             .acceptor
@@ -146,7 +154,6 @@ impl PairingListener {
     }
 }
 
-/// Carries out a `RejectPeer` effect before the handshake: drops the socket and reports `reason`.
 pub fn reject_socket(socket: TcpStream, reason: ReasonCode) -> PairingError {
     drop(socket);
     PairingError::new(reason, "peer refused before the handshake")
@@ -179,9 +186,7 @@ impl ServerChannel {
         self.inner.get_ref().0.peer_addr()
     }
 
-    /// Carries out a `RejectPeer` effect after the handshake: closes the channel and reports `reason`.
     pub async fn reject(mut self, reason: ReasonCode) -> PairingError {
-        // The peer is leaving either way, so a failed close_notify changes nothing.
         let _ = self.shutdown().await;
         PairingError::new(reason, "peer refused after the handshake")
     }
