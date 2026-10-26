@@ -247,7 +247,7 @@
         }
       },
       "verdict": "pass",
-      "reason_code": "token_already_used"
+      "reason_code": "superseded"
     },
     {
       "scenario": "replay-refused",

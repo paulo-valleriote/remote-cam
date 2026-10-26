@@ -123,7 +123,7 @@ impl ScenarioKind {
                 name: "single-use-refused",
                 seed_salt: 0x0003,
                 expected_outcome: Outcome::Rejected,
-                expected_reason_code: Some("token_already_used"),
+                expected_reason_code: Some("superseded"),
             },
             Self::ReplayRefused => ScenarioDefinition {
                 name: "replay-refused",

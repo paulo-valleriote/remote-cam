@@ -79,6 +79,6 @@ async fn qr_material_authenticates_the_session_core_pairing() {
     );
     assert_eq!(
         core.authenticate_first_frame(&frame),
-        Err(PairingError::TokenAlreadyUsed)
+        Err(PairingError::Superseded)
     );
 }

@@ -213,7 +213,7 @@ fn every_rec_10_acceptance_scenario_reports_its_refusal_contract() {
         (
             "single-use-refused",
             Outcome::Rejected,
-            Some("token_already_used"),
+            Some("superseded"),
             &["pair"],
             &[1],
         ),

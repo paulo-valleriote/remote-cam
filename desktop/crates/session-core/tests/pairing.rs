@@ -141,7 +141,7 @@ fn a_valid_pair_returns_the_desktop_identity_and_consumes_its_token() {
     assert_eq!(core.state(), SessionState::Negotiating);
     assert_eq!(
         core.authenticate_first_frame(&frame),
-        Err(PairingError::TokenAlreadyUsed)
+        Err(PairingError::Superseded)
     );
 }
 
