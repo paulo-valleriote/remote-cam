@@ -97,9 +97,6 @@ fn checked_sdp(text: &str, role: SdpRole) -> Result<String, InvalidValue> {
     Ok(text.to_owned())
 }
 
-/// The SDP body of an `offer`. The contract caps it at 8192 characters and
-/// admits only audio and video sections that the mobile sends and the desktop
-/// receives.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct OfferSdp(String);
@@ -110,8 +107,6 @@ impl OfferSdp {
     }
 }
 
-/// The SDP body of an `answer`. The desktop never sends, so every section is
-/// `recvonly` or `inactive`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct AnswerSdp(String);

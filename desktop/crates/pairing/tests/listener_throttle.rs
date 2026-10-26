@@ -185,7 +185,7 @@ async fn ten_failed_handshakes_are_recorded_with_their_code_and_one_listener_clo
         .collect();
     assert_eq!(closed.len(), 1);
     assert!(closed[0].is_security_event());
-    assert_eq!(closed[0].origin, None);
+    assert_eq!(closed[0].origin, Some(FIRST));
     let failures: Vec<_> = entries
         .iter()
         .filter(|entry| entry.reason != ReasonCode::ListenerClosed)

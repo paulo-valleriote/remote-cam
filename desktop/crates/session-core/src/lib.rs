@@ -284,8 +284,6 @@ impl PairingError {
     }
 }
 
-/// A refused inbound signaling frame: exactly one closed reason code and the
-/// effects the adapter must perform because of it.
 #[derive(Debug, PartialEq, Eq)]
 pub struct SignalingRefusal {
     code: ReasonCode,
@@ -535,7 +533,6 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         Ok(self.activate_pairing(pending_qr, limits))
     }
 
-    /// Admits one inbound signaling frame, in the validation order of ADR-0015.
     pub fn admit_signaling_frame(
         &mut self,
         frame: &[u8],
