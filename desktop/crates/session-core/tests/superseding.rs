@@ -7,7 +7,7 @@ use remotecam_protocol::signaling::{CloseCode, Limits};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
 use remotecam_session_core::{
     Effect, MediaFrame, PAIRING_WINDOW_MILLIS, PairingError, PairingMaterial, SessionCore,
-    SessionEvent, SessionId, SessionState, Timestamp, TransitionErrorCode,
+    SessionEvent, SessionId, SessionState, Timestamp,
 };
 
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];

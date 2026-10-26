@@ -304,12 +304,15 @@ mod over_tls {
         ActiveSession, EphemeralCertificate, PairingListener, PinnedClient, ServerChannel,
         read_frame, write_frame,
     };
+    use remotecam_protocol::ReasonCode;
     use remotecam_protocol::signaling::{Limits, SignalingMessage};
     use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
     use remotecam_session_core::{
         Effect, MediaFrame, PairingError, PairingMaterial, SessionCore, SessionEvent, SessionState,
         Timestamp,
     };
+    use tokio::io::AsyncReadExt;
+    use tokio::net::TcpStream;
     use tokio::task::JoinHandle;
 
     use super::{DESKTOP_FINGERPRINT, close_text};
@@ -497,5 +500,47 @@ mod over_tls {
         assert_eq!(replaced.last(), Some(&close_text()));
         drop(desktop);
         assert_eq!(winner.await.expect("winner phone"), vec![expected]);
+    }
+    #[tokio::test]
+    async fn a_peer_that_connects_after_the_race_is_decided_is_closed_without_a_frame() {
+        let mut desktop = desktop().await;
+        let connected = desktop.connected_peer().await;
+        let second = desktop.present_pairing();
+        let winner = desktop.phone(&second);
+        let (channel, frame) = desktop.accept().await;
+        desktop.pair(channel, &frame).await;
+        let address = desktop.listener.local_addr();
+        let late = tokio::spawn(async move {
+            let mut socket = TcpStream::connect(address).await.expect("tcp connect");
+            let mut received = Vec::new();
+            socket
+                .read_to_end(&mut received)
+                .await
+                .expect("the refused peer sees a close");
+            received
+        });
+
+        let core = &mut desktop.core;
+        let refused = desktop
+            .listener
+            .accept_admitted(|| {
+                let effects = core
+                    .handle(SessionEvent::PeerConnected)
+                    .expect("a late peer is answered, not rejected as a transition");
+                match effects.as_slice() {
+                    [Effect::RejectPeer { reason }] => Some(*reason),
+                    other => panic!("unexpected effects {other:?}"),
+                }
+            })
+            .await;
+
+        let error = refused.expect_err("the late peer is refused");
+        assert_eq!(error.code(), ReasonCode::Superseded);
+        assert!(late.await.expect("late phone").is_empty());
+        assert_eq!(desktop.core.state(), SessionState::Negotiating);
+        assert!(desktop.session.is_occupied());
+        let _ = connected.await.expect("first phone");
+        drop(desktop);
+        let _ = winner.await.expect("winner phone");
     }
 }
