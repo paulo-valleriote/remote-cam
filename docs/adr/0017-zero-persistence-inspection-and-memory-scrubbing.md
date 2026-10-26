@@ -47,7 +47,7 @@ declares what each inspection swept (D-33).
 **Scrubbing.** New crate `remotecam-scrub` (the only crate with `unsafe`):
 
 - `ZeroizingAllocator` wipes every block before it is freed and always moves on
-  `realloc`. The desktop executable installs it as the global allocator.
+  `realloc`. The residue probe installs it as its global allocator; the desktop executable does not exist yet and must do the same when it lands, so the Linux evidence proves the probe, not a shipped app.
 - `scrub_stack()` overwrites 512 KiB of dead stack; call it on the session thread
   after the session is dropped.
 - `PairingMaterial` wipes its fingerprint and QR on drop.

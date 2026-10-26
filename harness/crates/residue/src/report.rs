@@ -91,10 +91,16 @@ impl Inspection {
     }
 }
 
+/// Scope names are shared by the builders in `inspect` and the verdict below.
+pub const PROCESS_MEMORY: &str = "process_memory";
+pub const STATE_DIRECTORY: &str = "state_directory";
+pub const CREDENTIAL_STORES: &str = "credential_stores";
+pub const TLS_TICKET_STATE: &str = "tls_ticket_state";
+
 fn live_control_verdict(scopes: &[ScopeResult]) -> Verdict {
     let seen = scopes
         .iter()
-        .find(|scope| scope.scope == "process_memory")
+        .find(|scope| scope.scope == PROCESS_MEMORY)
         .map(|scope| &scope.findings);
     let sensitive = seen.is_some_and(|seen| LIVE_REQUIRED.iter().all(|label| seen.contains(label)));
     if sensitive {
