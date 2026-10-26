@@ -6,7 +6,7 @@ use std::sync::{Mutex, PoisonError};
 use std::time::Instant;
 
 use remotecam_protocol::ReasonCode;
-use remotecam_protocol::signaling::{Limits, SignalingMessage, parse_signaling};
+use remotecam_protocol::signaling::{CloseCode, Limits, SignalingMessage, parse_signaling};
 use zeroize::Zeroize;
 
 pub mod testing;
@@ -23,6 +23,8 @@ pub enum SessionState {
     Negotiating,
     Connected,
     Ended,
+    /// The terminal position of a session replaced by a newer valid pairing.
+    Superseded,
 }
 
 impl SessionState {
@@ -35,6 +37,7 @@ impl SessionState {
             Self::Negotiating => "negotiating",
             Self::Connected => "connected",
             Self::Ended => "ended",
+            Self::Superseded => "superseded",
         }
     }
 }
@@ -209,6 +212,10 @@ pub enum Effect {
     RejectPeer {
         reason: ReasonCode,
     },
+    /// Send the replaced peer a `close` frame with the given code.
+    SendClose {
+        reason: CloseCode,
+    },
     /// Send the authenticated peer the `paired` frame.
     SendPaired {
         session_id: SessionId,
@@ -242,6 +249,10 @@ impl fmt::Debug for Effect {
                 .finish(),
             Self::RejectPeer { reason } => formatter
                 .debug_struct("RejectPeer")
+                .field("reason", reason)
+                .finish(),
+            Self::SendClose { reason } => formatter
+                .debug_struct("SendClose")
                 .field("reason", reason)
                 .finish(),
             Self::StartMedia => formatter.write_str("StartMedia"),
@@ -318,19 +329,32 @@ impl TransitionError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SessionIdentity {
+    session_id: SessionId,
+    epoch: u32,
+}
+
+#[derive(Debug)]
+struct PendingOffer {
+    identity: SessionIdentity,
+    token: PairingToken,
+    expires_at: Timestamp,
+    peer_connected: bool,
+}
+
 /// The product session core. It owns the state machine and performs no I/O.
 pub struct SessionCore<C: Clock, R: RandomSource> {
     state: SessionState,
     clock: C,
     random: R,
-    session_id: Option<SessionId>,
-    epoch: Option<u32>,
-    pairing_token: Option<PairingToken>,
+    active: Option<SessionIdentity>,
+    offer: Option<PendingOffer>,
+    retired: Option<SessionState>,
     consumed_tokens: Vec<PairingToken>,
     desktop_dtls_fingerprint: [u8; 32],
     last_transition_at: Timestamp,
     first_frame_deadline: Option<Timestamp>,
-    pairing_expires_at: Option<Timestamp>,
     epochs: EpochSource,
     protocol_violations: u64,
 }
@@ -350,14 +374,13 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             state: SessionState::Idle,
             clock,
             random,
-            session_id: None,
-            epoch: None,
-            pairing_token: None,
+            active: None,
+            offer: None,
+            retired: None,
             consumed_tokens: Vec::new(),
             desktop_dtls_fingerprint,
             last_transition_at: Timestamp::ZERO,
             first_frame_deadline: None,
-            pairing_expires_at: None,
             epochs,
             protocol_violations: 0,
         }
@@ -368,8 +391,8 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     }
 
     pub fn admit_frame_epoch(&mut self, frame_epoch: u32) -> bool {
-        match self.epoch {
-            Some(active) if frame_epoch < active => {
+        match self.current_identity() {
+            Some(current) if frame_epoch < current.epoch => {
                 self.protocol_violations += 1;
                 false
             }
@@ -382,14 +405,19 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         self.state
     }
 
-    /// The identity of the pairing in progress, if one has started.
+    /// The identity of the current session, or of the pending offer when no session is active.
     pub fn session_id(&self) -> Option<SessionId> {
-        self.session_id
+        self.current_identity().map(|identity| identity.session_id)
     }
 
-    /// The generation assigned to the current pairing, if one has started.
+    /// The generation of the current session, or of the pending offer when no session is active.
     pub fn epoch(&self) -> Option<u32> {
-        self.epoch
+        self.current_identity().map(|identity| identity.epoch)
+    }
+
+    /// The state a session reached when a newer valid pairing replaced it.
+    pub fn retired_state(&self) -> Option<SessionState> {
+        self.retired
     }
 
     /// The injected clock reading captured at the last accepted transition.
@@ -414,10 +442,9 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
 
     /// Authenticates the required first signaling frame from a connected peer.
     pub fn authenticate_first_frame(&mut self, frame: &[u8]) -> Result<Vec<Effect>, PairingError> {
-        if matches!(
-            self.state,
-            SessionState::Negotiating | SessionState::Connected
-        ) {
+        if self.state == SessionState::Negotiating
+            || (self.state == SessionState::Connected && self.offer.is_none())
+        {
             return Err(PairingError::TokenAlreadyUsed);
         }
 
@@ -439,13 +466,13 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             return Err(PairingError::TokenAlreadyUsed);
         }
 
-        if self.state != SessionState::Handshaking {
-            self.reject_pairing_frame();
+        if !self.awaits_pair_frame() {
+            self.refuse_pairing_frame();
             return Err(PairingError::ProtocolViolation);
         }
 
         let Some((token, limits)) = presented else {
-            self.reject_pairing_frame();
+            self.refuse_pairing_frame();
             return Err(PairingError::ProtocolViolation);
         };
 
@@ -456,28 +483,54 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             return Ok(effects);
         }
 
-        let Some(expected_token) = self.pairing_token.as_ref() else {
-            self.reject_pairing_frame();
-            return Err(PairingError::ProtocolViolation);
-        };
-
-        if !expected_token.matches(token.as_bytes()) {
+        if !self
+            .offer
+            .as_ref()
+            .is_some_and(|offer| offer.token.matches(token.as_bytes()))
+        {
             return Err(PairingError::TokenInvalid);
         }
 
-        if let Some(used) = self.pairing_token.take() {
-            self.consumed_tokens.push(used);
+        let offer = self.offer.take().expect("a matching offer is pending");
+        Ok(self.take_over(offer, limits))
+    }
+
+    fn current_identity(&self) -> Option<SessionIdentity> {
+        self.active
+            .or_else(|| self.offer.as_ref().map(|offer| offer.identity))
+    }
+
+    fn awaits_pair_frame(&self) -> bool {
+        matches!(
+            self.state,
+            SessionState::Handshaking | SessionState::Connected
+        ) && self
+            .offer
+            .as_ref()
+            .is_some_and(|offer| offer.peer_connected)
+    }
+
+    fn take_over(&mut self, offer: PendingOffer, accepted_limits: Limits) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        self.retired = None;
+        if self.active.is_some() {
+            effects.push(Effect::SendClose {
+                reason: CloseCode::Superseded,
+            });
+            effects.push(Effect::End);
+            self.retired = Some(SessionState::Superseded);
         }
-        self.pairing_expires_at = None;
+        self.consumed_tokens.push(offer.token);
+        self.active = Some(offer.identity);
         self.state = SessionState::Negotiating;
         self.last_transition_at = self.clock.now();
-
-        Ok(vec![Effect::SendPaired {
-            session_id: self.session_id.expect("pairing has a session identity"),
-            epoch: self.epoch.expect("pairing has an epoch"),
+        effects.push(Effect::SendPaired {
+            session_id: offer.identity.session_id,
+            epoch: offer.identity.epoch,
             dtls_fingerprint: self.desktop_dtls_fingerprint,
-            accepted_limits: limits,
-        }])
+            accepted_limits,
+        });
+        effects
     }
 
     fn is_consumed(&self, token: &PairingToken) -> bool {
@@ -486,20 +539,31 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             .fold(false, |found, used| used.matches(token.as_bytes()) | found)
     }
 
-    fn reject_pairing_frame(&mut self) {
-        self.state = SessionState::Ended;
-        drop(self.pairing_token.take());
-        self.pairing_expires_at = None;
+    fn refuse_pairing_frame(&mut self) {
+        if self.state != SessionState::Connected {
+            self.state = SessionState::Ended;
+        }
+        self.offer = None;
         self.last_transition_at = self.clock.now();
     }
 
     fn pairing_window_closed(&self) -> bool {
-        self.pairing_expires_at
-            .is_some_and(|expires_at| self.clock.now() >= expires_at)
+        self.offer
+            .as_ref()
+            .is_some_and(|offer| self.clock.now() >= offer.expires_at)
+    }
+
+    fn mark_peer_connected(&mut self) {
+        if let Some(offer) = self.offer.as_mut() {
+            offer.peer_connected = true;
+        }
     }
 
     fn retire_expired_pairing(&mut self, reason: ReasonCode) -> (SessionState, Vec<Effect>) {
-        drop(self.pairing_token.take());
+        self.offer = None;
+        if self.active.is_some() {
+            return (SessionState::Connected, vec![Effect::RejectPeer { reason }]);
+        }
         match self.begin_pairing() {
             Some(material) => (
                 SessionState::PairingReady,
@@ -516,30 +580,32 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     }
 
     fn clear_pairing(&mut self) {
-        self.session_id = None;
-        self.epoch = None;
-        self.pairing_token = None;
-        self.pairing_expires_at = None;
+        self.offer = None;
+        self.active = None;
+        self.retired = None;
     }
 
     fn begin_pairing(&mut self) -> Option<PairingMaterial> {
         let epoch = self.epochs.issue()?;
-        let session_id = self.assign_session_id();
-        self.epoch = Some(epoch);
-        self.pairing_expires_at = Some(Timestamp::from_millis(
-            self.clock
-                .now()
-                .as_millis()
-                .saturating_add(PAIRING_WINDOW_MILLIS),
-        ));
+        let session_id = SessionId::generate(&mut self.random);
         let mut token_bytes = [0u8; 32];
         self.random.fill_bytes(&mut token_bytes);
-        self.pairing_token = Some(PairingToken::from_bytes(token_bytes));
         let material = PairingMaterial {
             session_id,
             epoch,
             token: PairingToken::from_bytes(token_bytes),
         };
+        self.offer = Some(PendingOffer {
+            identity: SessionIdentity { session_id, epoch },
+            token: PairingToken::from_bytes(token_bytes),
+            expires_at: Timestamp::from_millis(
+                self.clock
+                    .now()
+                    .as_millis()
+                    .saturating_add(PAIRING_WINDOW_MILLIS),
+            ),
+            peer_connected: false,
+        });
         token_bytes.zeroize();
         Some(material)
     }
@@ -553,11 +619,26 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
                     vec![Effect::PresentPairing(material)],
                 ))
             }
+            (SessionState::Connected, SessionEvent::StartPairing) => {
+                let material = self.begin_pairing()?;
+                Some((
+                    SessionState::Connected,
+                    vec![Effect::PresentPairing(material)],
+                ))
+            }
             (SessionState::PairingReady, SessionEvent::PeerConnected) => {
                 if self.pairing_window_closed() {
                     return Some(self.retire_expired_pairing(ReasonCode::QrExpired));
                 }
+                self.mark_peer_connected();
                 Some((SessionState::Handshaking, Vec::new()))
+            }
+            (SessionState::Connected, SessionEvent::PeerConnected) if self.offer.is_some() => {
+                if self.pairing_window_closed() {
+                    return Some(self.retire_expired_pairing(ReasonCode::QrExpired));
+                }
+                self.mark_peer_connected();
+                Some((SessionState::Connected, Vec::new()))
             }
             (SessionState::Negotiating, SessionEvent::NegotiationCompleted)
                 if self.first_frame_deadline.is_none() =>
@@ -588,16 +669,11 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
                 Some((SessionState::Idle, vec![Effect::End]))
             }
             (SessionState::Connected, SessionEvent::EndSession) => {
+                self.offer = None;
                 Some((SessionState::Ended, vec![Effect::End]))
             }
             _ => None,
         }
-    }
-
-    fn assign_session_id(&mut self) -> SessionId {
-        let session_id = SessionId::generate(&mut self.random);
-        self.session_id = Some(session_id);
-        session_id
     }
 }
 
@@ -628,6 +704,7 @@ mod tests {
             SessionState::Negotiating,
             SessionState::Connected,
             SessionState::Ended,
+            SessionState::Superseded,
         ]
         .into_iter()
         .map(SessionState::as_str)
@@ -642,6 +719,7 @@ mod tests {
                 "negotiating",
                 "connected",
                 "ended",
+                "superseded",
             ]
         );
     }
