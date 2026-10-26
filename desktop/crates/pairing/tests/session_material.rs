@@ -65,12 +65,12 @@ async fn qr_material_authenticates_the_session_core_pairing() {
 
     assert_eq!(
         effect,
-        Effect::SendPaired {
+        vec![Effect::SendPaired {
             session_id: session_material.session_id(),
             epoch: session_material.epoch(),
             dtls_fingerprint: DESKTOP_FINGERPRINT,
             accepted_limits: Limits::new(),
-        }
+        }]
     );
     assert_eq!(
         core.authenticate_first_frame(&frame),

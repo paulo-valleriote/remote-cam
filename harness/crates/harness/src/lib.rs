@@ -1192,14 +1192,22 @@ where
         core.last_transition_at(),
         None,
     );
-    let Effect::SendPaired {
-        session_id,
-        epoch,
-        dtls_fingerprint,
-        accepted_limits,
-    } = paired_effect
-    else {
-        return Err("internal_error");
+    let (session_id, epoch, dtls_fingerprint, accepted_limits) = match paired_effect.as_slice() {
+        [
+            Effect::SendPaired {
+                session_id,
+                epoch,
+                dtls_fingerprint,
+                accepted_limits,
+            },
+        ] => (
+            *session_id,
+            *epoch,
+            *dtls_fingerprint,
+            accepted_limits.clone(),
+        ),
+        [Effect::RejectPeer { reason }, ..] => return Err(reason.as_str()),
+        _ => return Err("internal_error"),
     };
     let paired_frame = SignalingMessage::Paired {
         session_id: *session_id.as_bytes(),
