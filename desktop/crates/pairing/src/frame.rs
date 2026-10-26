@@ -40,10 +40,12 @@ pub async fn write_frame(
             "the frame exceeds the signaling limit",
         ));
     }
-    let failed =
-        |_| PairingError::new(ReasonCode::InternalError, "the frame could not be written");
+    let failed = |_| PairingError::new(ReasonCode::InternalError, "the frame could not be written");
     writer.write_all(frame).await.map_err(failed)?;
-    writer.write_all(&[FRAME_TERMINATOR]).await.map_err(failed)?;
+    writer
+        .write_all(&[FRAME_TERMINATOR])
+        .await
+        .map_err(failed)?;
     writer.flush().await.map_err(failed)
 }
 
