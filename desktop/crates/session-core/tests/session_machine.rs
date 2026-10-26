@@ -65,6 +65,7 @@ fn core_in(
         SessionState::Negotiating => &HAPPY_PATH[..2],
         SessionState::Connected => &HAPPY_PATH[..4],
         SessionState::Ended => &HAPPY_PATH[..5],
+        SessionState::Superseded => panic!("a core never rests in the retired state"),
     };
 
     let mut frame = None;
@@ -345,7 +346,7 @@ fn an_out_of_order_event_is_rejected_with_a_closed_code_and_keeps_the_state() {
             SessionEvent::NegotiationCompleted,
         ),
         (SessionState::Negotiating, SessionEvent::EndSession),
-        (SessionState::Connected, SessionEvent::StartPairing),
+        (SessionState::Connected, SessionEvent::PeerConnected),
         (SessionState::Ended, SessionEvent::StartPairing),
         (SessionState::Ended, SessionEvent::EndSession),
     ];
