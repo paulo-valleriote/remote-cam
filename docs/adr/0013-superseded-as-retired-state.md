@@ -85,3 +85,7 @@ still `NEGOTIATING`. Under REC-37 that replay is the race's losing attempt.
   `NEGOTIATING`. That peer is now refused at the socket, so its
   `message_sequence` is empty instead of `["pair"]`. The expected reason stays
   `superseded`. Report version stays 4; only the golden fixture changes.
+- `close { superseded }` to the predecessor is best effort within `SUPERSEDE_BUDGET`
+  (250 ms). A predecessor that is gone or does not read never delays the
+  successor past that budget; the predecessor is then dropped and the successor
+  is paired.
