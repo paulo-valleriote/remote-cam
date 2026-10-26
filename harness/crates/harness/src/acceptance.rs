@@ -110,17 +110,13 @@ async fn stale_epoch_discarded(world: &mut World) -> Result<HarnessReport, &'sta
     world.expire_first_frame()?;
     world.start_pairing()?;
     let active_qr = world.scan_pending()?;
-    let active = world.attempt(&active_qr, None).await;
+    let active = world.attempt_with(&active_qr, None, Some(1)).await;
 
-    let stale_admitted = world.core.admit_frame_epoch(1);
     let violations = world.core.protocol_violations();
-    let active_admitted = world.core.admit_frame_epoch(2);
 
     let invariant = first.desktop.is_ok()
         && active.desktop.is_ok()
         && active.messages == FULL_SEQUENCE
-        && !stale_admitted
-        && active_admitted
         && violations == 1
         && world.core.state() == SessionState::Negotiating
         && world.issued_epochs == [1, 2];
@@ -279,10 +275,20 @@ impl World {
     }
 
     async fn attempt(&mut self, qr: &MobileQr, pause_before_pair: Option<u64>) -> Attempt {
+        self.attempt_with(qr, pause_before_pair, None).await
+    }
+
+    async fn attempt_with(
+        &mut self,
+        qr: &MobileQr,
+        pause_before_pair: Option<u64>,
+        stale_offer_epoch: Option<u64>,
+    ) -> Attempt {
         let peer = tokio::spawn(mobile_exchange(
             qr.clone(),
             self.clock.clone(),
             pause_before_pair,
+            stale_offer_epoch,
         ));
         let desktop = run_desktop(
             &mut self.core,
@@ -291,7 +297,11 @@ impl World {
             &mut self.regenerated,
         )
         .await;
-        let messages = peer.await.unwrap_or_default();
+        let messages = match peer.await {
+            Ok(messages) => messages,
+            Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
+            Err(_) => Vec::new(),
+        };
         self.absorb_regenerated();
         Attempt { desktop, messages }
     }
@@ -349,6 +359,7 @@ async fn mobile_exchange(
     qr: MobileQr,
     clock: ManualClock,
     pause_before_pair: Option<u64>,
+    stale_offer_epoch: Option<u64>,
 ) -> Vec<&'static str> {
     let mut messages = Vec::new();
     let Ok(client) = PinnedClient::new(qr.fingerprint) else {
@@ -380,6 +391,25 @@ async fn mobile_exchange(
         return messages;
     }
     messages.push("paired");
+
+    if let Some(epoch) = stale_offer_epoch {
+        let Ok(stale_sdp) = Sdp::new(OFFER_SDP) else {
+            return messages;
+        };
+        let Ok(stale_frame) = (SignalingMessage::Offer {
+            epoch,
+            sdp: stale_sdp,
+        })
+        .encode() else {
+            return messages;
+        };
+        if write_signaling_frame(&mut mobile, &stale_frame)
+            .await
+            .is_err()
+        {
+            return messages;
+        }
+    }
 
     let Ok(offer_sdp) = Sdp::new(OFFER_SDP) else {
         return messages;

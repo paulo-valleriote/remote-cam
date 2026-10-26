@@ -109,17 +109,17 @@ impl Clock for MonotonicClock {
 }
 
 #[derive(Debug, Clone)]
-pub struct EpochSource(Arc<Mutex<u32>>);
+pub struct EpochSource(Arc<Mutex<Option<u32>>>);
 
 impl EpochSource {
     pub fn new() -> Self {
-        Self(Arc::new(Mutex::new(1)))
+        Self(Arc::new(Mutex::new(Some(1))))
     }
 
     fn issue(&self) -> Option<u32> {
         let mut next = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        let epoch = *next;
-        *next = next.checked_add(1)?;
+        let epoch = (*next)?;
+        *next = epoch.checked_add(1);
         Some(epoch)
     }
 }
@@ -422,8 +422,12 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         }
 
         let presented = match parse_signaling(frame) {
-            Ok(SignalingMessage::Pair { token, limits, .. }) => {
-                Some((PairingToken::from_bytes(token), limits))
+            Ok(SignalingMessage::Pair {
+                mut token, limits, ..
+            }) => {
+                let presented = PairingToken::from_bytes(token);
+                token.zeroize();
+                Some((presented, limits))
             }
             _ => None,
         };

@@ -1354,14 +1354,7 @@ where
     .map_err(|_| "internal_error")?;
     write_signaling_frame(&mut desktop, &paired_frame).await?;
 
-    let offer_frame = read_signaling_frame(&mut desktop).await?;
-    match parse_signaling(&offer_frame) {
-        Ok(SignalingMessage::Offer {
-            epoch: offer_epoch, ..
-        }) if core.epoch().map(u64::from) == Some(offer_epoch) => {}
-        Ok(_) => return Err("invalid_message"),
-        Err(error) => return Err(error.code.as_str()),
-    }
+    read_offer_frame(&mut desktop, core).await?;
 
     let answer_sdp = Sdp::new(ANSWER_SDP).map_err(|_| "internal_error")?;
     let answer_frame = SignalingMessage::Answer {
@@ -1378,6 +1371,34 @@ where
         return Err("internal_error");
     }
     Ok(())
+}
+
+async fn read_offer_frame<C, R>(
+    reader: &mut (impl AsyncRead + Unpin),
+    core: &mut SessionCore<C, R>,
+) -> Result<(), &'static str>
+where
+    C: Clock,
+    R: RandomSource,
+{
+    loop {
+        let frame = read_signaling_frame(reader).await?;
+        let offer_epoch = match parse_signaling(&frame) {
+            Ok(SignalingMessage::Offer { epoch, .. }) => epoch,
+            Ok(_) => return Err("invalid_message"),
+            Err(error) => return Err(error.code.as_str()),
+        };
+        let Ok(frame_epoch) = u32::try_from(offer_epoch) else {
+            return Err("invalid_message");
+        };
+        if !core.admit_frame_epoch(frame_epoch) {
+            continue;
+        }
+        if core.epoch() == Some(frame_epoch) {
+            return Ok(());
+        }
+        return Err("invalid_message");
+    }
 }
 
 async fn read_signaling_frame(

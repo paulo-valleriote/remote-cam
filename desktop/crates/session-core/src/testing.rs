@@ -76,5 +76,5 @@ impl RandomSource for SeededRandomSource {
 
 /// Creates an epoch sequence whose next issued epoch is `first`.
 pub fn epoch_source_starting_at(first: u32) -> EpochSource {
-    EpochSource(Arc::new(Mutex::new(first)))
+    EpochSource(Arc::new(Mutex::new(Some(first))))
 }
