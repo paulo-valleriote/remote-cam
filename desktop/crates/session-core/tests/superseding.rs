@@ -150,6 +150,45 @@ fn an_unused_qr_that_expires_keeps_the_predecessor_connected() {
 }
 
 #[test]
+fn a_successor_qr_that_expires_after_its_peer_connected_keeps_the_predecessor_connected() {
+    let (mut core, clock, first) = connected_core();
+    let successor = present_pairing(&mut core);
+    core.handle(SessionEvent::PeerConnected)
+        .expect("the successor peer can connect");
+    clock.advance(PAIRING_WINDOW_MILLIS);
+
+    let effects = core
+        .authenticate_first_frame(&successor.pair_frame())
+        .expect("an expired successor token is refused as an effect");
+
+    assert_eq!(
+        effects,
+        vec![Effect::RejectPeer {
+            reason: ReasonCode::TokenExpired,
+        }]
+    );
+    assert_eq!(core.state(), SessionState::Connected);
+    assert_eq!(core.session_id(), Some(first.session_id));
+    assert_eq!(core.retired_state(), None);
+    assert_successor_connect_refused(&mut core);
+}
+
+#[test]
+fn a_pending_successor_qr_does_not_change_the_identity_of_the_connected_predecessor() {
+    let (mut core, _clock, first) = connected_core();
+    let successor = present_pairing(&mut core);
+
+    assert!(successor.epoch > first.epoch);
+    assert_ne!(successor.session_id, first.session_id);
+    assert_eq!(core.session_id(), Some(first.session_id));
+    assert_eq!(core.epoch(), Some(first.epoch));
+    assert!(core.admit_frame_epoch(first.epoch));
+    assert_eq!(core.protocol_violations(), 0);
+    assert!(!core.admit_frame_epoch(first.epoch - 1));
+    assert_eq!(core.protocol_violations(), 1);
+}
+
+#[test]
 fn a_wrong_token_for_the_successor_leaves_the_predecessor_connected() {
     let (mut core, _clock, _first) = connected_core();
     let successor = present_pairing(&mut core);
