@@ -193,6 +193,11 @@ injected logical clock and a fixed expected result (see ADR-0012):
 - `regeneration-after-refusal`: after `qr_expired`, a fresh QR is accepted and
   completes the pairing handshake.
 
+With a session active (`NEGOTIATING`, or `CONNECTED` with no pending QR), a
+first frame that does not reuse a consumed token is refused with
+`protocol_violation` and leaves the session unchanged. The Session Core tests
+cover it; the Harness has no scenario for it.
+
 Pass `HARNESS_ARGS` to reproduce a run with chosen inputs:
 
 ```bash

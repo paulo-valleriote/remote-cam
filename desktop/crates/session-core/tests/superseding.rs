@@ -3,7 +3,7 @@ mod common;
 
 use common::{PEER_FINGERPRINT, pair_frame, pair_frame_from_peer};
 use remotecam_protocol::ReasonCode;
-use remotecam_protocol::signaling::{CloseCode, Limits};
+use remotecam_protocol::signaling::{CloseCode, Limits, SignalingMessage};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
 use remotecam_session_core::{
     Effect, MediaFrame, PAIRING_WINDOW_MILLIS, PairingError, PairingMaterial, SessionCore,
@@ -371,4 +371,54 @@ fn a_peer_connecting_while_the_successor_negotiates_is_refused_as_superseded() {
     );
     assert_eq!(core.state(), SessionState::Negotiating);
     assert_eq!(core.retired_state(), Some(SessionState::Superseded));
+}
+
+fn frames_that_reuse_no_consumed_token() -> Vec<Vec<u8>> {
+    let mut unknown = [0x99; 32];
+    unknown[31] ^= 1;
+    vec![
+        pair_frame(unknown),
+        SignalingMessage::Ping.encode().expect("ping is valid"),
+        b"not a signaling frame".to_vec(),
+    ]
+}
+
+#[test]
+fn a_first_frame_that_reuses_no_consumed_token_is_a_protocol_violation_while_negotiating() {
+    for frame in frames_that_reuse_no_consumed_token() {
+        let (mut core, _clock, _first) = connected_core();
+        let successor = present_pairing(&mut core);
+        core.handle(SessionEvent::PeerConnected)
+            .expect("the successor peer can connect");
+        core.authenticate_first_frame(&successor.pair_frame())
+            .expect("the successor authenticates");
+
+        let refusal = core
+            .authenticate_first_frame(&frame)
+            .expect_err("an out-of-sequence frame is refused");
+
+        assert_eq!(refusal, PairingError::ProtocolViolation);
+        assert_eq!(core.state(), SessionState::Negotiating);
+        assert_eq!(core.session_id(), Some(successor.session_id));
+        assert_eq!(core.epoch(), Some(successor.epoch));
+        assert_eq!(core.retired_state(), Some(SessionState::Superseded));
+    }
+}
+
+#[test]
+fn a_first_frame_that_reuses_no_consumed_token_is_a_protocol_violation_while_connected_without_a_pending_qr()
+ {
+    for frame in frames_that_reuse_no_consumed_token() {
+        let (mut core, _clock, first) = connected_core();
+
+        let refusal = core
+            .authenticate_first_frame(&frame)
+            .expect_err("a connected core with no pending qr refuses any first frame");
+
+        assert_eq!(refusal, PairingError::ProtocolViolation);
+        assert_eq!(core.state(), SessionState::Connected);
+        assert_eq!(core.session_id(), Some(first.session_id));
+        assert_eq!(core.epoch(), Some(first.epoch));
+        assert_eq!(core.retired_state(), None);
+    }
 }
