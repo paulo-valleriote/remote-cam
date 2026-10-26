@@ -12,7 +12,7 @@ test: ## Run the desktop, harness, Android and spike-tooling tests
 	$(CARGO) test --manifest-path spikes/f0-virtual-audio/Cargo.toml
 	$(GRADLE) -p mobile :protocol:testDebugUnitTest
 	cd spikes/tools && $(PYTHON_BIN) -m pytest tests ../f0-camera-injection ../f0-handshake ../f0-virtual-audio
-	bash protocol/vectors/run_conformance.sh
+	GRADLE="$(GRADLE)" bash protocol/vectors/run_conformance.sh
 
 coverage: ## Report coverage for the delivered product packages (≥90% required; spikes/ exempt per T117)
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || { echo "error: cargo-llvm-cov is required; install it with 'cargo install cargo-llvm-cov'." >&2; exit 1; }
