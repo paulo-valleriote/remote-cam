@@ -16,7 +16,7 @@
 ## Context and architecture
 
 - **Location:** top-level `harness/`, decided in ADR-0007. The F0 harnesses stay under `spikes/` and are disposable.
-- **Workspace:** `harness/Cargo.toml` (resolver 3, edition 2024, MSRV 1.92, version 0.1.0) with one member, `crates/harness`.
+- **Workspace:** `harness/Cargo.toml` (resolver 3, edition 2024, MSRV 1.92, version 0.1.0) with two members: `crates/harness` and `crates/residue`.
 - **Toolchain:** `harness/rust-toolchain.toml` — `1.99.1`, components `clippy` + `rustfmt`, profile `minimal`.
 - **Build and run:** `make harness` runs `cargo run --quiet --locked --package remotecam-harness` from inside `harness/`, so rustup honours the pinned toolchain; GNU `timeout` bounds execution externally. `make harness HARNESS_ARGS="--seed 42 --clock-start-millis 100"` overrides the deterministic defaults.
 - **Dependency direction:** the harness consumes `desktop/crates/pairing`, `desktop/crates/session-core` and `desktop/crates/protocol` by relative path. It never reaches into `desktop/crates/app` and never defines the contract, which belongs to `protocol/`.
@@ -55,7 +55,14 @@
 - Integration tests exercise the public harness API and the binary's exit code and output. Unit tests may cover private helpers only when that behavior cannot be exercised through a public surface.
 - The harness is not shipped, but REC-25 requires ≥90% line coverage for `remotecam-harness`; `make coverage` enforces it alongside the delivered-package thresholds.
 
-### 6. Before modifying
+### 6. Residue inspection (`crates/residue`)
+
+- `make residue` is the single command of the zero-persistence method (REC-15, ADR-0017) and writes `docs/evidence/f1/rec-15-zero-persistence-linux.json`. It spawns itself as a probe in a sandboxed `HOME`/`XDG_*`/`TMPDIR`, then sweeps memory, state and credential stores at `live-control`, `session-end`, `process-exit` and `restart`.
+- Both controls are part of the verdict: `live-control` must find the secrets and the canary leak must be detected. A green run without them is a broken method.
+- The method is the one C-02 requires on the reference devices; the Linux evidence does not close that device run.
+- The binary installs `remotecam_scrub::ZeroizingAllocator`; it is outside the REC-25 coverage gate (`remotecam-harness` only).
+
+### 7. Before modifying
 
 - Before changing the report shape: update the tests, the documented JSON line and any consumer in the same delivery.
 - Before adding a dependency: stop and write the ADR entry first.
