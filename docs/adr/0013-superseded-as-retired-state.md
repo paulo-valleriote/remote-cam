@@ -3,6 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-10-26
 - **Amends:** ADR-0012 (the `single-use-refused` expectation only)
+- **Amended by:** REC-38 (a peer that connects with no pending QR while a session is active is refused as `superseded` before the handshake)
 
 ## Context
 
@@ -35,8 +36,10 @@ still `NEGOTIATING`. Under REC-37 that replay is the race's losing attempt.
 - A consumed token presented with no active session (`IDLE`, `PAIRING_READY`,
   `HANDSHAKING`, `ENDED`) is still refused with `token_already_used`.
 - The out-of-order test case `(CONNECTED, StartPairing)` is replaced by
-  `(CONNECTED, PeerConnected)`. `StartPairing` is now valid in `CONNECTED`, so
-  the old case no longer tests an invalid transition.
+  `(ENDED, PeerConnected)`. `StartPairing` is now valid in `CONNECTED`, so
+  the old case no longer tests an invalid transition. (REC-38: it was first
+  replaced by `(CONNECTED, PeerConnected)`, which stopped being invalid when
+  a peer without a pending QR became a refusal; see below.)
 - Harness: `single-use-refused` expects `superseded`. `replay-refused` (the
   token replayed after the first session timed out) stays `token_already_used`.
   Report version stays 4; the golden fixture and `report.schema.json` change
@@ -69,3 +72,16 @@ still `NEGOTIATING`. Under REC-37 that replay is the race's losing attempt.
   core.
 - No wire change (ADR-0002). ADR-0005's decision is unchanged; it only gains an
   Amended by pointer to this ADR.
+
+## Amendment (REC-38)
+
+- `PeerConnected` in `NEGOTIATING`, or in `CONNECTED` with no pending QR, is
+  answered with `Effect::RejectPeer { reason: superseded }` and does not change
+  the state. The peer is the loser of the race for the active session. With a
+  pending QR in `CONNECTED`, `PeerConnected` stays valid.
+- The refusal happens before the handshake, so it follows ADR-0011: the socket
+  closes without a reason frame and `superseded` is recorded locally only.
+- Harness: `single-use-refused` replays the consumed token while a session is
+  `NEGOTIATING`. That peer is now refused at the socket, so its
+  `message_sequence` is empty instead of `["pair"]`. The expected reason stays
+  `superseded`. Report version stays 4; only the golden fixture changes.

@@ -204,9 +204,7 @@
       "scenario": "single-use-refused",
       "outcome": "rejected",
       "observed_state": "negotiating",
-      "message_sequence": [
-        "pair"
-      ],
+      "message_sequence": [],
       "state_trace": [
         {
           "from": "idle",

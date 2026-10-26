@@ -644,6 +644,16 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
                 };
                 Some((next, Vec::new()))
             }
+            (SessionState::Negotiating | SessionState::Connected, SessionEvent::PeerConnected)
+                if self.offer.is_none() =>
+            {
+                Some((
+                    self.state,
+                    vec![Effect::RejectPeer {
+                        reason: ReasonCode::Superseded,
+                    }],
+                ))
+            }
             (SessionState::Negotiating, SessionEvent::NegotiationCompleted)
                 if self.first_frame_deadline.is_none() =>
             {

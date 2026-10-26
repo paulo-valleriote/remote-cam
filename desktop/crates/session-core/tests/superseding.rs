@@ -74,13 +74,18 @@ fn connected_core() -> (Core, ManualClock, Offer) {
     (core, clock, first)
 }
 
-/// A successor QR that was discarded cannot accept a peer any more.
+/// With no pending QR left, a peer that connects lost the race for the active session.
 fn assert_successor_connect_refused(core: &mut Core) {
-    let refusal = core
+    let effects = core
         .handle(SessionEvent::PeerConnected)
-        .expect_err("the discarded successor qr accepts no peer");
+        .expect("a peer with no pending qr is answered, not rejected as a transition");
 
-    assert_eq!(refusal.code(), TransitionErrorCode::InvalidTransition);
+    assert_eq!(
+        effects,
+        vec![Effect::RejectPeer {
+            reason: ReasonCode::Superseded,
+        }]
+    );
     assert_eq!(core.state(), SessionState::Connected);
 }
 
@@ -344,4 +349,27 @@ fn the_close_effect_renders_its_reason_for_logs() {
     };
 
     assert_eq!(format!("{effect:?}"), "SendClose { reason: Superseded }");
+}
+
+#[test]
+fn a_peer_connecting_while_the_successor_negotiates_is_refused_as_superseded() {
+    let (mut core, _clock, _first) = connected_core();
+    let successor = present_pairing(&mut core);
+    core.handle(SessionEvent::PeerConnected)
+        .expect("the successor peer can connect");
+    core.authenticate_first_frame(&successor.pair_frame())
+        .expect("the successor's token authenticates");
+
+    let effects = core
+        .handle(SessionEvent::PeerConnected)
+        .expect("the losing peer is answered, not rejected as a transition");
+
+    assert_eq!(
+        effects,
+        vec![Effect::RejectPeer {
+            reason: ReasonCode::Superseded,
+        }]
+    );
+    assert_eq!(core.state(), SessionState::Negotiating);
+    assert_eq!(core.retired_state(), Some(SessionState::Superseded));
 }
