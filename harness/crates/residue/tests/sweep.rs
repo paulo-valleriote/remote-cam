@@ -142,3 +142,34 @@ fn store_sweep_of_a_clean_home_finds_nothing() {
     assert!(stores.iter().all(|store| store.findings.is_empty()));
     fs::remove_dir_all(home).expect("cleanup");
 }
+
+#[test]
+fn store_sweep_marks_an_unreadable_store_instead_of_calling_it_clean() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = scratch("home-locked");
+    let locked = home.join(".gnupg");
+    fs::create_dir_all(&locked).expect("dirs");
+    fs::write(locked.join("key"), SECRET).expect("file");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("chmod");
+
+    let stores = scanner().sweep_credential_stores(&home);
+
+    let gnupg = stores
+        .iter()
+        .find(|store| store.name == "gnupg")
+        .expect("gnupg");
+    assert!(gnupg.unreadable);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o700)).expect("chmod");
+    fs::remove_dir_all(home).expect("cleanup");
+}
+
+#[test]
+fn process_memory_sweep_counts_regions_it_could_not_read() {
+    let process = sleeper_holding(None);
+
+    let sweep = scanner()
+        .sweep_process_memory(process.0.id())
+        .expect("memory sweep");
+
+    assert_eq!(sweep.unreadable_regions, 0);
+}
