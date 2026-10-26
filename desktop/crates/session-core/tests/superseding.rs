@@ -15,13 +15,13 @@ const RIVAL_PEER_FINGERPRINT: [u8; 32] = [0x66; 32];
 
 type Core = SessionCore<ManualClock, SeededRandomSource>;
 
-struct Offer {
+struct PresentedQr {
     session_id: SessionId,
     epoch: u32,
     token: [u8; 32],
 }
 
-impl Offer {
+impl PresentedQr {
     fn of(material: &PairingMaterial) -> Self {
         Self {
             session_id: material.session_id(),
@@ -42,14 +42,14 @@ fn core_at(start_millis: u64) -> (Core, ManualClock) {
     (core, handle)
 }
 
-fn present_pairing(core: &mut Core) -> Offer {
+fn present_pairing(core: &mut Core) -> PresentedQr {
     let mut effects = core
         .handle(SessionEvent::StartPairing)
         .expect("starting pairing is valid");
     let Some(Effect::PresentPairing(material)) = effects.pop() else {
         panic!("starting pairing presents its material");
     };
-    Offer::of(&material)
+    PresentedQr::of(&material)
 }
 
 fn media_flowing(core: &mut Core) {
@@ -63,7 +63,7 @@ fn media_flowing(core: &mut Core) {
     assert_eq!(core.state(), SessionState::Connected);
 }
 
-fn connected_core() -> (Core, ManualClock, Offer) {
+fn connected_core() -> (Core, ManualClock, PresentedQr) {
     let (mut core, clock) = core_at(0);
     let first = present_pairing(&mut core);
     core.handle(SessionEvent::PeerConnected)

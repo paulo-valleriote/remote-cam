@@ -6,7 +6,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::task::{Context, Poll};
 
 use remotecam_protocol::ReasonCode;
-use remotecam_protocol::signaling::CloseCode;
 use rustls::server::ServerSessionMemoryCache;
 use rustls::{ProtocolVersion, ServerConfig};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
@@ -15,7 +14,7 @@ use tokio::time::timeout;
 use tokio_rustls::TlsAcceptor;
 use tokio_rustls::server::TlsStream;
 
-use crate::active::{SUPERSEDE_BUDGET, send_close};
+use crate::active::{SUPERSEDE_BUDGET, close_code_for, send_close};
 use crate::certificate::EphemeralCertificate;
 use crate::error::{PairingError, classify_io_error};
 use crate::material::{MaterialError, PairingMaterial, PairingMaterialRequest, UnixClock};
@@ -125,6 +124,13 @@ impl PairingListener {
         self.closed.load(Ordering::SeqCst)
     }
 
+    fn refuse_if_closed(&self, socket: TcpStream) -> Result<TcpStream, PairingError> {
+        if self.is_closed() {
+            return Err(reject_socket(socket, ReasonCode::ListenerClosed));
+        }
+        Ok(socket)
+    }
+
     pub fn attempts(&self) -> u32 {
         self.attempts.load(Ordering::SeqCst)
     }
@@ -149,16 +155,11 @@ impl PairingListener {
             PairingError::new(ReasonCode::DesktopUnreachable, error.to_string())
         })?;
         self.attempts.fetch_add(1, Ordering::SeqCst);
-        if self.is_closed() {
-            return Err(reject_socket(stream, ReasonCode::ListenerClosed));
-        }
-        Ok(stream)
+        self.refuse_if_closed(stream)
     }
 
     pub async fn handshake(&self, socket: TcpStream) -> Result<ServerChannel, PairingError> {
-        if self.is_closed() {
-            return Err(reject_socket(socket, ReasonCode::ListenerClosed));
-        }
+        let socket = self.refuse_if_closed(socket)?;
         let stream = self
             .acceptor
             .accept(socket)
@@ -207,12 +208,8 @@ impl ServerChannel {
     }
 
     pub async fn reject(mut self, reason: ReasonCode) -> PairingError {
-        if reason == ReasonCode::Superseded {
-            let _ = timeout(
-                SUPERSEDE_BUDGET,
-                send_close(&mut self, CloseCode::Superseded),
-            )
-            .await;
+        if let Some(code) = close_code_for(reason) {
+            let _ = timeout(SUPERSEDE_BUDGET, send_close(&mut self, code)).await;
         }
         let _ = self.shutdown().await;
         PairingError::new(reason, "peer refused after the handshake")

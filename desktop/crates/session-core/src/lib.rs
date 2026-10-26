@@ -350,7 +350,7 @@ pub struct SessionCore<C: Clock, R: RandomSource> {
     random: R,
     active: Option<SessionIdentity>,
     pending_qr: Option<PendingQr>,
-    retired: bool,
+    has_retired_predecessor: bool,
     consumed_tokens: Vec<PairingToken>,
     desktop_dtls_fingerprint: [u8; 32],
     last_transition_at: Timestamp,
@@ -376,7 +376,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             random,
             active: None,
             pending_qr: None,
-            retired: false,
+            has_retired_predecessor: false,
             consumed_tokens: Vec::new(),
             desktop_dtls_fingerprint,
             last_transition_at: Timestamp::ZERO,
@@ -414,7 +414,8 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     }
 
     pub fn retired_state(&self) -> Option<SessionState> {
-        self.retired.then_some(SessionState::Superseded)
+        self.has_retired_predecessor
+            .then_some(SessionState::Superseded)
     }
 
     /// The injected clock reading captured at the last accepted transition.
@@ -454,7 +455,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             .as_ref()
             .is_some_and(|(token, _)| self.is_consumed(token))
         {
-            return Err(self.reuse_refusal());
+            return Err(self.consumed_token_refusal());
         }
 
         if self.state == SessionState::Negotiating
@@ -513,8 +514,8 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
 
     fn activate_pairing(&mut self, pending_qr: PendingQr, accepted_limits: Limits) -> Vec<Effect> {
         let mut effects = Vec::new();
-        self.retired = self.active.is_some();
-        if self.retired {
+        self.has_retired_predecessor = self.active.is_some();
+        if self.has_retired_predecessor {
             effects.push(Effect::SendClose {
                 reason: CloseCode::Superseded,
             });
@@ -539,7 +540,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             .fold(false, |found, used| used.matches(token.as_bytes()) | found)
     }
 
-    fn reuse_refusal(&self) -> PairingError {
+    fn consumed_token_refusal(&self) -> PairingError {
         if matches!(
             self.state,
             SessionState::Negotiating | SessionState::Connected
@@ -593,7 +594,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
     fn clear_pairing(&mut self) {
         self.pending_qr = None;
         self.active = None;
-        self.retired = false;
+        self.has_retired_predecessor = false;
     }
 
     fn begin_pairing(&mut self) -> Option<PairingMaterial> {
