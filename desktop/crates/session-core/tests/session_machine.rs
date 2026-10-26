@@ -340,7 +340,7 @@ fn an_out_of_order_event_is_rejected_with_a_closed_code_and_keeps_the_state() {
             SessionEvent::NegotiationCompleted,
         ),
         (SessionState::Negotiating, SessionEvent::EndSession),
-        (SessionState::Connected, SessionEvent::PeerConnected),
+        (SessionState::Ended, SessionEvent::PeerConnected),
         (SessionState::Ended, SessionEvent::StartPairing),
         (SessionState::Ended, SessionEvent::EndSession),
     ];

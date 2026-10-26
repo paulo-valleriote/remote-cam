@@ -83,7 +83,7 @@ async fn single_use_refused(world: &mut World) -> Result<HarnessReport, &'static
 
     let invariant = first.desktop.is_ok()
         && first.messages == FULL_SEQUENCE
-        && second.messages == ["pair"]
+        && second.messages.is_empty()
         && world.issued_epochs == [1];
     Ok(world.conclude(second.desktop, second.messages, invariant))
 }
