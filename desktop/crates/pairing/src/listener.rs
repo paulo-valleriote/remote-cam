@@ -1,11 +1,13 @@
+use std::collections::VecDeque;
 use std::fmt;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 
 use remotecam_protocol::ReasonCode;
+use remotecam_session_core::{Clock, MonotonicClock};
 use rustls::server::ServerSessionMemoryCache;
 use rustls::{ProtocolVersion, ServerConfig};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
@@ -18,10 +20,19 @@ use crate::active::{SUPERSEDE_BUDGET, close_code_for, send_close};
 use crate::certificate::EphemeralCertificate;
 use crate::error::{PairingError, classify_io_error};
 use crate::material::{MaterialError, PairingMaterial, PairingMaterialRequest, UnixClock};
+use crate::throttle::{Admission, OriginThrottle};
 
 pub const ALPN_PROTOCOL: &[u8] = b"remotecam/1";
 
 const CONSECUTIVE_FAILURE_LIMIT: u32 = 10;
+const SECURITY_EVENT_CAPACITY: usize = 256;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SecurityEvent {
+    pub reason: ReasonCode,
+    pub origin: Option<IpAddr>,
+    pub blocked_for_millis: Option<u64>,
+}
 
 #[derive(Debug)]
 pub enum ListenerError {
@@ -66,6 +77,9 @@ pub struct PairingListener {
     attempts: AtomicU32,
     consecutive_failures: AtomicU32,
     closed: AtomicBool,
+    throttle: OriginThrottle,
+    clock: Box<dyn Clock + Send + Sync>,
+    events: Mutex<VecDeque<SecurityEvent>>,
 }
 
 impl fmt::Debug for PairingListener {
@@ -97,11 +111,40 @@ impl PairingListener {
             attempts: AtomicU32::new(0),
             consecutive_failures: AtomicU32::new(0),
             closed: AtomicBool::new(false),
+            throttle: OriginThrottle::new(),
+            clock: Box::new(MonotonicClock::new()),
+            events: Mutex::new(VecDeque::new()),
         })
     }
 
     pub async fn bind_loopback(certificate: EphemeralCertificate) -> Result<Self, ListenerError> {
         Self::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)), certificate).await
+    }
+
+    #[must_use]
+    pub fn with_clock(mut self, clock: impl Clock + Send + Sync + 'static) -> Self {
+        self.clock = Box::new(clock);
+        self
+    }
+
+    #[must_use]
+    pub fn with_origin_throttle(mut self, throttle: OriginThrottle) -> Self {
+        self.throttle = throttle;
+        self
+    }
+
+    /// Takes the local diagnostic entries recorded since the last call.
+    pub fn drain_security_events(&self) -> Vec<SecurityEvent> {
+        let mut events = self.events.lock().unwrap_or_else(PoisonError::into_inner);
+        events.drain(..).collect()
+    }
+
+    fn record(&self, event: SecurityEvent) {
+        let mut events = self.events.lock().unwrap_or_else(PoisonError::into_inner);
+        if events.len() >= SECURITY_EVENT_CAPACITY {
+            events.pop_front();
+        }
+        events.push_back(event);
     }
 
     pub fn local_addr(&self) -> SocketAddr {
@@ -155,21 +198,51 @@ impl PairingListener {
     }
 
     pub async fn accept_socket(&self) -> Result<TcpStream, PairingError> {
-        let (stream, _peer) = self.listener.accept().await.map_err(|error| {
+        let (stream, peer) = self.listener.accept().await.map_err(|error| {
             PairingError::new(ReasonCode::DesktopUnreachable, error.to_string())
         })?;
         self.attempts.fetch_add(1, Ordering::SeqCst);
-        self.refuse_if_closed(stream)
+        let origin = peer.ip();
+        let stream = self.refuse_if_closed(stream).inspect_err(|error| {
+            self.record(SecurityEvent {
+                reason: error.code(),
+                origin: Some(origin),
+                blocked_for_millis: None,
+            });
+        })?;
+        match self.throttle.admit(origin, self.clock.now()) {
+            Admission::Admitted => Ok(stream),
+            Admission::Refused { blocked_for_millis } => {
+                self.record(SecurityEvent {
+                    reason: ReasonCode::RateLimited,
+                    origin: Some(origin),
+                    blocked_for_millis: Some(blocked_for_millis),
+                });
+                Err(reject_socket(stream, ReasonCode::RateLimited))
+            }
+        }
     }
 
     pub async fn handshake(&self, socket: TcpStream) -> Result<ServerChannel, PairingError> {
-        let socket = self.refuse_if_closed(socket)?;
+        let peer = socket.peer_addr().ok().map(|address| address.ip());
+        let socket = self.refuse_if_closed(socket).inspect_err(|error| {
+            self.record(SecurityEvent {
+                reason: error.code(),
+                origin: peer,
+                blocked_for_millis: None,
+            });
+        })?;
         match self.negotiate(socket).await {
             Ok(channel) => {
                 self.consecutive_failures.store(0, Ordering::SeqCst);
                 Ok(channel)
             }
             Err(error) => {
+                self.record(SecurityEvent {
+                    reason: error.code(),
+                    origin: peer,
+                    blocked_for_millis: None,
+                });
                 self.record_failure();
                 Err(error)
             }
@@ -193,8 +266,12 @@ impl PairingListener {
 
     fn record_failure(&self) {
         let failures = self.consecutive_failures.fetch_add(1, Ordering::SeqCst) + 1;
-        if failures >= CONSECUTIVE_FAILURE_LIMIT {
-            self.close();
+        if failures >= CONSECUTIVE_FAILURE_LIMIT && !self.closed.swap(true, Ordering::SeqCst) {
+            self.record(SecurityEvent {
+                reason: ReasonCode::ListenerClosed,
+                origin: None,
+                blocked_for_millis: None,
+            });
         }
     }
 }
