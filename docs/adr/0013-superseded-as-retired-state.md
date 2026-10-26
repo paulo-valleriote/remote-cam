@@ -50,7 +50,17 @@ still `NEGOTIATING`. Under REC-37 that replay is the race's losing attempt.
   A consumed-token replay during an active session is now `superseded`, a
   user-actionable pairing rejection, so it no longer reaches the security
   section of the local diagnostic. This is a deliberate trade-off that follows
-  REC-37. Revisit it if the security log must still count those attempts.
+  REC-37.
+- Decision (REC-43): the trade-off stands. `superseded` stays
+  `security_event: false` and `is_security_event` is unchanged. The replay
+  leaves the active session untouched and cannot be told apart from a user who
+  scanned the same QR twice, so it is a pairing rejection, not a security
+  signal. No counter is added: nothing consumes one today (the security section
+  of the diagnostic does not exist yet) and Principle III rejects a metric
+  without a declared purpose and consumer. The structured log record that
+  carries `reason_code=superseded` is the only trace, and the count stays
+  derivable from it. Reopen this when the security section of the diagnostic is
+  designed and names a consumer for these attempts.
 - The glossary entry for the state machine (`ENDED/SUPERSEDED`) should say that
   `SUPERSEDED` is the predecessor's terminal state, not a resting state of the
   core.
