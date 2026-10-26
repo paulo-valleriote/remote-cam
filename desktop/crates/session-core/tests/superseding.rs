@@ -373,7 +373,7 @@ fn a_peer_connecting_while_the_successor_negotiates_is_refused_as_superseded() {
     assert_eq!(core.retired_state(), Some(SessionState::Superseded));
 }
 
-fn frames_that_reuse_no_consumed_token() -> Vec<Vec<u8>> {
+fn frames_without_a_consumed_token() -> Vec<Vec<u8>> {
     let mut unknown = [0x99; 32];
     unknown[31] ^= 1;
     vec![
@@ -385,7 +385,7 @@ fn frames_that_reuse_no_consumed_token() -> Vec<Vec<u8>> {
 
 #[test]
 fn a_first_frame_that_reuses_no_consumed_token_is_a_protocol_violation_while_negotiating() {
-    for frame in frames_that_reuse_no_consumed_token() {
+    for frame in frames_without_a_consumed_token() {
         let (mut core, _clock, _first) = connected_core();
         let successor = present_pairing(&mut core);
         core.handle(SessionEvent::PeerConnected)
@@ -408,7 +408,7 @@ fn a_first_frame_that_reuses_no_consumed_token_is_a_protocol_violation_while_neg
 #[test]
 fn a_first_frame_that_reuses_no_consumed_token_is_a_protocol_violation_while_connected_without_a_pending_qr()
  {
-    for frame in frames_that_reuse_no_consumed_token() {
+    for frame in frames_without_a_consumed_token() {
         let (mut core, _clock, first) = connected_core();
 
         let refusal = core

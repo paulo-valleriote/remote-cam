@@ -1,9 +1,11 @@
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use remotecam_pairing::{EphemeralCertificate, PairingListener, PinnedClient};
 use remotecam_protocol::ReasonCode;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
+use tokio::task::JoinSet;
 
 async fn listener() -> PairingListener {
     PairingListener::bind_loopback(EphemeralCertificate::generate().expect("certificate"))
@@ -128,6 +130,54 @@ async fn ten_consecutive_failed_handshakes_close_the_listener() {
         .accept()
         .await
         .expect_err("the tenth failure closed the listener");
+
+    assert_eq!(error.code(), ReasonCode::ListenerClosed);
+    assert!(peer.await.expect("peer task").is_empty());
+}
+
+#[tokio::test]
+async fn concurrent_failed_handshakes_close_the_listener_once() {
+    let listener = Arc::new(listener().await);
+    let address = listener.local_addr();
+    let fingerprint = [0; 32];
+    let peers: Vec<_> = (0..10)
+        .map(|_| {
+            tokio::spawn(async move {
+                PinnedClient::new(fingerprint)
+                    .expect("client")
+                    .connect(address)
+                    .await
+            })
+        })
+        .collect();
+
+    let mut accepts = JoinSet::new();
+    for _ in 0..10 {
+        let listener = Arc::clone(&listener);
+        accepts.spawn(async move { listener.accept().await });
+    }
+    while let Some(result) = accepts.join_next().await {
+        result
+            .expect("accept task")
+            .expect_err("a divergent pin fails the handshake");
+    }
+    for peer in peers {
+        assert!(peer.await.expect("peer task").is_err());
+    }
+
+    let peer = tokio::spawn(async move {
+        let mut socket = TcpStream::connect(address).await.expect("tcp connect");
+        let mut received = Vec::new();
+        socket
+            .read_to_end(&mut received)
+            .await
+            .expect("the refused peer sees a close");
+        received
+    });
+    let error = listener
+        .accept()
+        .await
+        .expect_err("ten concurrent failures closed the listener");
 
     assert_eq!(error.code(), ReasonCode::ListenerClosed);
     assert!(peer.await.expect("peer task").is_empty());

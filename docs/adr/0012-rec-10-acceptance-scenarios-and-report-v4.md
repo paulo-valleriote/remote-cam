@@ -28,8 +28,9 @@ deterministic report. ADR-0010 fixes the report at two scenarios and version 3.
   reason code, verdict) stay per-scenario `allOf` definitions.
 - A peer that connects while the Session Core is not ready to pair is no longer
   refused with `invalid_transition` before TLS. It completes TLS and presents its
-  Pair frame, so the Session Core decides with `token_already_used` for a
-  consumed token in any state. Other cases map to `protocol_violation`.
+  Pair frame, so the Session Core decides: `token_already_used` for a consumed
+  token with no active session, `superseded` for one with an active session
+  (ADR-0013). Other cases map to `protocol_violation`.
 - The stale-epoch scenario exercises `SessionCore::admit_frame_epoch` directly.
   No epoch-tagged media frame path exists in the harness yet.
 
