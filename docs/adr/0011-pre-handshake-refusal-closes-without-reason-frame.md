@@ -2,6 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-10-26
+- **Clarified by:** REC-38 (the loser of a race for the active session follows the same rule)
 
 ## Context
 
@@ -29,3 +30,16 @@ frozen for F1 (ADR-0002), so adding such a frame is a wire change.
   level. It must ask the user to scan a new QR in either case.
 - A future decision to report pre-handshake reasons on the wire needs a new
   ADR and a protocol change that the freeze must allow.
+
+## Clarification (REC-38)
+
+The rule covers every refusal decided before the handshake, not only
+`qr_expired`. A **Race Loser** that connects after the race is decided is refused
+with `superseded` at the socket: the desktop closes it without a reason frame
+and records `superseded` locally. A Race Loser that already completed the
+handshake has a channel, and the existing `close` frame carries `superseded`
+to it. This needs no new wire frame, so it does not conflict with this ADR or
+with ADR-0002.
+
+`listener_closed` follows the same rule: it is a pre-handshake refusal, local
+only, and never reaches the wire (ADR-0005).
