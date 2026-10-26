@@ -1,6 +1,7 @@
 use remotecam_pairing::{
     EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient, UnixClock,
 };
+use remotecam_protocol::ReasonCode;
 use remotecam_protocol::signaling::{
     Limits, MAX_SIGNALING_MESSAGE_BYTES, Sdp, SignalingMessage, parse_signaling,
 };
@@ -10,6 +11,8 @@ use remotecam_session_core::{
     Clock, Effect, FIRST_MEDIA_FRAME_TIMEOUT_MILLIS, MediaFrame, MediaPort, RandomSource,
     SessionCore, SessionEvent, SessionState, Timestamp,
 };
+mod acceptance;
+
 use serde::Serialize;
 use std::sync::{
     Arc,
@@ -54,7 +57,26 @@ pub enum ScenarioKind {
     Pairing,
     PinMismatch,
     FirstFrameTimeout,
+    QrExpiryRefused,
+    TokenExpiryRefused,
+    SingleUseRefused,
+    ReplayRefused,
+    StaleEpochDiscarded,
+    ClockBackwardsWindow,
+    RegenerationAfterRefusal,
 }
+
+pub const REPORTED_SCENARIOS: [ScenarioKind; 9] = [
+    ScenarioKind::Pairing,
+    ScenarioKind::PinMismatch,
+    ScenarioKind::QrExpiryRefused,
+    ScenarioKind::TokenExpiryRefused,
+    ScenarioKind::SingleUseRefused,
+    ScenarioKind::ReplayRefused,
+    ScenarioKind::StaleEpochDiscarded,
+    ScenarioKind::ClockBackwardsWindow,
+    ScenarioKind::RegenerationAfterRefusal,
+];
 
 #[derive(Clone, Copy)]
 struct ScenarioDefinition {
@@ -85,7 +107,62 @@ impl ScenarioKind {
                 expected_outcome: Outcome::TimedOut,
                 expected_reason_code: None,
             },
+            Self::QrExpiryRefused => ScenarioDefinition {
+                name: "qr-expiry-refused",
+                seed_salt: 0x0001,
+                expected_outcome: Outcome::Rejected,
+                expected_reason_code: Some("qr_expired"),
+            },
+            Self::TokenExpiryRefused => ScenarioDefinition {
+                name: "token-expiry-refused",
+                seed_salt: 0x0002,
+                expected_outcome: Outcome::Rejected,
+                expected_reason_code: Some("token_expired"),
+            },
+            Self::SingleUseRefused => ScenarioDefinition {
+                name: "single-use-refused",
+                seed_salt: 0x0003,
+                expected_outcome: Outcome::Rejected,
+                expected_reason_code: Some("token_already_used"),
+            },
+            Self::ReplayRefused => ScenarioDefinition {
+                name: "replay-refused",
+                seed_salt: 0x0004,
+                expected_outcome: Outcome::Rejected,
+                expected_reason_code: Some("token_already_used"),
+            },
+            Self::StaleEpochDiscarded => ScenarioDefinition {
+                name: "stale-epoch-discarded",
+                seed_salt: 0x0005,
+                expected_outcome: Outcome::Accepted,
+                expected_reason_code: None,
+            },
+            Self::ClockBackwardsWindow => ScenarioDefinition {
+                name: "clock-backwards-window",
+                seed_salt: 0x0006,
+                expected_outcome: Outcome::Rejected,
+                expected_reason_code: Some("token_expired"),
+            },
+            Self::RegenerationAfterRefusal => ScenarioDefinition {
+                name: "regeneration-after-refusal",
+                seed_salt: 0x0007,
+                expected_outcome: Outcome::Accepted,
+                expected_reason_code: None,
+            },
         }
+    }
+
+    pub const fn is_acceptance(self) -> bool {
+        matches!(
+            self,
+            Self::QrExpiryRefused
+                | Self::TokenExpiryRefused
+                | Self::SingleUseRefused
+                | Self::ReplayRefused
+                | Self::StaleEpochDiscarded
+                | Self::ClockBackwardsWindow
+                | Self::RegenerationAfterRefusal
+        )
     }
 
     const fn as_str(self) -> &'static str {
@@ -291,6 +368,10 @@ pub struct HarnessReport {
     pub frames: Vec<FrameObservation>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub late_frame_discarded: Option<DiscardedFrame>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub issued_epochs: Vec<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol_violations: Option<u64>,
     pub resources: ResourceReport,
     pub verdict: Verdict,
     pub reason_code: Option<&'static str>,
@@ -315,6 +396,8 @@ impl HarnessReport {
             state_trace: Vec::new(),
             frames: Vec::new(),
             late_frame_discarded: None,
+            issued_epochs: Vec::new(),
+            protocol_violations: None,
             resources: ResourceReport::default(),
             verdict: if outcome == Outcome::Accepted {
                 Verdict::Pass
@@ -453,7 +536,7 @@ impl RunReport {
             .count() as u32;
         let failed = scenarios.len() as u32 - passed;
         Self {
-            report_version: 3,
+            report_version: 4,
             contract_version: 1,
             commit,
             seed: options.seed,
@@ -624,7 +707,7 @@ pub fn run_with_options(options: RunOptions) -> Result<RunReport, HarnessError> 
     let commit = current_commit()?;
     let environment = EnvironmentReport::current()?;
     let clock_start = Timestamp::from_millis(options.clock_start_millis);
-    let scenarios = [ScenarioKind::Pairing, ScenarioKind::PinMismatch]
+    let scenarios = REPORTED_SCENARIOS
         .into_iter()
         .map(|scenario| {
             run_with(ScenarioConfig {
@@ -704,6 +787,9 @@ fn run_with_runtime(
 }
 
 async fn run_pairing(config: ScenarioConfig, resources: ResourceTracker) -> HarnessReport {
+    if config.scenario.is_acceptance() {
+        return acceptance::run(config, resources).await;
+    }
     finish_pairing_result(
         config,
         resources.clone(),
@@ -848,7 +934,7 @@ async fn run_pairing_inner(
     let server_state_trace = state_trace.clone();
     let server = tokio::spawn(async move {
         let _task_guard = task_guard;
-        run_desktop(core, desktop_listener, server_state_trace).await
+        desktop_session(core, desktop_listener, server_state_trace).await
     });
     macro_rules! abort_server {
         ($report:expr) => {{
@@ -1087,6 +1173,15 @@ async fn run_pairing_inner(
             report.frames = frames;
             report
         }
+        ScenarioKind::QrExpiryRefused
+        | ScenarioKind::TokenExpiryRefused
+        | ScenarioKind::SingleUseRefused
+        | ScenarioKind::ReplayRefused
+        | ScenarioKind::StaleEpochDiscarded
+        | ScenarioKind::ClockBackwardsWindow
+        | ScenarioKind::RegenerationAfterRefusal => {
+            unreachable!("acceptance scenarios are dispatched before the pairing flow")
+        }
         ScenarioKind::FirstFrameTimeout => {
             clock.advance(FIRST_MEDIA_FRAME_TIMEOUT_MILLIS + 1);
             let previous_state = core.state();
@@ -1149,49 +1244,72 @@ async fn run_pairing_inner(
     })
 }
 
-struct DesktopRun<C: remotecam_session_core::Clock, R: RandomSource> {
+struct DesktopRun<C: Clock, R: RandomSource> {
     core: SessionCore<C, R>,
     state_trace: Vec<StateTransition>,
 }
 
-async fn run_desktop<C, R>(
+async fn desktop_session<C, R>(
     mut core: SessionCore<C, R>,
     listener: Arc<PairingListener>,
     mut state_trace: Vec<StateTransition>,
 ) -> Result<DesktopRun<C, R>, &'static str>
 where
-    C: remotecam_session_core::Clock + Send + 'static,
-    R: remotecam_session_core::RandomSource + Send + 'static,
+    C: Clock + Send + 'static,
+    R: RandomSource + Send + 'static,
 {
-    let mut peer_transition = Ok(());
+    let mut regenerated = Vec::new();
+    run_desktop(&mut core, &listener, &mut state_trace, &mut regenerated).await?;
+    Ok(DesktopRun { core, state_trace })
+}
+
+fn split_refusal(
+    effects: Vec<Effect>,
+    regenerated: &mut Vec<remotecam_session_core::PairingMaterial>,
+) -> Result<Vec<Effect>, ReasonCode> {
+    let mut refusal = None;
+    let mut remaining = Vec::with_capacity(effects.len());
+    for effect in effects {
+        match effect {
+            Effect::RejectPeer { reason } => refusal = Some(reason),
+            Effect::PresentPairing(material) => regenerated.push(material),
+            other => remaining.push(other),
+        }
+    }
+    match refusal {
+        Some(reason) => Err(reason),
+        None => Ok(remaining),
+    }
+}
+
+async fn run_desktop<C, R>(
+    core: &mut SessionCore<C, R>,
+    listener: &PairingListener,
+    state_trace: &mut Vec<StateTransition>,
+    regenerated: &mut Vec<remotecam_session_core::PairingMaterial>,
+) -> Result<(), &'static str>
+where
+    C: Clock,
+    R: RandomSource,
+{
     let channel = listener
         .accept_admitted(|| {
             let previous_state = core.state();
             let effects = match core.handle(SessionEvent::PeerConnected) {
                 Ok(effects) => effects,
-                Err(error) => {
-                    peer_transition = Err(error.code().as_str());
-                    return None;
-                }
+                Err(_) => return None,
             };
             record_transition(
-                &mut state_trace,
+                state_trace,
                 previous_state,
                 core.state(),
                 core.last_transition_at(),
                 None,
             );
-            if effects.contains(&Effect::StartMedia) {
-                peer_transition = Err("internal_error");
-            }
-            match effects.as_slice() {
-                [Effect::RejectPeer { reason }, ..] => Some(*reason),
-                _ => None,
-            }
+            split_refusal(effects, regenerated).err()
         })
         .await
         .map_err(|error| error.code().as_str())?;
-    peer_transition?;
     if !channel.is_tls13() {
         return Err("tls_version_unsupported");
     }
@@ -1199,17 +1317,18 @@ where
     let mut desktop = BufReader::new(channel);
     let pair_frame = read_signaling_frame(&mut desktop).await?;
     let previous_state = core.state();
-    let paired_effect = core
-        .authenticate_first_frame(&pair_frame)
-        .map_err(|error| error.code().as_str())?;
+    let paired_effects = core.authenticate_first_frame(&pair_frame);
     record_transition(
-        &mut state_trace,
+        state_trace,
         previous_state,
         core.state(),
         core.last_transition_at(),
         None,
     );
-    let (session_id, epoch, dtls_fingerprint, accepted_limits) = match paired_effect.as_slice() {
+    let paired_effects = paired_effects.map_err(|error| error.code().as_str())?;
+    let paired_effects =
+        split_refusal(paired_effects, regenerated).map_err(|reason| reason.as_str())?;
+    let (session_id, epoch, dtls_fingerprint, accepted_limits) = match paired_effects.as_slice() {
         [
             Effect::SendPaired {
                 session_id,
@@ -1223,7 +1342,6 @@ where
             *dtls_fingerprint,
             accepted_limits.clone(),
         ),
-        [Effect::RejectPeer { reason }, ..] => return Err(reason.as_str()),
         _ => return Err("internal_error"),
     };
     let paired_frame = SignalingMessage::Paired {
@@ -1259,7 +1377,7 @@ where
     if media_effects != [Effect::StartMedia] {
         return Err("internal_error");
     }
-    Ok(DesktopRun { core, state_trace })
+    Ok(())
 }
 
 async fn read_signaling_frame(
@@ -1371,7 +1489,7 @@ mod tests {
             panic!("starting pairing presents pairing material");
         };
         let token = Zeroizing::new(*material.token().as_bytes());
-        let server = tokio::spawn(run_desktop(core, Arc::clone(&listener), Vec::new()));
+        let server = tokio::spawn(desktop_session(core, Arc::clone(&listener), Vec::new()));
         let client = PinnedClient::new(fingerprint)
             .expect("client")
             .connect(listener.local_addr())
@@ -1677,7 +1795,7 @@ mod tests {
             core.handle(SessionEvent::StartPairing)
                 .expect("pairing starts");
             clock.advance(PAIRING_WINDOW_MILLIS);
-            let server = tokio::spawn(run_desktop(core, Arc::clone(&listener), Vec::new()));
+            let server = tokio::spawn(desktop_session(core, Arc::clone(&listener), Vec::new()));
 
             let mut peer = tokio::net::TcpStream::connect(listener.local_addr())
                 .await

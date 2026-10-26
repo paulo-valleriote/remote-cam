@@ -151,9 +151,9 @@ delivered packages and, as a REC-25-specific gate, to the non-shipped Harness.
 workspace, pinned to Rust 1.99.1; `make build-desktop` never compiles it. The
 Harness drives `desktop/crates/pairing`, `desktop/crates/session-core` and
 `desktop/crates/protocol`, then prints one compact JSON line with
-`report_version: 3` and `contract_version: 1`. GNU `timeout` bounds execution
-to 120 seconds. Exit code 0 means both scenarios passed; exit code 1 means at
-least one scenario failed.
+`report_version: 4` and `contract_version: 1`. GNU `timeout` bounds execution
+to 120 seconds. Exit code 0 means all nine scenarios passed; exit code 1 means
+at least one scenario failed.
 
 The report envelope contains the Git commit, seed, injected logical clock
 start, an allowlisted environment (`os`, `architecture`, `rustc_version`),
@@ -174,6 +174,24 @@ different TLS pin. It expects the handshake to abort before the client sends
 the Pairing Token, with `verdict: pass`, `outcome: rejected` and
 `reason_code: certificate_pin_mismatch`. The reason code already belongs to
 protocol v1; the scenario adds no wire change.
+
+The seven REC-10 acceptance scenarios run after those two, each with an
+injected logical clock and a fixed expected result (see ADR-0012):
+
+- `qr-expiry-refused`: a peer that connects after the 120 s window is closed
+  before TLS, with no bytes sent; the desktop regenerates a QR at epoch 2.
+- `token-expiry-refused`: a valid QR whose token is presented after the window
+  closed is refused with `token_expired`.
+- `single-use-refused`: a second use of a token, while the first session is
+  still negotiating, is refused with `token_already_used`.
+- `replay-refused`: a captured QR replayed after its session timed out is
+  refused with `token_already_used`.
+- `stale-epoch-discarded`: a frame with an epoch older than the active session
+  is discarded and counted as one protocol violation; the session continues.
+- `clock-backwards-window`: a backward clock step neither invalidates the
+  window nor extends it.
+- `regeneration-after-refusal`: after `qr_expired`, a fresh QR is accepted and
+  completes the pairing handshake.
 
 Pass `HARNESS_ARGS` to reproduce a run with chosen inputs:
 
