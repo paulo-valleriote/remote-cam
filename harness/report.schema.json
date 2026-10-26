@@ -207,10 +207,13 @@
               "const": "pairing-happy-path"
             },
             "outcome": {
-              "enum": [
-                "accepted",
-                "rejected"
-              ]
+              "const": "accepted"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": null
             }
           }
         }
@@ -227,10 +230,13 @@
               "const": "pin-mismatch-aborts"
             },
             "outcome": {
-              "enum": [
-                "accepted",
-                "rejected"
-              ]
+              "const": "rejected"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": "certificate_pin_mismatch"
             }
           }
         }

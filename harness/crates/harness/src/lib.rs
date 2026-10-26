@@ -1,5 +1,3 @@
-//! The product harness: a headless driver for the RemoteCam pairing path.
-
 use remotecam_pairing::{
     EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient,
 };
@@ -51,20 +49,44 @@ pub enum ScenarioKind {
     FirstFrameTimeout,
 }
 
+#[derive(Clone, Copy)]
+struct ScenarioDefinition {
+    name: &'static str,
+    seed_salt: u64,
+    expected_outcome: Outcome,
+    expected_reason_code: Option<&'static str>,
+}
+
 impl ScenarioKind {
-    const fn as_str(self) -> &'static str {
+    const fn definition(self) -> ScenarioDefinition {
         match self {
-            Self::Pairing => "pairing-happy-path",
-            Self::PinMismatch => "pin-mismatch-aborts",
-            Self::FirstFrameTimeout => "first_frame_timeout",
+            Self::Pairing => ScenarioDefinition {
+                name: "pairing-happy-path",
+                seed_salt: 0,
+                expected_outcome: Outcome::Accepted,
+                expected_reason_code: None,
+            },
+            Self::PinMismatch => ScenarioDefinition {
+                name: "pin-mismatch-aborts",
+                seed_salt: 0xa5a5_5a5a_d3c1_b7e9,
+                expected_outcome: Outcome::Rejected,
+                expected_reason_code: Some("certificate_pin_mismatch"),
+            },
+            Self::FirstFrameTimeout => ScenarioDefinition {
+                name: "first_frame_timeout",
+                seed_salt: 0,
+                expected_outcome: Outcome::TimedOut,
+                expected_reason_code: None,
+            },
         }
     }
 
+    const fn as_str(self) -> &'static str {
+        self.definition().name
+    }
+
     const fn seed(self, seed: u64) -> u64 {
-        match self {
-            Self::PinMismatch => seed ^ 0xa5a5_5a5a_d3c1_b7e9,
-            Self::Pairing | Self::FirstFrameTimeout => seed,
-        }
+        seed ^ self.definition().seed_salt
     }
 }
 
@@ -179,7 +201,6 @@ fn parse_commit(output: &[u8]) -> Result<String, HarnessError> {
     Ok(commit)
 }
 
-/// The per-scenario outcome carried by the report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
@@ -187,7 +208,6 @@ pub enum Verdict {
     Fail,
 }
 
-/// The report-level totals for the scenarios that ran.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Summary {
     pub scenarios: u32,
@@ -254,7 +274,6 @@ impl Default for ResourceReport {
     }
 }
 
-/// The deterministic result of one scenario.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HarnessReport {
     pub scenario: &'static str,
@@ -300,18 +319,15 @@ impl HarnessReport {
     }
 
     fn apply_scenario(&mut self, scenario: ScenarioKind) {
-        self.scenario = scenario.as_str();
-        let (expected_outcome, expected_reason_code) = match scenario {
-            ScenarioKind::Pairing => (Outcome::Accepted, None),
-            ScenarioKind::PinMismatch => (Outcome::Rejected, Some("certificate_pin_mismatch")),
-            ScenarioKind::FirstFrameTimeout => (Outcome::TimedOut, None),
+        let definition = scenario.definition();
+        self.scenario = definition.name;
+        self.verdict = if self.outcome == definition.expected_outcome
+            && self.reason_code == definition.expected_reason_code
+        {
+            Verdict::Pass
+        } else {
+            Verdict::Fail
         };
-        self.verdict =
-            if self.outcome == expected_outcome && self.reason_code == expected_reason_code {
-                Verdict::Pass
-            } else {
-                Verdict::Fail
-            };
     }
 }
 
@@ -400,7 +416,6 @@ fn pairing_material(
     }
 }
 
-/// The deterministic, machine-readable result of one harness run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RunReport {
     pub report_version: u32,
@@ -415,7 +430,6 @@ pub struct RunReport {
 }
 
 impl RunReport {
-    /// Serialises the report as the single JSON line the harness prints.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
@@ -588,7 +602,6 @@ fn record_transition(
     }
 }
 
-/// Runs both deterministic report scenarios through the loopback TLS listener.
 pub fn run() -> Result<RunReport, HarnessError> {
     run_with_options(RunOptions::default())
 }
