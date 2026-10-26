@@ -23,7 +23,6 @@ enum Behavior {
     Broken,
 }
 
-/// What the test can still do to a channel the desktop owns.
 #[derive(Clone)]
 struct Handle {
     behavior: Arc<Mutex<Behavior>>,
@@ -40,7 +39,6 @@ impl Handle {
     }
 }
 
-/// A channel that records what the desktop does to it.
 struct Recorder {
     label: &'static str,
     handle: Handle,
@@ -129,6 +127,13 @@ fn paired(identity: u8, epoch: u32) -> Effect {
     }
 }
 
+fn framed(payload: &[u8]) -> String {
+    let length = u32::try_from(payload.len()).expect("the payload fits");
+    let mut wire = length.to_be_bytes().to_vec();
+    wire.extend_from_slice(payload);
+    String::from_utf8_lossy(&wire).into_owned()
+}
+
 fn paired_text(identity: u8, epoch: u32) -> String {
     let frame = SignalingMessage::Paired {
         session_id: [identity; 16],
@@ -138,7 +143,7 @@ fn paired_text(identity: u8, epoch: u32) -> String {
     }
     .encode()
     .expect("paired encodes");
-    format!("{}\n", String::from_utf8(frame).expect("utf-8"))
+    framed(&frame)
 }
 
 fn close_text() -> String {
@@ -147,7 +152,7 @@ fn close_text() -> String {
     }
     .encode()
     .expect("close encodes");
-    format!("{}\n", String::from_utf8(frame).expect("utf-8"))
+    framed(&frame)
 }
 
 fn supersession(identity: u8, epoch: u32) -> Vec<Effect> {
@@ -160,7 +165,6 @@ fn supersession(identity: u8, epoch: u32) -> Vec<Effect> {
     ]
 }
 
-/// Joins the writes of one frame so the order test does not depend on how a frame is chunked.
 fn events(log: &Log) -> Vec<(&'static str, String)> {
     let mut merged: Vec<(&'static str, String)> = Vec::new();
     for (label, event) in log.lock().unwrap().iter() {
@@ -261,6 +265,35 @@ async fn a_predecessor_that_is_already_gone_is_dropped_before_the_successor_is_p
 }
 
 #[tokio::test]
+async fn a_successor_paired_without_end_still_retires_the_predecessor_first() {
+    let log = Log::default();
+    let (first, first_handle) = Recorder::new("first", &log);
+    let (second, _) = Recorder::new("second", &log);
+    let mut session = ActiveSession::new();
+    session
+        .apply(vec![paired(1, 1)], first)
+        .await
+        .expect("the first peer is paired");
+    log.lock().unwrap().clear();
+
+    session
+        .apply(vec![paired(2, 2)], second)
+        .await
+        .expect("the successor is paired");
+
+    assert!(first_handle.dropped());
+    assert_eq!(
+        events(&log),
+        vec![
+            ("first", "shutdown".to_owned()),
+            ("first", "drop".to_owned()),
+            ("second", format!("write {}", paired_text(2, 2))),
+        ]
+    );
+    assert!(session.is_occupied());
+}
+
+#[tokio::test]
 async fn effects_the_session_does_not_own_are_refused() {
     let log = Log::default();
     let (peer, _) = Recorder::new("peer", &log);
@@ -315,7 +348,7 @@ mod over_tls {
     use tokio::net::TcpStream;
     use tokio::task::JoinHandle;
 
-    use super::{DESKTOP_FINGERPRINT, close_text};
+    use super::{DESKTOP_FINGERPRINT, close_text, framed};
 
     type Core = SessionCore<ManualClock, SeededRandomSource>;
 
@@ -355,7 +388,6 @@ mod over_tls {
             material
         }
 
-        /// A phone that scans `material`, pairs, and reports every frame until its channel ends.
         fn phone(&self, material: &PairingMaterial) -> JoinHandle<Vec<String>> {
             let address = self.listener.local_addr();
             let fingerprint = self.listener.fingerprint();
@@ -373,16 +405,12 @@ mod over_tls {
                 write_frame(&mut channel, &pair).await.expect("pair sent");
                 let mut frames = Vec::new();
                 while let Ok(frame) = read_frame(&mut channel).await {
-                    frames.push(format!(
-                        "{}\n",
-                        String::from_utf8(frame.to_vec()).expect("utf-8")
-                    ));
+                    frames.push(framed(&frame));
                 }
                 frames
             })
         }
 
-        /// Accepts the next peer and returns its channel and the first frame it sent.
         async fn accept(&mut self) -> (ServerChannel, Vec<u8>) {
             let core = &mut self.core;
             let mut channel = self
@@ -442,7 +470,7 @@ mod over_tls {
         }
         .encode()
         .expect("paired encodes");
-        format!("{}\n", String::from_utf8(frame).expect("utf-8"))
+        framed(&frame)
     }
 
     #[tokio::test]

@@ -117,10 +117,6 @@ impl PairingListener {
         PairingMaterial::issue_with_fingerprint(request, self.fingerprint, clock)
     }
 
-    /// Stops admitting peers. Every later connection is refused with `listener_closed`.
-    ///
-    /// The refusal is local: the socket closes without a frame and the reason never
-    /// reaches the wire (ADR-0005).
     pub fn close(&self) {
         self.closed.store(true, Ordering::SeqCst);
     }
@@ -210,10 +206,6 @@ impl ServerChannel {
         self.inner.get_ref().0.peer_addr()
     }
 
-    /// Refuses the peer after the handshake.
-    ///
-    /// A peer that lost the race for the session is told so with `close { superseded }`.
-    /// Any other refusal closes the channel without a frame.
     pub async fn reject(mut self, reason: ReasonCode) -> PairingError {
         if reason == ReasonCode::Superseded {
             let _ = timeout(
