@@ -131,12 +131,12 @@ fn a_valid_pair_returns_the_desktop_identity_and_consumes_its_token() {
 
     assert_eq!(
         effect,
-        Effect::SendPaired {
+        vec![Effect::SendPaired {
             session_id: remotecam_session_core::SessionId::from_bytes(session_id),
             epoch: 1,
             dtls_fingerprint: DESKTOP_FINGERPRINT,
             accepted_limits: Limits::new(),
-        }
+        }]
     );
     assert_eq!(core.state(), SessionState::Negotiating);
     assert_eq!(

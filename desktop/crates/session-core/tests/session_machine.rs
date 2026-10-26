@@ -28,7 +28,7 @@ fn core_at(
     (core, handle)
 }
 
-fn authenticate(core: &mut SessionCore<ManualClock, SeededRandomSource>) -> Effect {
+fn authenticate(core: &mut SessionCore<ManualClock, SeededRandomSource>) -> Vec<Effect> {
     let effects = core
         .handle(SessionEvent::StartPairing)
         .expect("starting pairing is valid");
@@ -167,12 +167,12 @@ fn an_authenticated_pair_sends_paired_and_moves_to_negotiating() {
     assert_eq!(core.state(), SessionState::Negotiating);
     assert_eq!(
         effect,
-        Effect::SendPaired {
+        vec![Effect::SendPaired {
             session_id: core.session_id().expect("pairing assigned a session id"),
             epoch: 1,
             dtls_fingerprint: DESKTOP_FINGERPRINT,
             accepted_limits: Limits::new(),
-        }
+        }]
     );
     assert_eq!(core.last_transition_at(), Timestamp::from_millis(15));
 }
@@ -296,10 +296,10 @@ fn the_happy_path_walks_every_state_in_order() {
             .expect("the peer may connect while pairing is ready"),
     );
     states.push(core.state());
-    effects.push(vec![
+    effects.push(
         core.authenticate_first_frame(&frame)
             .expect("the matching token authenticates"),
-    ]);
+    );
     states.push(core.state());
     for event in [
         SessionEvent::NegotiationCompleted,
@@ -399,10 +399,10 @@ fn run_path(seed: u64, start_millis: u64) -> Trace {
     timestamps.push(core.last_transition_at());
 
     clock.advance(10);
-    effects.push(vec![
+    effects.push(
         core.authenticate_first_frame(&frame)
             .expect("the matching token authenticates"),
-    ]);
+    );
     timestamps.push(core.last_transition_at());
 
     for event in [
