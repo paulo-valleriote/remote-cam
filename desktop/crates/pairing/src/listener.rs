@@ -2,7 +2,7 @@ use std::fmt;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::task::{Context, Poll};
 
 use remotecam_protocol::ReasonCode;
@@ -63,6 +63,7 @@ pub struct PairingListener {
     fingerprint: [u8; 32],
     local_addr: SocketAddr,
     attempts: AtomicU32,
+    closed: AtomicBool,
 }
 
 impl fmt::Debug for PairingListener {
@@ -92,6 +93,7 @@ impl PairingListener {
             fingerprint,
             local_addr,
             attempts: AtomicU32::new(0),
+            closed: AtomicBool::new(false),
         })
     }
 
@@ -113,6 +115,18 @@ impl PairingListener {
         clock: &impl UnixClock,
     ) -> Result<PairingMaterial, MaterialError> {
         PairingMaterial::issue_with_fingerprint(request, self.fingerprint, clock)
+    }
+
+    /// Stops admitting peers. Every later connection is refused with `listener_closed`.
+    ///
+    /// The refusal is local: the socket closes without a frame and the reason never
+    /// reaches the wire (ADR-0005).
+    pub fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst)
     }
 
     pub fn attempts(&self) -> u32 {
@@ -139,10 +153,16 @@ impl PairingListener {
             PairingError::new(ReasonCode::DesktopUnreachable, error.to_string())
         })?;
         self.attempts.fetch_add(1, Ordering::SeqCst);
+        if self.is_closed() {
+            return Err(reject_socket(stream, ReasonCode::ListenerClosed));
+        }
         Ok(stream)
     }
 
     pub async fn handshake(&self, socket: TcpStream) -> Result<ServerChannel, PairingError> {
+        if self.is_closed() {
+            return Err(reject_socket(socket, ReasonCode::ListenerClosed));
+        }
         let stream = self
             .acceptor
             .accept(socket)
