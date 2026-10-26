@@ -336,7 +336,7 @@ struct SessionIdentity {
 }
 
 #[derive(Debug)]
-struct PendingOffer {
+struct PendingPairing {
     identity: SessionIdentity,
     token: PairingToken,
     expires_at: Timestamp,
@@ -349,7 +349,7 @@ pub struct SessionCore<C: Clock, R: RandomSource> {
     clock: C,
     random: R,
     active: Option<SessionIdentity>,
-    offer: Option<PendingOffer>,
+    offer: Option<PendingPairing>,
     retired: bool,
     consumed_tokens: Vec<PairingToken>,
     desktop_dtls_fingerprint: [u8; 32],
@@ -467,12 +467,12 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         }
 
         if !self.awaits_pair_frame() {
-            self.refuse_offer();
+            self.refuse_pairing();
             return Err(PairingError::ProtocolViolation);
         }
 
         let Some((token, limits)) = presented else {
-            self.refuse_offer();
+            self.refuse_pairing();
             return Err(PairingError::ProtocolViolation);
         };
 
@@ -488,12 +488,12 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             .take_if(|offer| offer.token.matches(token.as_bytes()))
         else {
             if self.state == SessionState::Connected {
-                self.refuse_offer();
+                self.refuse_pairing();
             }
             return Err(PairingError::TokenInvalid);
         };
 
-        Ok(self.activate_offer(offer, limits))
+        Ok(self.activate_pairing(offer, limits))
     }
 
     fn current_identity(&self) -> Option<SessionIdentity> {
@@ -511,7 +511,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             .is_some_and(|offer| offer.peer_connected)
     }
 
-    fn activate_offer(&mut self, offer: PendingOffer, accepted_limits: Limits) -> Vec<Effect> {
+    fn activate_pairing(&mut self, offer: PendingPairing, accepted_limits: Limits) -> Vec<Effect> {
         let mut effects = Vec::new();
         self.retired = self.active.is_some();
         if self.retired {
@@ -550,7 +550,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         }
     }
 
-    fn refuse_offer(&mut self) {
+    fn refuse_pairing(&mut self) {
         if self.state != SessionState::Connected {
             self.state = SessionState::Ended;
         }
@@ -606,7 +606,7 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
             epoch,
             token: PairingToken::from_bytes(token_bytes),
         };
-        self.offer = Some(PendingOffer {
+        self.offer = Some(PendingPairing {
             identity: SessionIdentity { session_id, epoch },
             token: PairingToken::from_bytes(token_bytes),
             expires_at: Timestamp::from_millis(
