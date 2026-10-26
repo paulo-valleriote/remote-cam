@@ -8,6 +8,7 @@ use remotecam_session_core::{
 
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
 const PEER_FINGERPRINT: [u8; 32] = [0x55; 32];
+const RIVAL_PEER_FINGERPRINT: [u8; 32] = [0x66; 32];
 
 type Core = SessionCore<ManualClock, SeededRandomSource>;
 
@@ -49,9 +50,13 @@ fn present_pairing(core: &mut Core) -> Offer {
 }
 
 fn pair_frame_with_token(token: [u8; 32]) -> Vec<u8> {
+    pair_frame_from_peer(token, PEER_FINGERPRINT)
+}
+
+fn pair_frame_from_peer(token: [u8; 32], dtls_fingerprint: [u8; 32]) -> Vec<u8> {
     SignalingMessage::Pair {
         token,
-        dtls_fingerprint: PEER_FINGERPRINT,
+        dtls_fingerprint,
         limits: Limits::new(),
     }
     .encode()
@@ -187,6 +192,49 @@ fn a_consumed_token_presented_while_the_successor_is_active_is_refused_as_supers
         Err(PairingError::Superseded)
     );
     assert_eq!(core.state(), SessionState::Negotiating);
+}
+
+#[test]
+fn two_peers_racing_for_the_same_token_let_only_the_first_valid_frame_win() {
+    let (mut core, _clock, _first) = connected_core();
+    let successor = present_pairing(&mut core);
+    core.handle(SessionEvent::PeerConnected)
+        .expect("the winning peer can connect");
+    core.handle(SessionEvent::PeerConnected)
+        .expect("a rival peer can connect to the same qr");
+    let winner = pair_frame_from_peer(successor.token, PEER_FINGERPRINT);
+    let loser = pair_frame_from_peer(successor.token, RIVAL_PEER_FINGERPRINT);
+
+    let effects = core
+        .authenticate_first_frame(&winner)
+        .expect("the first valid token wins");
+
+    assert_eq!(
+        effects,
+        vec![
+            Effect::SendClose {
+                reason: CloseCode::Superseded,
+            },
+            Effect::End,
+            Effect::SendPaired {
+                session_id: successor.session_id,
+                epoch: successor.epoch,
+                dtls_fingerprint: DESKTOP_FINGERPRINT,
+                accepted_limits: Limits::new(),
+            },
+        ]
+    );
+
+    let refusal = core
+        .authenticate_first_frame(&loser)
+        .expect_err("the rival's consumed token is refused");
+
+    assert_eq!(refusal, PairingError::Superseded);
+    assert_eq!(refusal.code(), ReasonCode::Superseded);
+    assert_eq!(core.state(), SessionState::Negotiating);
+    assert_eq!(core.session_id(), Some(successor.session_id));
+    assert_eq!(core.epoch(), Some(successor.epoch));
+    assert_eq!(core.retired_state(), Some(SessionState::Superseded));
 }
 
 #[test]
