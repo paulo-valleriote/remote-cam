@@ -63,13 +63,7 @@ fn pair_frame_from_peer(token: [u8; 32], dtls_fingerprint: [u8; 32]) -> Vec<u8> 
     .expect("the pair message is valid")
 }
 
-fn connected_core() -> (Core, ManualClock, Offer) {
-    let (mut core, clock) = core_at(0);
-    let first = present_pairing(&mut core);
-    core.handle(SessionEvent::PeerConnected)
-        .expect("the first peer can connect");
-    core.authenticate_first_frame(&first.pair_frame())
-        .expect("the first peer authenticates");
+fn media_flowing(core: &mut Core) {
     core.handle(SessionEvent::NegotiationCompleted)
         .expect("negotiation completes");
     core.handle(SessionEvent::FirstMediaFrame(MediaFrame {
@@ -78,6 +72,16 @@ fn connected_core() -> (Core, ManualClock, Offer) {
     }))
     .expect("the first frame arrives on time");
     assert_eq!(core.state(), SessionState::Connected);
+}
+
+fn connected_core() -> (Core, ManualClock, Offer) {
+    let (mut core, clock) = core_at(0);
+    let first = present_pairing(&mut core);
+    core.handle(SessionEvent::PeerConnected)
+        .expect("the first peer can connect");
+    core.authenticate_first_frame(&first.pair_frame())
+        .expect("the first peer authenticates");
+    media_flowing(&mut core);
     (core, clock, first)
 }
 
@@ -235,6 +239,44 @@ fn two_peers_racing_for_the_same_token_let_only_the_first_valid_frame_win() {
     assert_eq!(core.session_id(), Some(successor.session_id));
     assert_eq!(core.epoch(), Some(successor.epoch));
     assert_eq!(core.retired_state(), Some(SessionState::Superseded));
+}
+
+#[test]
+fn a_rival_replaying_the_consumed_token_after_the_successor_connects_is_refused() {
+    let (mut core, _clock, _first) = connected_core();
+    let successor = present_pairing(&mut core);
+    core.handle(SessionEvent::PeerConnected)
+        .expect("the successor peer can connect");
+    core.authenticate_first_frame(&successor.pair_frame())
+        .expect("the successor authenticates");
+    media_flowing(&mut core);
+    let rival = pair_frame_from_peer(successor.token, RIVAL_PEER_FINGERPRINT);
+
+    let refusal = core
+        .authenticate_first_frame(&rival)
+        .expect_err("a consumed token is refused while connected");
+
+    assert_eq!(refusal, PairingError::Superseded);
+    assert_eq!(core.state(), SessionState::Connected);
+    assert_eq!(core.session_id(), Some(successor.session_id));
+    assert_eq!(core.epoch(), Some(successor.epoch));
+    assert_eq!(core.retired_state(), Some(SessionState::Superseded));
+}
+
+#[test]
+fn the_predecessor_token_replayed_while_connected_is_refused_as_superseded() {
+    let (mut core, _clock, first) = connected_core();
+    present_pairing(&mut core);
+
+    let refusal = core
+        .authenticate_first_frame(&first.pair_frame())
+        .expect_err("a token already consumed by the predecessor is refused");
+
+    assert_eq!(refusal, PairingError::Superseded);
+    assert_eq!(core.state(), SessionState::Connected);
+    assert_eq!(core.session_id(), Some(first.session_id));
+    assert_eq!(core.epoch(), Some(first.epoch));
+    assert_eq!(core.retired_state(), None);
 }
 
 #[test]
