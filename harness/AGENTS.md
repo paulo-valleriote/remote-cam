@@ -52,7 +52,7 @@
 ### 5. Tests and lint
 
 - `make test` runs `cargo test --workspace` from inside `harness/`; `make lint` runs `rustfmt --check` and Clippy with `-D warnings` for the same workspace.
-- Tests exercise the public harness API and the binary's exit code and output, not private helpers.
+- Integration tests exercise the public harness API and the binary's exit code and output. Unit tests may cover private helpers only when that behavior cannot be exercised through a public surface.
 - The harness is not shipped, but REC-25 requires ≥90% line coverage for `remotecam-harness`; `make coverage` enforces it alongside the delivered-package thresholds.
 
 ### 6. Before modifying
