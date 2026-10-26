@@ -1,6 +1,7 @@
 pub mod certificate;
 pub mod client;
 mod error;
+pub mod frame;
 pub mod listener;
 pub mod material;
 
@@ -9,6 +10,7 @@ pub use certificate::{
     sha256_fingerprint,
 };
 pub use client::{ClientChannel, PinnedClient};
+pub use frame::{read_frame, write_frame};
 pub use error::{PairingError, classify_io_error, classify_rustls_error};
 pub use listener::{ALPN_PROTOCOL, ListenerError, PairingListener, ServerChannel, reject_socket};
 pub use material::{
