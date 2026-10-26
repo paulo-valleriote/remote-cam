@@ -21,6 +21,7 @@ decision was made and why.
 | [0013](0013-superseded-as-retired-state.md) | `SUPERSEDED` is the predecessor's retired state, not a resting state |
 | [0014](0014-length-prefixed-signaling-frames.md) | Signaling frames on the pairing channel are length-prefixed |
 | [0015](0015-signaling-refusal-order-and-codes.md) | Signaling refusals follow one validation order and carry one code |
+| [0016](0016-origin-throttle-and-listener-lifecycle.md) | Pairing attempts are throttled per origin; the listener lifecycle stays listener-wide |
 
 Add a new ADR by scanning this directory for the highest number and
 incrementing it. To revisit a decision, write a new ADR that supersedes the old

@@ -1,7 +1,8 @@
+mod common;
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use remotecam_pairing::throttle::{OriginThrottle, ThrottlePolicy};
 use remotecam_pairing::{EphemeralCertificate, PairingListener, PinnedClient};
 use remotecam_protocol::ReasonCode;
 use tokio::io::AsyncReadExt;
@@ -12,10 +13,7 @@ async fn listener() -> PairingListener {
     PairingListener::bind_loopback(EphemeralCertificate::generate().expect("certificate"))
         .await
         .expect("listener")
-        .with_origin_throttle(OriginThrottle::with_policy(ThrottlePolicy {
-            attempt_limit: usize::MAX,
-            ..ThrottlePolicy::default()
-        }))
+        .with_origin_throttle(common::unlimited_attempts())
 }
 
 #[tokio::test]

@@ -1,6 +1,6 @@
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 
-use remotecam_pairing::throttle::{Admission, OriginThrottle};
+use remotecam_pairing::throttle::{Admission, OriginThrottle, ThrottlePolicy};
 use remotecam_session_core::Timestamp;
 
 fn origin(last: u8) -> IpAddr {
@@ -114,4 +114,79 @@ fn a_quiet_origin_starts_over_at_the_first_block() {
             blocked_for_millis: 60_000
         }
     );
+}
+
+fn v6(prefix_subnet: u16, host: u16) -> IpAddr {
+    IpAddr::V6(Ipv6Addr::new(
+        0x2001,
+        0xdb8,
+        0,
+        prefix_subnet,
+        0,
+        0,
+        0,
+        host,
+    ))
+}
+
+#[test]
+fn addresses_inside_one_ipv6_64_prefix_share_one_budget() {
+    let throttle = OriginThrottle::new();
+
+    for host in 1..=5 {
+        assert_eq!(throttle.admit(v6(1, host), at(0)), Admission::Admitted);
+    }
+
+    assert!(matches!(
+        throttle.admit(v6(1, 6), at(0)),
+        Admission::Refused { .. }
+    ));
+    assert_eq!(throttle.admit(v6(2, 1), at(0)), Admission::Admitted);
+}
+
+#[test]
+fn an_ipv4_mapped_ipv6_address_is_the_same_origin_as_its_ipv4_address() {
+    let throttle = OriginThrottle::new();
+    let mapped = IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x000a));
+    for _ in 0..5 {
+        throttle.admit(origin(10), at(0));
+    }
+
+    assert!(matches!(
+        throttle.admit(mapped, at(0)),
+        Admission::Refused { .. }
+    ));
+}
+
+fn small_table() -> OriginThrottle {
+    OriginThrottle::with_policy(ThrottlePolicy {
+        max_origins: 2,
+        ..ThrottlePolicy::default()
+    })
+}
+
+#[test]
+fn a_full_table_evicts_an_unblocked_origin_before_a_blocked_one() {
+    let throttle = small_table();
+    exhaust(&throttle, origin(10), 0);
+    throttle.admit(origin(11), at(1_000));
+
+    throttle.admit(origin(12), at(2_000));
+
+    assert_eq!(throttle.tracked_origins(), 2);
+    assert!(matches!(
+        throttle.admit(origin(10), at(3_000)),
+        Admission::Refused { .. }
+    ));
+}
+
+#[test]
+fn a_full_table_releases_origins_that_stayed_quiet() {
+    let throttle = small_table();
+    throttle.admit(origin(10), at(0));
+    throttle.admit(origin(11), at(0));
+
+    throttle.admit(origin(12), at(30 * 60_000));
+
+    assert_eq!(throttle.tracked_origins(), 1);
 }
