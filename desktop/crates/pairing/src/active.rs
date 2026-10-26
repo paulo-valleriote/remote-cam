@@ -81,6 +81,13 @@ pub(crate) async fn send_close(
     write_frame(channel, &frame).await
 }
 
+pub(crate) fn close_code_for(reason: ReasonCode) -> Option<CloseCode> {
+    match reason {
+        ReasonCode::Superseded => Some(CloseCode::Superseded),
+        _ => None,
+    }
+}
+
 fn unowned() -> PairingError {
     PairingError::new(
         ReasonCode::InternalError,
