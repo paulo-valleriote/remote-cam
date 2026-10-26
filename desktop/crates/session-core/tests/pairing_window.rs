@@ -2,8 +2,8 @@ use remotecam_protocol::ReasonCode;
 use remotecam_protocol::signaling::{Limits, SignalingMessage};
 use remotecam_session_core::testing::{ManualClock, SeededRandomSource};
 use remotecam_session_core::{
-    Effect, PAIRING_WINDOW_MILLIS, PairingMaterial, SessionCore, SessionEvent, SessionState,
-    Timestamp,
+    Effect, EpochSource, FIRST_MEDIA_FRAME_TIMEOUT_MILLIS, PAIRING_WINDOW_MILLIS, PairingError,
+    PairingMaterial, SessionCore, SessionEvent, SessionState, Timestamp,
 };
 
 const DESKTOP_FINGERPRINT: [u8; 32] = [0x44; 32];
@@ -35,11 +35,10 @@ fn pair_frame(material: &PairingMaterial) -> Vec<u8> {
     .expect("the pair message is valid")
 }
 
-/// Asserts that `effects` refuse the attempt and present a fresh one at `epoch`.
 fn assert_refused_and_replaced(
     effects: Vec<Effect>,
     reason: ReasonCode,
-    epoch: u64,
+    epoch: u32,
 ) -> PairingMaterial {
     let [refusal, presented]: [Effect; 2] = effects.try_into().expect("two effects");
     let Effect::PresentPairing(fresh) = presented else {
@@ -136,4 +135,45 @@ fn a_new_core_starts_its_epoch_sequence_at_one() {
 
     assert_eq!(start(&mut first).epoch(), 1);
     assert_eq!(start(&mut second).epoch(), 1);
+}
+
+#[test]
+fn a_consumed_token_is_refused_with_token_already_used_after_the_session_ends() {
+    let (mut core, clock) = core_at(0);
+    let material = start(&mut core);
+    core.handle(SessionEvent::PeerConnected)
+        .expect("the qr is still valid when the peer connects");
+    core.authenticate_first_frame(&pair_frame(&material))
+        .expect("the matching token authenticates");
+    core.handle(SessionEvent::NegotiationCompleted)
+        .expect("negotiation starts the first-frame timer");
+    clock.advance(FIRST_MEDIA_FRAME_TIMEOUT_MILLIS + 1);
+    core.handle(SessionEvent::FirstFrameTimedOut)
+        .expect("the first frame never arrived");
+
+    let refusal = core.authenticate_first_frame(&pair_frame(&material));
+
+    assert_eq!(refusal, Err(PairingError::TokenAlreadyUsed));
+    assert_eq!(core.state(), SessionState::Idle);
+}
+
+#[test]
+fn cores_sharing_one_epoch_source_never_reuse_an_epoch() {
+    let epochs = EpochSource::new();
+    let clock = ManualClock::new(Timestamp::ZERO);
+    let mut first = SessionCore::with_epoch_source(
+        clock.clone(),
+        SeededRandomSource::new(7),
+        DESKTOP_FINGERPRINT,
+        epochs.clone(),
+    );
+    let mut second = SessionCore::with_epoch_source(
+        clock,
+        SeededRandomSource::new(8),
+        DESKTOP_FINGERPRINT,
+        epochs,
+    );
+
+    assert_eq!(start(&mut first).epoch(), 1);
+    assert_eq!(start(&mut second).epoch(), 2);
 }

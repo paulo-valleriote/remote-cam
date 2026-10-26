@@ -31,7 +31,6 @@ impl ManualClock {
         self.now_millis.fetch_add(millis, Ordering::SeqCst);
     }
 
-    /// Positions the clock at `now`, which may be earlier than its reading.
     pub fn set(&self, now: Timestamp) {
         self.now_millis.store(now.as_millis(), Ordering::SeqCst);
     }

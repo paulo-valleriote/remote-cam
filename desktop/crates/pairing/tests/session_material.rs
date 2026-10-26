@@ -43,10 +43,7 @@ async fn qr_material_authenticates_the_session_core_pairing() {
         payload.session_id,
         *session_material.session_id().as_bytes()
     );
-    assert_eq!(
-        payload.epoch,
-        u32::try_from(session_material.epoch()).expect("session epoch fits QR")
-    );
+    assert_eq!(payload.epoch, session_material.epoch());
     assert_eq!(payload.pairing_token, *session_material.token().as_bytes());
 
     core.handle(SessionEvent::PeerConnected)

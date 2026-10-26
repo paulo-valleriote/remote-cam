@@ -1,5 +1,5 @@
 use remotecam_pairing::{
-    EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient, reject_socket,
+    EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient,
 };
 use remotecam_protocol::signaling::{Limits, SignalingMessage};
 use remotecam_protocol::{Endpoint, ReasonCode};
@@ -69,7 +69,6 @@ fn pair_frame(token: &[u8; 32]) -> Vec<u8> {
     .expect("the pair message is valid")
 }
 
-/// Returns the refused reason and the fresh material from a refusal's effects.
 fn refusal(effects: Vec<Effect>) -> (ReasonCode, PairingMaterial) {
     let mut reason = None;
     let mut fresh = None;
@@ -102,18 +101,25 @@ async fn a_peer_after_the_qr_window_is_closed_before_the_handshake() {
         received
     });
 
-    let socket = fixture.listener.accept_socket().await.expect("tcp accept");
-    let effects = fixture
-        .core
-        .handle(SessionEvent::PeerConnected)
-        .expect("an expired qr is answered, not rejected as a transition");
-    let (code, fresh) = refusal(effects);
-    let error = reject_socket(socket, code);
+    let mut fresh = None;
+    let refused = fixture
+        .listener
+        .accept_admitted(|| {
+            let effects = fixture
+                .core
+                .handle(SessionEvent::PeerConnected)
+                .expect("an expired qr is answered, not rejected as a transition");
+            let (code, material) = refusal(effects);
+            fresh = Some(material);
+            Some(code)
+        })
+        .await;
 
+    let error = refused.expect_err("the expired qr is refused");
     assert_eq!(error.code(), ReasonCode::QrExpired);
     assert!(peer.await.expect("peer task").is_empty());
     assert_eq!(fixture.listener.attempts(), 1);
-    assert_eq!(fresh.epoch(), 2);
+    assert_eq!(fresh.expect("fresh material").epoch(), 2);
     assert_eq!(fixture.core.state(), SessionState::PairingReady);
 }
 
