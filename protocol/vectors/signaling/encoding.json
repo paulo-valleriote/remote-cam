@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Pinned canonical frames for the emitting direction. Every vector must encode to exactly expected_frame and parse back to the same message. Executed by the Rust contract crate; the Kotlin emitter joins with REC-14.",
+  "description": "Pinned canonical frames for the emitting direction. Every vector must encode to exactly expected_frame and parse back to the same message. Executed by the Rust contract crate; executed by both the Rust and the Kotlin emitters.",
   "vectors": [
     {
       "id": "enc-pair",

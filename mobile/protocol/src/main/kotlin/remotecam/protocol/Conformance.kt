@@ -37,11 +37,15 @@ data class SignalingResult(
 /** Observed state of the closed reason-code enumeration. */
 data class ReasonCodeResult(val count: Int, val ok: Boolean)
 
+/** Observed outcome for one encoding vector. */
+data class EncodingResult(val id: String, val encodedBytes: Int)
+
 /** Canonical result document, byte-comparable with the Rust implementation. */
 data class ConformanceReport(
     val qr: List<QrResult>,
     val signaling: List<SignalingResult>,
     val reasonCodes: ReasonCodeResult,
+    val encoding: List<EncodingResult>,
 ) {
     fun passed(): Boolean = failures().isEmpty()
 
@@ -71,6 +75,19 @@ data class ConformanceReport(
             buildJsonObject {
                 put("count", JsonPrimitive(reasonCodes.count))
                 put("ok", JsonPrimitive(reasonCodes.ok))
+            },
+        )
+        put(
+            "encoding",
+            buildJsonArray {
+                encoding.forEach {
+                    add(
+                        buildJsonObject {
+                            put("id", JsonPrimitive(it.id))
+                            put("encoded_bytes", JsonPrimitive(it.encodedBytes))
+                        },
+                    )
+                }
             },
         )
     }.toString()
@@ -107,7 +124,26 @@ object Conformance {
         val qr = runQrVectors(vectorsDirectory.resolve("qr"))
         val signaling = runSignalingScenarios(vectorsDirectory.resolve("signaling/scenarios.json"))
         val reasonCodes = checkReasonCodes(vectorsDirectory.parent.resolve("reason-codes.json"))
-        return ConformanceReport(qr, signaling, reasonCodes)
+        val encoding = runEncodingVectors(vectorsDirectory.resolve("signaling/encoding.json"))
+        return ConformanceReport(qr, signaling, reasonCodes, encoding)
+    }
+
+    private fun runEncodingVectors(path: Path): List<EncodingResult> {
+        val file = Json.parseToJsonElement(Files.readAllBytes(path).decodeToString()).jsonObject
+        return file["vectors"]!!.jsonArray.map { element ->
+            val vector = element.jsonObject
+            val id = vector.string("id")
+            val expectedFrame = vector.string("expected_frame")
+            val parsed = SignalingParser.parse(vector["message"]!!.toString())
+            val message = (parsed as? SignalingParseResult.Accepted)?.message
+                ?: error("$id: the vector message is not valid")
+            val encoded = SignalingEncoder.encode(message)
+            check(encoded == expectedFrame) { "$id: canonical frame mismatch: observed $encoded" }
+            val reparsed = (SignalingParser.parse(encoded) as? SignalingParseResult.Accepted)?.message
+                ?: error("$id: the encoded frame is rejected")
+            check(reparsed == message) { "$id: encode then parse changed the message" }
+            EncodingResult(id, encoded.encodeToByteArray().size)
+        }
     }
 
     private fun runQrVectors(directory: Path): List<QrResult> {

@@ -23,3 +23,4 @@ dependencyResolutionManagement {
 rootProject.name = "remotecam"
 
 include(":protocol")
+include(":session-core")

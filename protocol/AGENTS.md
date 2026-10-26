@@ -55,19 +55,19 @@
 - **Canonical order:** `version`, `type`, then the fields of the message in schema declaration order, with no whitespace. Optional fields that were never supplied are omitted. The order is pinned by `signaling/encoding.json`, not left to a map implementation.
 - **Validated values:** `Limits`, `OfferSdp`, `AnswerSdp`, `Candidates`, `Stats`, `CloseCode`, `ErrorCode` and `ErrorText` reject out-of-contract values at construction. Parsing and application code share those constructors, so a message that exists as a typed value re-parses to itself and no code path can emit an invalid message.
 - **Size:** `encode()` refuses a frame above `MAX_MESSAGE_BYTES = 16 KiB` (`EncodeError::FrameTooLarge`). A validated message can still be refused when JSON escaping grows the frame past the cap.
-- **Refusals:** the validation order and the code of each refusal are in ADR-0015. `OfferSdp` accepts only `sendonly`/`inactive` audio and video sections, `AnswerSdp` only `recvonly`/`inactive`; data channels and non-host, non-UDP or non-private `a=candidate` lines are `invalid_message`. Kotlin enforces none of the SDP policy until REC-14.
-- **Parity:** Rust executes the encoding vectors today; the Kotlin encoder joins the same vectors with REC-14.
+- **Refusals:** the validation order and the code of each refusal are in ADR-0015. `OfferSdp` accepts only `sendonly`/`inactive` audio and video sections, `AnswerSdp` only `recvonly`/`inactive`; data channels and non-host, non-UDP or non-private `a=candidate` lines are `invalid_message`. Kotlin does not enforce the SDP policy yet.
+- **Parity:** both the Rust and the Kotlin encoder execute the encoding vectors, and `compare_conformance.py` compares the results.
 - **Wire freeze:** ADR-0002 still applies. Adding a message type, field or ordering rule is a version decision, not an implementation change.
 
 ### 5. Conformance harness
 
 - Vectors in `protocol/vectors/`:
   - `qr/` — QR payload vectors (`qr/*.json`).
-  - `signaling/scenarios.json` — signaling scenarios.
+  - `signaling/scenarios.json` — `kind = message` scenarios plus `kind = handshake` scenarios. Each handshake scenario has a `layer` (ADR-0018): `core` carries `steps` and the expected state, transition, epoch, violations and reason code; `qr` names a `qr_vector`; `transport` is decided below the session core and is reported as not executed.
   - `signaling/encoding.json` — canonical frames and encode→parse round-trip.
   - `reason-codes/all-codes.json` — reason code verification.
-- `run_conformance.sh` runs Rust binary (`bin/conformance.rs`).
-- `compare_conformance.py` compares Rust vs Kotlin results (ensures platforms do not diverge).
+- `run_conformance.sh` runs the Rust binaries (`bin/conformance.rs` in `protocol`, `bin/handshake_conformance.rs` in `session-core`) and the Kotlin `ContractTest` and `HandshakeConformanceTest`.
+- `compare_conformance.py` compares Rust vs Kotlin results for QR, message, encoding and handshake vectors. It fails on any divergence and on any vector id that either report omits, so nothing is skipped silently. Its own tests are in `vectors/tests/`.
 - Can be run via `make spike-interop` (if `f0-codec-interop` delivered), `make conformance`, or directly `cargo run --bin conformance -- ...`.
 
 ### 6. Code and structure

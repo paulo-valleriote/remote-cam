@@ -11,6 +11,7 @@ use remotecam_protocol::signaling::{
 };
 use zeroize::Zeroize;
 
+pub mod conformance;
 pub mod testing;
 pub mod token;
 

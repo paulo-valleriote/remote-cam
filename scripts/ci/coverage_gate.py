@@ -3,7 +3,7 @@
 Enforces ≥ 90 % line coverage for ``desktop/crates/protocol``,
 ``desktop/crates/session-core`` and ``desktop/crates/pairing`` (via
 ``cargo-llvm-cov``), the product harness (via ``cargo-llvm-cov``), and
-``mobile/protocol`` (via JaCoCo). ``spikes/`` is exempt as a recorded deviation
+``mobile/protocol`` and ``mobile/session-core`` (via JaCoCo). ``spikes/`` is exempt as a recorded deviation
 (T117); the harness has its own REC-25 gate despite not being shipped.
 
 Usage::
@@ -13,7 +13,8 @@ Usage::
         --rust-session-core-summary <cargo-llvm-cov --summary-only output for remotecam-session-core> \
         --rust-pairing-summary <cargo-llvm-cov --summary-only output for remotecam-pairing> \
         --rust-harness-summary <cargo-llvm-cov --summary-only output for remotecam-harness> \
-        --jacoco-report <jacocoTestReport.xml>
+        --jacoco-report <jacocoTestReport.xml for mobile/protocol> \
+        --jacoco-session-core-report <jacocoTestReport.xml for mobile/session-core>
 
 Exit status is 1 when any supplied package or the harness is below 90 %.
 """
@@ -83,6 +84,10 @@ def main() -> int:
         "--jacoco-report",
         help="Path to JaCoCo XML report for mobile/protocol",
     )
+    parser.add_argument(
+        "--jacoco-session-core-report",
+        help="Path to JaCoCo XML report for mobile/session-core",
+    )
     args = parser.parse_args()
 
     failures = []
@@ -107,15 +112,21 @@ def main() -> int:
                 f"{label} coverage {rust_pct:.2f}% below {THRESHOLD}% threshold"
             )
 
-    if args.jacoco_report:
-        jacoco_pct = jacoco_coverage(args.jacoco_report)
+    jacoco_reports = [
+        ("Kotlin protocol", args.jacoco_report),
+        ("Kotlin session core", args.jacoco_session_core_report),
+    ]
+    for label, report_path in jacoco_reports:
+        if not report_path:
+            continue
+        jacoco_pct = jacoco_coverage(report_path)
         if jacoco_pct is None:
-            print("error: could not parse JaCoCo protocol coverage report")
+            print(f"error: could not parse {label} coverage report")
             return 1
-        print(f"Android protocol coverage: {jacoco_pct:.2f}%")
+        print(f"{label} coverage: {jacoco_pct:.2f}%")
         if jacoco_pct < THRESHOLD:
             failures.append(
-                f"Android protocol coverage {jacoco_pct:.2f}% below {THRESHOLD}% threshold"
+                f"{label} coverage {jacoco_pct:.2f}% below {THRESHOLD}% threshold"
             )
 
     if failures:

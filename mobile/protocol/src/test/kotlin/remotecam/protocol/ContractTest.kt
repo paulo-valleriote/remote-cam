@@ -20,6 +20,12 @@ class ContractTest {
         assertEquals(43, report.signaling.size)
         assertEquals(26, report.reasonCodes.count)
         assertTrue(report.reasonCodes.ok)
+        assertEquals(
+            listOf("enc-pair", "enc-ping"),
+            report.encoding.map { it.id }.filter { it in setOf("enc-pair", "enc-ping") },
+        )
+        assertTrue(report.encoding.all { it.encodedBytes > 0 })
+        assertTrue(report.toJson().contains("\"encoding\""))
 
         System.getenv("CONFORMANCE_OUTPUT")?.let { output ->
             Files.write(Path.of(output), (report.toJson() + "\n").toByteArray())
@@ -208,6 +214,7 @@ class ContractTest {
             qr = listOf(QrResult("minimal-v1", true, null, "00", null)),
             signaling = listOf(SignalingResult("msg-ping-valid", "message", true, null)),
             reasonCodes = ReasonCodeResult(26, true),
+            encoding = listOf(EncodingResult("enc-ping", 25)),
         )
         assertTrue(report.passed())
         val json = report.toJson()
