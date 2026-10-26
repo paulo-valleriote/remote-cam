@@ -74,7 +74,6 @@ fn connected_core() -> (Core, ManualClock, Offer) {
     (core, clock, first)
 }
 
-/// With no pending QR left, a peer that connects lost the race for the active session.
 fn assert_successor_connect_refused(core: &mut Core) {
     let effects = core
         .handle(SessionEvent::PeerConnected)

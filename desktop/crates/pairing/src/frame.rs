@@ -4,32 +4,31 @@ use zeroize::Zeroizing;
 
 use crate::error::PairingError;
 
-const FRAME_TERMINATOR: u8 = b'\n';
+const LENGTH_PREFIX_BYTES: usize = 4;
 
-/// Reads one newline-terminated signaling frame, without the terminator.
 pub async fn read_frame(
     reader: &mut (impl AsyncRead + Unpin),
 ) -> Result<Zeroizing<Vec<u8>>, PairingError> {
-    let mut frame = Zeroizing::new(Vec::new());
-    loop {
-        let mut byte = [0_u8; 1];
-        reader.read_exact(&mut byte).await.map_err(|_| {
-            PairingError::new(ReasonCode::InvalidMessage, "the peer ended mid-frame")
-        })?;
-        if byte[0] == FRAME_TERMINATOR {
-            return Ok(frame);
-        }
-        if frame.len() == MAX_SIGNALING_MESSAGE_BYTES {
-            return Err(PairingError::new(
-                ReasonCode::InvalidMessage,
-                "the frame exceeds the signaling limit",
-            ));
-        }
-        frame.push(byte[0]);
+    let mut prefix = [0_u8; LENGTH_PREFIX_BYTES];
+    reader
+        .read_exact(&mut prefix)
+        .await
+        .map_err(|_| PairingError::new(ReasonCode::InvalidMessage, "the peer ended mid-frame"))?;
+    let length = u32::from_be_bytes(prefix) as usize;
+    if length > MAX_SIGNALING_MESSAGE_BYTES {
+        return Err(PairingError::new(
+            ReasonCode::InvalidMessage,
+            "the frame exceeds the signaling limit",
+        ));
     }
+    let mut frame = Zeroizing::new(vec![0_u8; length]);
+    reader
+        .read_exact(&mut frame[..])
+        .await
+        .map_err(|_| PairingError::new(ReasonCode::InvalidMessage, "the peer ended mid-frame"))?;
+    Ok(frame)
 }
 
-/// Writes `frame` followed by the newline terminator and flushes.
 pub async fn write_frame(
     writer: &mut (impl AsyncWrite + Unpin),
     frame: &[u8],
@@ -40,12 +39,11 @@ pub async fn write_frame(
             "the frame exceeds the signaling limit",
         ));
     }
+    let mut wire = Vec::with_capacity(LENGTH_PREFIX_BYTES + frame.len());
+    wire.extend_from_slice(&(frame.len() as u32).to_be_bytes());
+    wire.extend_from_slice(frame);
     let failed = |_| PairingError::new(ReasonCode::InternalError, "the frame could not be written");
-    writer.write_all(frame).await.map_err(failed)?;
-    writer
-        .write_all(&[FRAME_TERMINATOR])
-        .await
-        .map_err(failed)?;
+    writer.write_all(&wire).await.map_err(failed)?;
     writer.flush().await.map_err(failed)
 }
 
@@ -56,7 +54,7 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
 
     #[tokio::test]
-    async fn a_written_frame_ends_with_one_newline_and_reads_back_without_it() {
+    async fn a_written_frame_is_prefixed_with_its_big_endian_length() {
         let (mut left, mut right) = duplex(64 * 1024);
 
         write_frame(&mut left, b"{\"type\":\"close\"}")
@@ -66,7 +64,7 @@ mod tests {
 
         let mut raw = Vec::new();
         right.read_to_end(&mut raw).await.expect("raw bytes");
-        assert_eq!(raw, b"{\"type\":\"close\"}\n");
+        assert_eq!(raw, b"\x00\x00\x00\x10{\"type\":\"close\"}");
 
         let (mut left, mut right) = duplex(64 * 1024);
         left.write_all(&raw).await.expect("send");
@@ -77,10 +75,23 @@ mod tests {
     #[tokio::test]
     async fn frames_are_read_one_at_a_time() {
         let (mut left, mut right) = duplex(1024);
-        left.write_all(b"one\ntwo\n").await.expect("send");
+        left.write_all(b"\x00\x00\x00\x03one\x00\x00\x00\x03two")
+            .await
+            .expect("send");
 
         assert_eq!(&read_frame(&mut right).await.expect("first")[..], b"one");
         assert_eq!(&read_frame(&mut right).await.expect("second")[..], b"two");
+    }
+
+    #[tokio::test]
+    async fn an_empty_frame_is_a_zero_length_prefix() {
+        let (mut left, mut right) = duplex(1024);
+        write_frame(&mut left, b"").await.expect("empty is allowed");
+        drop(left);
+
+        let mut raw = Vec::new();
+        right.read_to_end(&mut raw).await.expect("raw bytes");
+        assert_eq!(raw, b"\x00\x00\x00\x00");
     }
 
     #[tokio::test]
@@ -101,8 +112,10 @@ mod tests {
             .expect_err("over the limit is refused on write");
         assert_eq!(error.code(), ReasonCode::InvalidMessage);
 
-        left.write_all(&over).await.expect("raw send");
-        left.write_all(b"\n").await.expect("raw send");
+        let length = u32::try_from(over.len()).expect("the test length fits");
+        left.write_all(&length.to_be_bytes())
+            .await
+            .expect("raw prefix");
         let error = read_frame(&mut right)
             .await
             .expect_err("over the limit is refused on read");
@@ -112,7 +125,7 @@ mod tests {
     #[tokio::test]
     async fn a_truncated_frame_is_refused() {
         let (mut left, mut right) = duplex(1024);
-        left.write_all(b"no terminator").await.expect("send");
+        left.write_all(b"\x00\x00\x00\x0aabc").await.expect("send");
         drop(left);
 
         let error = read_frame(&mut right)
