@@ -1,4 +1,4 @@
 .PHONY: build-mobile
 
-build-mobile: ## Assemble the Android contract library (mobile/protocol/build/outputs/aar)
-	$(GRADLE) -p mobile :protocol:assembleDebug
+build-mobile: ## Assemble the pure-JVM contract libraries (mobile/protocol and mobile/session-core jars)
+	$(GRADLE) -p mobile :protocol:assemble :session-core:assemble

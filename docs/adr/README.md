@@ -23,6 +23,7 @@ decision was made and why.
 | [0015](0015-signaling-refusal-order-and-codes.md) | Signaling refusals follow one validation order and carry one code |
 | [0016](0016-origin-throttle-and-listener-lifecycle.md) | Pairing attempts are throttled per origin; the listener lifecycle stays listener-wide |
 | [0017](0017-zero-persistence-inspection-and-memory-scrubbing.md) | Zero persistence is proven by one inspection method; the desktop scrubs freed memory |
+| [0018](0018-kotlin-session-core-parity.md) | The Kotlin session core is a pure-JVM mirror, compared by handshake scenarios |
 
 Add a new ADR by scanning this directory for the highest number and
 incrementing it. To revisit a decision, write a new ADR that supersedes the old

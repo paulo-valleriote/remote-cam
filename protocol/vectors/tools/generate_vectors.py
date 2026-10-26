@@ -240,6 +240,109 @@ def message(
     }
 
 
+def step(action: str, **arguments: object) -> dict:
+    return {"action": action, **arguments}
+
+
+# Handshake scenarios run in one of three layers (ADR-0006, ADR-0018):
+#   core      - both session cores replay `steps` on an injected clock and must
+#               end in `expected_state` via `expected_transition`.
+#   qr        - both implementations decode the referenced QR vector.
+#   transport - decided below the session core (TLS, source address, listener);
+#               executed by the pairing crate tests and reported as not executed
+#               by the cores so that nothing is skipped silently.
+START_AND_CONNECT = [step("start_pairing"), step("peer_connected")]
+PAIR_THEN_CONNECTED = [
+    *START_AND_CONNECT,
+    step("pair", token="latest"),
+    step("negotiation_completed"),
+    step("first_media_frame"),
+]
+HANDSHAKE_PLANS: dict[str, dict] = {
+    "hs-valid-pairing": {
+        "layer": "core",
+        "steps": [*START_AND_CONNECT, step("pair", token="latest")],
+        "expected_state": "negotiating",
+        "expected_transition": "handshaking->negotiating",
+        "expected_epoch": 1,
+        "expected_protocol_violations": 0,
+    },
+    "hs-token-expired": {
+        "layer": "core",
+        "steps": [
+            *START_AND_CONNECT,
+            step("advance_clock", millis=120_000),
+            step("pair", token="latest"),
+        ],
+        "expected_state": "pairing_ready",
+        "expected_transition": "handshaking->pairing_ready",
+        "expected_epoch": 2,
+        "expected_protocol_violations": 0,
+    },
+    "hs-token-reused": {
+        "layer": "core",
+        "steps": [
+            *START_AND_CONNECT,
+            step("pair", token="latest"),
+            step("negotiation_completed"),
+            step("advance_clock", millis=3_001),
+            step("first_frame_timed_out"),
+            *START_AND_CONNECT,
+            step("pair", token="first"),
+        ],
+        "expected_state": "handshaking",
+        "expected_transition": "handshaking->handshaking",
+        "expected_epoch": 2,
+        "expected_protocol_violations": 0,
+    },
+    "hs-token-wrong": {
+        "layer": "core",
+        "steps": [*START_AND_CONNECT, step("pair", token="wrong")],
+        "expected_state": "handshaking",
+        "expected_transition": "handshaking->handshaking",
+        "expected_epoch": 1,
+        "expected_protocol_violations": 0,
+    },
+    "hs-superseded": {
+        "layer": "core",
+        "description": (
+            "A newer QR replaces the session under test; replaying the replaced "
+            "token is refused as superseded."
+        ),
+        "steps": [
+            *PAIR_THEN_CONNECTED,
+            *START_AND_CONNECT,
+            step("pair", token="latest"),
+            step("pair", token="first"),
+        ],
+        "expected_state": "negotiating",
+        "expected_transition": "negotiating->negotiating",
+        "expected_epoch": 2,
+        "expected_protocol_violations": 0,
+    },
+    "hs-protocol-violation": {
+        "layer": "core",
+        "description": (
+            "A frame carrying an epoch below the session's is discarded and "
+            "counted as a protocol violation."
+        ),
+        "steps": [
+            *START_AND_CONNECT,
+            step("pair", token="latest"),
+            step("admit_epoch", epoch=0),
+        ],
+        "expected_state": "negotiating",
+        "expected_transition": "negotiating->negotiating",
+        "expected_epoch": 1,
+        "expected_protocol_violations": 1,
+    },
+    "hs-qr-expired": {"layer": "qr", "qr_vector": "expired"},
+    "hs-qr-malformed": {"layer": "qr", "qr_vector": "bad-magic"},
+    "hs-qr-public-endpoint": {"layer": "qr", "qr_vector": "public-endpoint"},
+    "hs-qr-unsupported-version": {"layer": "qr", "qr_vector": "unknown-version"},
+}
+
+
 def handshake(
     scenario_id: str,
     description: str,
@@ -255,6 +358,7 @@ def handshake(
         "requires_network": requires_network,
         "expected_outcome": "accept" if accepted else "reject",
         "expected_reason_code": reason_code,
+        **HANDSHAKE_PLANS.get(scenario_id, {"layer": "transport"}),
     }
 
 
@@ -869,7 +973,7 @@ def main() -> None:
         VECTORS / "signaling" / "scenarios.json",
         {
             "version": 1,
-            "description": "Pinned signaling and pairing scenarios. kind=message cases are executed by both protocol consumers; kind=handshake cases are executed by the pairing harness.",
+            "description": "Pinned signaling and pairing scenarios. kind=message cases are executed by both protocol consumers; kind=handshake cases carry a layer: core and qr scenarios are executed by both session cores, transport scenarios are reported as not executed by the cores and run in the pairing crate tests.",
             "scenarios": build_signal_scenarios(),
         },
     )
@@ -877,7 +981,7 @@ def main() -> None:
         VECTORS / "signaling" / "encoding.json",
         {
             "version": 1,
-            "description": "Pinned canonical frames for the emitting direction. Every vector must encode to exactly expected_frame and parse back to the same message. Executed by the Rust contract crate; the Kotlin emitter joins with REC-14.",
+            "description": "Pinned canonical frames for the emitting direction. Every vector must encode to exactly expected_frame and parse back to the same message. Executed by the Rust contract crate; executed by both the Rust and the Kotlin emitters.",
             "vectors": build_encoding_vectors(),
         },
     )

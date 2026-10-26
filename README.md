@@ -37,7 +37,7 @@ are listed in [`specs/001-f0-technical-spikes/tasks.md`](specs/001-f0-technical-
 | --- | --- | --- |
 | Rust | 1.99.1 (pinned by `desktop/rust-toolchain.toml` and `harness/rust-toolchain.toml`, MSRV 1.92) | `desktop/`, `harness/` |
 | JDK | 17 | `mobile/` |
-| Android SDK | compileSdk 36, build-tools 36.0.0 | `mobile/` |
+| Android SDK | compileSdk 36, build-tools 36.0.0 | F2 application only; `mobile/` needs just a JDK in F1 |
 | Gradle | 9.6.x | `mobile/` |
 | Python | 3.12 or later | `spikes/tools/` |
 | FFmpeg | 8.1 or later | gate measurements |
@@ -89,8 +89,8 @@ target below is documented here.
 | `make residue` | Run the residue inspection (REC-15): a complete pairing, the session end, the process exit and a restart are each swept for the token, key, fingerprint, certificate and QR payload in process memory, state directories and credential stores; a deliberate leak must be detected. Writes `docs/evidence/f1/rec-15-zero-persistence-linux.json` and exits 1 on any residue. |
 | `make build-desktop-win` | Mirror the workspace to the Windows filesystem (`/mnt/c/Users/<user>/remotecam-win`) and build natively from WSL2; avoids the UNC filesystem error (see `docs/windows-build.md`). |
 | `make sync-desktop-win` | Mirror the working tree to the Windows filesystem without building (helper used by `build-desktop-win`). |
-| `make build-mobile` | Assemble the Android contract library (`mobile/protocol/build/outputs/aar`). |
-| `make test` | Run the desktop, harness, Android and measurement-tooling tests. |
+| `make build-mobile` | Assemble the pure-JVM contract libraries (`mobile/protocol` and `mobile/session-core` jars). |
+| `make test` | Run the desktop, harness, Kotlin and measurement-tooling tests. |
 | `make coverage` | Report coverage for the delivered product packages. |
 | `make lint` | Check Rust formatting, run Clippy and lint the Python tooling. |
 | `make preflight` | Record the reference environment and verify hardware decode. |
@@ -108,7 +108,7 @@ target below is documented here.
 | `make spike-audio` | Run the virtual audio scenario. |
 | `make gate-report` | Assemble the F0 gate report from the evidence. |
 | `make generate-fixtures` | Regenerate the committed synthetic fixtures. |
-| `make conformance` | Run the protocol vectors against the Rust and Kotlin implementations. |
+| `make conformance` | Run the message and handshake vectors against the Rust and Kotlin implementations; any divergence or unexecuted vector fails. |
 | `make validate-evidence` | Validate the recorded evidence against the contracts. |
 | `make clean` | Remove generated build artefacts, never committed evidence. |
 
@@ -137,12 +137,12 @@ GLOSSARY.md Shared domain vocabulary
 2. `cargo test` over the `harness/` workspace;
 3. `cargo test` over each quarantined Rust crate under `spikes/` and each Rust
    spike harness;
-4. the Android contract module's unit tests with JUnit 5;
+4. the Kotlin contract modules' (`mobile/protocol`, `mobile/session-core`) unit tests with JUnit 5;
 5. `pytest` over the spike tooling.
 
 `make coverage` reports `cargo-llvm-cov` coverage for `remotecam-protocol`,
 `remotecam-session-core`, `remotecam-pairing` and `remotecam-harness`, and the
-JaCoCo report for `mobile/protocol`. The ≥90% line threshold applies to the
+JaCoCo reports for `mobile/protocol` and `mobile/session-core`. The ≥90% line threshold applies to the
 delivered packages and, as a REC-25-specific gate, to the non-shipped Harness.
 `spikes/` remains exempt as recorded in the plan's Complexity Tracking.
 

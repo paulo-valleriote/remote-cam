@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Pinned signaling and pairing scenarios. kind=message cases are executed by both protocol consumers; kind=handshake cases are executed by the pairing harness.",
+  "description": "Pinned signaling and pairing scenarios. kind=message cases are executed by both protocol consumers; kind=handshake cases carry a layer: core and qr scenarios are executed by both session cores, transport scenarios are reported as not executed by the cores and run in the pairing crate tests.",
   "scenarios": [
     {
       "id": "msg-pair-valid",
@@ -979,7 +979,24 @@
       "description": "The valid pairing scenario establishes the authenticated channel.",
       "requires_network": true,
       "expected_outcome": "accept",
-      "expected_reason_code": null
+      "expected_reason_code": null,
+      "layer": "core",
+      "steps": [
+        {
+          "action": "start_pairing"
+        },
+        {
+          "action": "peer_connected"
+        },
+        {
+          "action": "pair",
+          "token": "latest"
+        }
+      ],
+      "expected_state": "negotiating",
+      "expected_transition": "handshaking->negotiating",
+      "expected_epoch": 1,
+      "expected_protocol_violations": 0
     },
     {
       "id": "hs-wrong-fingerprint",
@@ -987,7 +1004,8 @@
       "description": "One byte of the certificate fingerprint differs.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "certificate_pin_mismatch"
+      "expected_reason_code": "certificate_pin_mismatch",
+      "layer": "transport"
     },
     {
       "id": "hs-chain-only-trust",
@@ -995,7 +1013,8 @@
       "description": "The peer presents a public-CA chain instead of the pinned certificate.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "certificate_chain_rejected"
+      "expected_reason_code": "certificate_chain_rejected",
+      "layer": "transport"
     },
     {
       "id": "hs-tls-downgrade",
@@ -1003,7 +1022,8 @@
       "description": "The peer offers TLS 1.2 or attempts a downgrade.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "tls_version_unsupported"
+      "expected_reason_code": "tls_version_unsupported",
+      "layer": "transport"
     },
     {
       "id": "hs-token-expired",
@@ -1011,7 +1031,28 @@
       "description": "The pairing token outlived its 120 s window.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "token_expired"
+      "expected_reason_code": "token_expired",
+      "layer": "core",
+      "steps": [
+        {
+          "action": "start_pairing"
+        },
+        {
+          "action": "peer_connected"
+        },
+        {
+          "action": "advance_clock",
+          "millis": 120000
+        },
+        {
+          "action": "pair",
+          "token": "latest"
+        }
+      ],
+      "expected_state": "pairing_ready",
+      "expected_transition": "handshaking->pairing_ready",
+      "expected_epoch": 2,
+      "expected_protocol_violations": 0
     },
     {
       "id": "hs-token-reused",
@@ -1019,7 +1060,44 @@
       "description": "A consumed pairing token is presented again.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "token_already_used"
+      "expected_reason_code": "token_already_used",
+      "layer": "core",
+      "steps": [
+        {
+          "action": "start_pairing"
+        },
+        {
+          "action": "peer_connected"
+        },
+        {
+          "action": "pair",
+          "token": "latest"
+        },
+        {
+          "action": "negotiation_completed"
+        },
+        {
+          "action": "advance_clock",
+          "millis": 3001
+        },
+        {
+          "action": "first_frame_timed_out"
+        },
+        {
+          "action": "start_pairing"
+        },
+        {
+          "action": "peer_connected"
+        },
+        {
+          "action": "pair",
+          "token": "first"
+        }
+      ],
+      "expected_state": "handshaking",
+      "expected_transition": "handshaking->handshaking",
+      "expected_epoch": 2,
+      "expected_protocol_violations": 0
     },
     {
       "id": "hs-token-wrong",
@@ -1027,7 +1105,24 @@
       "description": "A forged pairing token is presented.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "token_invalid"
+      "expected_reason_code": "token_invalid",
+      "layer": "core",
+      "steps": [
+        {
+          "action": "start_pairing"
+        },
+        {
+          "action": "peer_connected"
+        },
+        {
+          "action": "pair",
+          "token": "wrong"
+        }
+      ],
+      "expected_state": "handshaking",
+      "expected_transition": "handshaking->handshaking",
+      "expected_epoch": 1,
+      "expected_protocol_violations": 0
     },
     {
       "id": "hs-source-not-private",
@@ -1035,7 +1130,8 @@
       "description": "The connection originates outside the private ranges.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "source_address_not_private"
+      "expected_reason_code": "source_address_not_private",
+      "layer": "transport"
     },
     {
       "id": "hs-interception-proxy",
@@ -1043,7 +1139,8 @@
       "description": "An intercepting proxy terminates TLS with its own certificate.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "certificate_pin_mismatch"
+      "expected_reason_code": "certificate_pin_mismatch",
+      "layer": "transport"
     },
     {
       "id": "hs-qr-expired",
@@ -1051,7 +1148,9 @@
       "description": "The QR payload expired before it was scanned.",
       "requires_network": false,
       "expected_outcome": "reject",
-      "expected_reason_code": "qr_expired"
+      "expected_reason_code": "qr_expired",
+      "layer": "qr",
+      "qr_vector": "expired"
     },
     {
       "id": "hs-qr-malformed",
@@ -1059,7 +1158,9 @@
       "description": "The QR payload fails structural validation.",
       "requires_network": false,
       "expected_outcome": "reject",
-      "expected_reason_code": "invalid_qr_payload"
+      "expected_reason_code": "invalid_qr_payload",
+      "layer": "qr",
+      "qr_vector": "bad-magic"
     },
     {
       "id": "hs-qr-public-endpoint",
@@ -1067,7 +1168,9 @@
       "description": "The QR payload advertises only a public endpoint.",
       "requires_network": false,
       "expected_outcome": "reject",
-      "expected_reason_code": "no_private_endpoint"
+      "expected_reason_code": "no_private_endpoint",
+      "layer": "qr",
+      "qr_vector": "public-endpoint"
     },
     {
       "id": "hs-qr-unsupported-version",
@@ -1075,7 +1178,9 @@
       "description": "The QR payload version is newer than this build supports.",
       "requires_network": false,
       "expected_outcome": "reject",
-      "expected_reason_code": "unsupported_qr_version"
+      "expected_reason_code": "unsupported_qr_version",
+      "layer": "qr",
+      "qr_vector": "unknown-version"
     },
     {
       "id": "hs-desktop-unreachable",
@@ -1083,7 +1188,8 @@
       "description": "The advertised endpoint is closed or blocked.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "desktop_unreachable"
+      "expected_reason_code": "desktop_unreachable",
+      "layer": "transport"
     },
     {
       "id": "hs-tls-handshake-failed",
@@ -1091,7 +1197,8 @@
       "description": "The TLS handshake fails for a network or protocol reason.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "tls_handshake_failed"
+      "expected_reason_code": "tls_handshake_failed",
+      "layer": "transport"
     },
     {
       "id": "hs-source-subnet-mismatch",
@@ -1099,23 +1206,82 @@
       "description": "The source address is private but outside the announced subnet.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "source_subnet_mismatch"
+      "expected_reason_code": "source_subnet_mismatch",
+      "layer": "transport"
     },
     {
       "id": "hs-superseded",
       "kind": "handshake",
-      "description": "A newer QR supersedes the session under test.",
+      "description": "A newer QR replaces the session under test; replaying the replaced token is refused as superseded.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "superseded"
+      "expected_reason_code": "superseded",
+      "layer": "core",
+      "steps": [
+        {
+          "action": "start_pairing"
+        },
+        {
+          "action": "peer_connected"
+        },
+        {
+          "action": "pair",
+          "token": "latest"
+        },
+        {
+          "action": "negotiation_completed"
+        },
+        {
+          "action": "first_media_frame"
+        },
+        {
+          "action": "start_pairing"
+        },
+        {
+          "action": "peer_connected"
+        },
+        {
+          "action": "pair",
+          "token": "latest"
+        },
+        {
+          "action": "pair",
+          "token": "first"
+        }
+      ],
+      "expected_state": "negotiating",
+      "expected_transition": "negotiating->negotiating",
+      "expected_epoch": 2,
+      "expected_protocol_violations": 0
     },
     {
       "id": "hs-protocol-violation",
       "kind": "handshake",
-      "description": "A second pair message with a stale epoch is discarded and counted.",
+      "description": "A frame carrying an epoch below the session's is discarded and counted as a protocol violation.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "protocol_violation"
+      "expected_reason_code": "protocol_violation",
+      "layer": "core",
+      "steps": [
+        {
+          "action": "start_pairing"
+        },
+        {
+          "action": "peer_connected"
+        },
+        {
+          "action": "pair",
+          "token": "latest"
+        },
+        {
+          "action": "admit_epoch",
+          "epoch": 0
+        }
+      ],
+      "expected_state": "negotiating",
+      "expected_transition": "negotiating->negotiating",
+      "expected_epoch": 1,
+      "expected_protocol_violations": 1
     },
     {
       "id": "hs-internal-error",
@@ -1123,7 +1289,8 @@
       "description": "An unexpected internal fault is reported with a closed code.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "internal_error"
+      "expected_reason_code": "internal_error",
+      "layer": "transport"
     },
     {
       "id": "hs-rate-limited",
@@ -1131,7 +1298,8 @@
       "description": "The sixth attempt from one origin within a minute is refused.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "rate_limited"
+      "expected_reason_code": "rate_limited",
+      "layer": "transport"
     },
     {
       "id": "hs-listener-closed",
@@ -1139,7 +1307,8 @@
       "description": "Ten consecutive failures close the pairing listener.",
       "requires_network": true,
       "expected_outcome": "reject",
-      "expected_reason_code": "listener_closed"
+      "expected_reason_code": "listener_closed",
+      "layer": "transport"
     },
     {
       "id": "hs-flood-second-origin-succeeds",
@@ -1147,7 +1316,8 @@
       "description": "A flood from one origin does not deny a legitimate second origin.",
       "requires_network": true,
       "expected_outcome": "accept",
-      "expected_reason_code": null
+      "expected_reason_code": null,
+      "layer": "transport"
     }
   ]
 }
