@@ -173,7 +173,7 @@ fn a_pair_frame_before_the_successor_connects_does_not_end_the_predecessor() {
 }
 
 #[test]
-fn a_consumed_token_after_takeover_is_refused_with_token_already_used() {
+fn a_consumed_token_presented_while_the_successor_is_active_is_refused_as_superseded() {
     let (mut core, _clock, _first) = connected_core();
     let successor = present_pairing(&mut core);
     core.handle(SessionEvent::PeerConnected)
@@ -184,8 +184,9 @@ fn a_consumed_token_after_takeover_is_refused_with_token_already_used() {
 
     assert_eq!(
         core.authenticate_first_frame(&frame),
-        Err(PairingError::TokenAlreadyUsed)
+        Err(PairingError::Superseded)
     );
+    assert_eq!(core.state(), SessionState::Negotiating);
 }
 
 #[test]

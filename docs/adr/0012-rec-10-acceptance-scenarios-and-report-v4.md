@@ -4,6 +4,7 @@
 - **Supersedes:** ADR-0010 for the report version and scenario set only
 - **Date:** 2026-10-26
 - **Applies from:** REC-35
+- **Amended by:** ADR-0013 (`single-use-refused` expects `superseded`)
 
 ## Context
 

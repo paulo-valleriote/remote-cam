@@ -468,7 +468,7 @@
               "const": "pass"
             },
             "reason_code": {
-              "const": "token_already_used"
+              "const": "superseded"
             }
           }
         }

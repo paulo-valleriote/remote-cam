@@ -265,6 +265,7 @@ pub enum PairingError {
     ProtocolViolation,
     TokenInvalid,
     TokenAlreadyUsed,
+    Superseded,
 }
 
 impl PairingError {
@@ -274,6 +275,7 @@ impl PairingError {
             Self::ProtocolViolation => ReasonCode::ProtocolViolation,
             Self::TokenInvalid => ReasonCode::TokenInvalid,
             Self::TokenAlreadyUsed => ReasonCode::TokenAlreadyUsed,
+            Self::Superseded => ReasonCode::Superseded,
         }
     }
 }
@@ -439,12 +441,6 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
 
     /// Authenticates the required first signaling frame from a connected peer.
     pub fn authenticate_first_frame(&mut self, frame: &[u8]) -> Result<Vec<Effect>, PairingError> {
-        if self.state == SessionState::Negotiating
-            || (self.state == SessionState::Connected && self.offer.is_none())
-        {
-            return Err(PairingError::TokenAlreadyUsed);
-        }
-
         let presented = match parse_signaling(frame) {
             Ok(SignalingMessage::Pair {
                 mut token, limits, ..
@@ -459,6 +455,12 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         if presented
             .as_ref()
             .is_some_and(|(token, _)| self.is_consumed(token))
+        {
+            return Err(self.reuse_refusal());
+        }
+
+        if self.state == SessionState::Negotiating
+            || (self.state == SessionState::Connected && self.offer.is_none())
         {
             return Err(PairingError::TokenAlreadyUsed);
         }
@@ -534,6 +536,17 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         self.consumed_tokens
             .iter()
             .fold(false, |found, used| used.matches(token.as_bytes()) | found)
+    }
+
+    fn reuse_refusal(&self) -> PairingError {
+        if matches!(
+            self.state,
+            SessionState::Negotiating | SessionState::Connected
+        ) {
+            PairingError::Superseded
+        } else {
+            PairingError::TokenAlreadyUsed
+        }
     }
 
     fn refuse_pairing_frame(&mut self) {
