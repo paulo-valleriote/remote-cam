@@ -12,11 +12,12 @@ pub mod reason;
 pub mod signaling;
 
 mod address;
+mod sdp;
 
 pub use qr::{Endpoint, QrDecodeError, QrEncodeError, QrPayload};
 pub use reason::{ReasonCategory, ReasonCode};
 pub use signaling::{
-    Candidate, Candidates, CloseCode, EncodeError, ErrorCode, ErrorText, IceComponent,
-    InvalidValue, Limits, MAX_SIGNALING_MESSAGE_BYTES, ParseError, Sdp, SignalingMessage, Stats,
-    ThermalStatus, TransportProtocol, parse_signaling,
+    AnswerSdp, Candidate, Candidates, CloseCode, EncodeError, ErrorCode, ErrorText, IceComponent,
+    InvalidValue, Limits, MAX_SIGNALING_MESSAGE_BYTES, OfferSdp, ParseError, SignalingMessage,
+    Stats, ThermalStatus, TransportProtocol, parse_signaling,
 };

@@ -13,6 +13,7 @@ use serde_json::{Map, Value};
 use crate::address::is_private_address;
 use crate::hex::{decode_hex_exact, encode_hex};
 use crate::reason::ReasonCode;
+use crate::sdp::{SdpRole, is_permitted};
 
 /// Maximum encoded message size. A larger frame is refused.
 pub const MAX_SIGNALING_MESSAGE_BYTES: usize = 16 * 1024;
@@ -89,17 +90,35 @@ impl Limits {
     }
 }
 
-/// A session description body. The contract caps it at 8192 characters.
+fn checked_sdp(text: &str, role: SdpRole) -> Result<String, InvalidValue> {
+    if !(1..=MAX_SDP_CHARS).contains(&text.chars().count()) || !is_permitted(text, role) {
+        return Err(InvalidValue);
+    }
+    Ok(text.to_owned())
+}
+
+/// The SDP body of an `offer`. The contract caps it at 8192 characters and
+/// admits only audio and video sections that the mobile sends and the desktop
+/// receives.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
-pub struct Sdp(String);
+pub struct OfferSdp(String);
 
-impl Sdp {
+impl OfferSdp {
     pub fn new(text: &str) -> Result<Self, InvalidValue> {
-        if !(1..=MAX_SDP_CHARS).contains(&text.chars().count()) {
-            return Err(InvalidValue);
-        }
-        Ok(Self(text.to_owned()))
+        checked_sdp(text, SdpRole::Offer).map(Self)
+    }
+}
+
+/// The SDP body of an `answer`. The desktop never sends, so every section is
+/// `recvonly` or `inactive`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct AnswerSdp(String);
+
+impl AnswerSdp {
+    pub fn new(text: &str) -> Result<Self, InvalidValue> {
+        checked_sdp(text, SdpRole::Answer).map(Self)
     }
 }
 
@@ -433,11 +452,11 @@ pub enum SignalingMessage {
     },
     Offer {
         epoch: u64,
-        sdp: Sdp,
+        sdp: OfferSdp,
     },
     Answer {
         epoch: u64,
-        sdp: Sdp,
+        sdp: AnswerSdp,
     },
     Ice {
         epoch: u64,
@@ -668,15 +687,19 @@ pub fn parse_signaling(input: &[u8]) -> Result<SignalingMessage, ParseError> {
                 accepted_limits,
             })
         }
-        "offer" | "answer" => {
+        "offer" => {
             check_keys(map, &["version", "type", "epoch", "sdp"])?;
             let epoch = parse_epoch(map)?;
-            let sdp = Sdp::new(parse_string(map, "sdp")?).map_err(|_| ParseError::invalid())?;
-            if message_type == "offer" {
-                Ok(SignalingMessage::Offer { epoch, sdp })
-            } else {
-                Ok(SignalingMessage::Answer { epoch, sdp })
-            }
+            let sdp =
+                OfferSdp::new(parse_string(map, "sdp")?).map_err(|_| ParseError::invalid())?;
+            Ok(SignalingMessage::Offer { epoch, sdp })
+        }
+        "answer" => {
+            check_keys(map, &["version", "type", "epoch", "sdp"])?;
+            let epoch = parse_epoch(map)?;
+            let sdp =
+                AnswerSdp::new(parse_string(map, "sdp")?).map_err(|_| ParseError::invalid())?;
+            Ok(SignalingMessage::Answer { epoch, sdp })
         }
         "ice" => {
             check_keys(map, &["version", "type", "epoch", "candidates"])?;

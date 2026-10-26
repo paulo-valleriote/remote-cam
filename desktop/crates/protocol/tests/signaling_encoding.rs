@@ -2,8 +2,8 @@
 //! accepts, and the canonical bytes are pinned independently of the encoder.
 
 use remotecam_protocol::signaling::{
-    Candidate, Candidates, CloseCode, EncodeError, ErrorCode, ErrorText, IceComponent,
-    InvalidValue, Limits, Sdp, SignalingMessage, Stats, ThermalStatus, TransportProtocol,
+    AnswerSdp, Candidate, Candidates, CloseCode, EncodeError, ErrorCode, ErrorText, IceComponent,
+    InvalidValue, Limits, OfferSdp, SignalingMessage, Stats, ThermalStatus, TransportProtocol,
     parse_signaling,
 };
 
@@ -36,11 +36,11 @@ fn every_message() -> Vec<SignalingMessage> {
         },
         SignalingMessage::Offer {
             epoch: 7,
-            sdp: Sdp::new("v=0\r\n").unwrap(),
+            sdp: OfferSdp::new("v=0\r\n").unwrap(),
         },
         SignalingMessage::Answer {
             epoch: 7,
-            sdp: Sdp::new("v=0\r\n").unwrap(),
+            sdp: AnswerSdp::new("v=0\r\n").unwrap(),
         },
         SignalingMessage::Ice {
             epoch: 7,
@@ -218,10 +218,12 @@ fn limits_refuse_values_outside_the_declared_ranges() {
 
 #[test]
 fn sdp_and_error_text_are_bounded_in_characters() {
-    assert_eq!(Sdp::new(""), Err(InvalidValue));
-    assert!(Sdp::new(&"a".repeat(8192)).is_ok());
-    assert_eq!(Sdp::new(&"a".repeat(8193)), Err(InvalidValue));
-    assert!(Sdp::new(&"é".repeat(8192)).is_ok());
+    assert_eq!(OfferSdp::new(""), Err(InvalidValue));
+    assert!(OfferSdp::new(&"a".repeat(8192)).is_ok());
+    assert_eq!(OfferSdp::new(&"a".repeat(8193)), Err(InvalidValue));
+    assert!(OfferSdp::new(&"é".repeat(8192)).is_ok());
+    assert_eq!(AnswerSdp::new(""), Err(InvalidValue));
+    assert_eq!(AnswerSdp::new(&"a".repeat(8193)), Err(InvalidValue));
 
     assert!(ErrorText::new("").is_ok());
     assert!(ErrorText::new(&"x".repeat(200)).is_ok());
@@ -294,7 +296,7 @@ fn close_and_error_codes_are_closed_and_disjoint() {
 
 #[test]
 fn a_frame_above_the_size_cap_is_refused() {
-    let escaping_sdp = Sdp::new(&"\"".repeat(8192)).unwrap();
+    let escaping_sdp = OfferSdp::new(&"\"".repeat(8192)).unwrap();
     assert_eq!(
         SignalingMessage::Offer {
             epoch: 0,
@@ -304,7 +306,7 @@ fn a_frame_above_the_size_cap_is_refused() {
         Err(EncodeError::FrameTooLarge)
     );
 
-    let fitting_sdp = Sdp::new(&"a".repeat(8192)).unwrap();
+    let fitting_sdp = AnswerSdp::new(&"a".repeat(8192)).unwrap();
     let frame = SignalingMessage::Answer {
         epoch: 0,
         sdp: fitting_sdp,

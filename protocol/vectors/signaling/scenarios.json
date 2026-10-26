@@ -49,7 +49,7 @@
         "version": 1,
         "type": "offer",
         "epoch": 7,
-        "sdp": "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n"
+        "sdp": "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=sendonly\r\n"
       },
       "expected_outcome": "accept",
       "expected_reason_code": null
