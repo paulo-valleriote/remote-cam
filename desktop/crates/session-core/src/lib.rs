@@ -23,7 +23,6 @@ pub enum SessionState {
     Negotiating,
     Connected,
     Ended,
-    /// The terminal position of a session replaced by a newer valid pairing.
     Superseded,
 }
 
@@ -212,7 +211,6 @@ pub enum Effect {
     RejectPeer {
         reason: ReasonCode,
     },
-    /// Send the replaced peer a `close` frame with the given code.
     SendClose {
         reason: CloseCode,
     },
@@ -405,17 +403,16 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
         self.state
     }
 
-    /// The identity of the current session, or of the pending offer when no session is active.
+    /// The identity of the pairing in progress, if one has started.
     pub fn session_id(&self) -> Option<SessionId> {
         self.current_identity().map(|identity| identity.session_id)
     }
 
-    /// The generation of the current session, or of the pending offer when no session is active.
+    /// The generation assigned to the current pairing, if one has started.
     pub fn epoch(&self) -> Option<u32> {
         self.current_identity().map(|identity| identity.epoch)
     }
 
-    /// The state a session reached when a newer valid pairing replaced it.
     pub fn retired_state(&self) -> Option<SessionState> {
         self.retired
     }
