@@ -1,9 +1,3 @@
-//! Direction and candidate policy for the SDP bodies of `offer` and `answer`.
-//!
-//! The mobile is the only sender: an offer may only ask the desktop to receive,
-//! an answer may only receive, and neither may carry a data channel or a
-//! candidate that leaves the local network.
-
 use crate::address::is_private_address;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

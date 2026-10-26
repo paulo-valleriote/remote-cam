@@ -1,6 +1,7 @@
 pub mod active;
 pub mod certificate;
 pub mod client;
+mod diagnostics;
 mod error;
 pub mod frame;
 pub mod listener;
@@ -13,11 +14,11 @@ pub use certificate::{
     sha256_fingerprint,
 };
 pub use client::{ClientChannel, PinnedClient};
+pub use diagnostics::DiagnosticEntry;
 pub use error::{PairingError, classify_io_error, classify_rustls_error};
 pub use frame::{read_frame, write_frame};
 pub use listener::{
-    ALPN_PROTOCOL, AdmittedSocket, DiagnosticEntry, ListenerError, PairingListener, ServerChannel,
-    reject_socket,
+    ALPN_PROTOCOL, AdmittedSocket, ListenerError, PairingListener, ServerChannel, reject_socket,
 };
 pub use material::{
     DESKTOP_CAPABILITIES, MaterialError, PairingMaterial, PairingMaterialRequest, SystemUnixClock,

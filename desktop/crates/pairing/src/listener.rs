@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
@@ -18,6 +17,7 @@ use tokio_rustls::server::TlsStream;
 
 use crate::active::{SUPERSEDE_BUDGET, close_code_for, send_close};
 use crate::certificate::EphemeralCertificate;
+use crate::diagnostics::{DiagnosticEntry, DiagnosticLog};
 use crate::error::{PairingError, classify_io_error};
 use crate::material::{MaterialError, PairingMaterial, PairingMaterialRequest, UnixClock};
 use crate::throttle::{Admission, OriginThrottle};
@@ -25,42 +25,6 @@ use crate::throttle::{Admission, OriginThrottle};
 pub const ALPN_PROTOCOL: &[u8] = b"remotecam/1";
 
 const CONSECUTIVE_FAILURE_LIMIT: u32 = 10;
-const DIAGNOSTIC_CAPACITY: usize = 256;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DiagnosticEntry {
-    pub reason: ReasonCode,
-    pub origin: Option<IpAddr>,
-    pub blocked_for_millis: Option<u64>,
-}
-
-impl DiagnosticEntry {
-    fn refusal(reason: ReasonCode, origin: Option<IpAddr>) -> Self {
-        Self {
-            reason,
-            origin,
-            blocked_for_millis: None,
-        }
-    }
-
-    fn throttled(origin: IpAddr, blocked_for_millis: u64) -> Self {
-        Self {
-            reason: ReasonCode::RateLimited,
-            origin: Some(origin),
-            blocked_for_millis: Some(blocked_for_millis),
-        }
-    }
-
-    pub fn is_security_event(&self) -> bool {
-        self.reason.is_security_event()
-    }
-}
-
-#[derive(Debug, Default)]
-struct DiagnosticLog {
-    entries: VecDeque<DiagnosticEntry>,
-    dropped: u64,
-}
 
 #[derive(Debug)]
 pub struct AdmittedSocket(TcpStream);
@@ -171,30 +135,24 @@ impl PairingListener {
     }
 
     pub fn drain_diagnostics(&self) -> Vec<DiagnosticEntry> {
-        let mut log = self
-            .diagnostics
+        self.diagnostics
             .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        log.entries.drain(..).collect()
+            .unwrap_or_else(PoisonError::into_inner)
+            .drain()
     }
 
     pub fn dropped_diagnostics(&self) -> u64 {
         self.diagnostics
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .dropped
+            .dropped()
     }
 
     fn record(&self, entry: DiagnosticEntry) {
-        let mut log = self
-            .diagnostics
+        self.diagnostics
             .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        if log.entries.len() >= DIAGNOSTIC_CAPACITY {
-            log.entries.pop_front();
-            log.dropped = log.dropped.saturating_add(1);
-        }
-        log.entries.push_back(entry);
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(entry);
     }
 
     pub fn local_addr(&self) -> SocketAddr {
@@ -214,8 +172,12 @@ impl PairingListener {
     }
 
     pub fn close(&self) {
+        self.close_after(None);
+    }
+
+    fn close_after(&self, origin: Option<IpAddr>) {
         if !self.closed.swap(true, Ordering::SeqCst) {
-            self.record(DiagnosticEntry::refusal(ReasonCode::ListenerClosed, None));
+            self.record(DiagnosticEntry::refusal(ReasonCode::ListenerClosed, origin));
         }
     }
 
@@ -283,7 +245,7 @@ impl PairingListener {
             }
             Err(error) => {
                 self.record(DiagnosticEntry::refusal(error.code(), origin));
-                self.record_failure();
+                self.record_failure(origin);
                 Err(error)
             }
         }
@@ -304,10 +266,10 @@ impl PairingListener {
         Ok(ServerChannel { inner: stream })
     }
 
-    fn record_failure(&self) {
+    fn record_failure(&self, origin: Option<IpAddr>) {
         let failures = self.consecutive_failures.fetch_add(1, Ordering::SeqCst) + 1;
         if failures >= CONSECUTIVE_FAILURE_LIMIT {
-            self.close();
+            self.close_after(origin);
         }
     }
 }

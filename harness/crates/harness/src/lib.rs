@@ -1383,10 +1383,10 @@ where
 {
     loop {
         let frame = read_signaling_frame(reader).await?;
-        let offer_epoch = match parse_signaling(&frame) {
+        let offer_epoch = match core.admit_signaling_frame(&frame) {
             Ok(SignalingMessage::Offer { epoch, .. }) => epoch,
             Ok(_) => return Err("invalid_message"),
-            Err(error) => return Err(error.code.as_str()),
+            Err(refusal) => return Err(refusal.code().as_str()),
         };
         let Ok(frame_epoch) = u32::try_from(offer_epoch) else {
             return Err("invalid_message");
@@ -1415,7 +1415,7 @@ async fn read_signaling_frame(
             return Ok(frame);
         }
         if frame.len() == MAX_SIGNALING_MESSAGE_BYTES {
-            return Err("invalid_message");
+            return Err("security_violation");
         }
         frame.push(byte[0]);
     }
@@ -1716,7 +1716,7 @@ mod tests {
             writer.write_all(&oversized).await.unwrap();
             assert_eq!(
                 read_signaling_frame(&mut reader).await,
-                Err("invalid_message")
+                Err("security_violation")
             );
 
             let (mut writer, reader) = tokio::io::duplex(1);
