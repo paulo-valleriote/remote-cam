@@ -8,7 +8,10 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use crate::cycle::derive_needles;
 use crate::probe::{END, ENDED, EXIT, IDLE, LIVE, Mode};
-use crate::report::{Canary, Expectation, Inspection, Report, ScopeResult};
+use crate::report::{
+    CREDENTIAL_STORES, Canary, Expectation, Inspection, PROCESS_MEMORY, Report, STATE_DIRECTORY,
+    ScopeResult, TLS_TICKET_STATE,
+};
 use crate::scan::Scanner;
 
 const TICKET_BASIS: &str = "remotecam-pairing::listener::tests::server_config_issues_no_tickets_and_keeps_no_resumable_session";
@@ -133,7 +136,7 @@ fn memory_scope(scanner: &Scanner, probe: Option<&Probe>) -> io::Result<ScopeRes
     let sweep = probe
         .map(|probe| scanner.sweep_process_memory(probe.pid()))
         .transpose()?;
-    let mut scope = ScopeResult::new("process_memory", "scan", sweep.is_some());
+    let mut scope = ScopeResult::new(PROCESS_MEMORY, "scan", sweep.is_some());
     if let Some(sweep) = sweep {
         scope.unreadable_regions = Some(sweep.unreadable_regions);
         scope.findings = sweep.findings.into_iter().collect();
@@ -143,7 +146,7 @@ fn memory_scope(scanner: &Scanner, probe: Option<&Probe>) -> io::Result<ScopeRes
 
 fn state_scope(scanner: &Scanner, sandbox: &Sandbox) -> io::Result<ScopeResult> {
     let tree = scanner.sweep_tree(&sandbox.root)?;
-    let mut scope = ScopeResult::new("state_directory", "scan", true);
+    let mut scope = ScopeResult::new(STATE_DIRECTORY, "scan", true);
     scope.files = Some(tree.files);
     scope.findings = tree.sweep.findings.into_iter().collect();
     Ok(scope)
@@ -153,7 +156,7 @@ fn state_scope(scanner: &Scanner, sandbox: &Sandbox) -> io::Result<ScopeResult> 
 /// something if the same sweep finds a secret planted in a scratch home (the control).
 fn stores_scope(scanner: &Scanner, home: &Path) -> io::Result<ScopeResult> {
     let stores = scanner.sweep_credential_stores(home);
-    let mut scope = ScopeResult::new("credential_stores", "scan", true);
+    let mut scope = ScopeResult::new(CREDENTIAL_STORES, "scan", true);
     scope.findings = stores
         .iter()
         .flat_map(|store| store.findings.iter().copied())
@@ -179,7 +182,7 @@ fn credential_control(scanner: &Scanner) -> io::Result<bool> {
 /// TLS tickets are never issued, so there is nothing to scan for at run time. The invariant
 /// is asserted by a unit test of the pairing crate, which this report names as its basis.
 fn ticket_scope() -> ScopeResult {
-    let mut scope = ScopeResult::new("tls_ticket_state", "unit_test", false);
+    let mut scope = ScopeResult::new(TLS_TICKET_STATE, "unit_test", false);
     scope.basis = Some(TICKET_BASIS);
     scope
 }
