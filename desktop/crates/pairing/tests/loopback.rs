@@ -1,7 +1,8 @@
+mod common;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use remotecam_pairing::throttle::{OriginThrottle, ThrottlePolicy};
 use remotecam_pairing::{
     ALPN_PROTOCOL, EphemeralCertificate, PairingError, PairingListener, PinnedClient,
     classify_io_error, sha256_fingerprint,
@@ -25,10 +26,7 @@ async fn bound_listener() -> (Arc<PairingListener>, [u8; 32], SocketAddr) {
     let listener = PairingListener::bind_loopback(certificate)
         .await
         .expect("listener")
-        .with_origin_throttle(OriginThrottle::with_policy(ThrottlePolicy {
-            attempt_limit: usize::MAX,
-            ..ThrottlePolicy::default()
-        }));
+        .with_origin_throttle(common::unlimited_attempts());
     let address = listener.local_addr();
     (Arc::new(listener), fingerprint, address)
 }
