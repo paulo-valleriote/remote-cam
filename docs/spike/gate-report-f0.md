@@ -73,8 +73,8 @@
   - After application restart artefacts found: []
 
 - **Conditions:**
-  - C-02-residue-restart: Residue inspection after application restart must be empty using the same method as the session-end inspection, on two named reference devices. (status: waived, conditioned phases: F1)
-    - Waiver: waived by Paulo Valleriote on 2026-10-23T17:20:00-03:00, deadline 2026-11-20
+  - C-02-residue-restart: Residue inspection after application restart must be empty using the same method as the session-end inspection, on two named reference devices. (status: waived, conditioned phases: F1; amended by A-1, 2026-10-26: the device part continues as C-02-residual)
+    - Waiver: waived by Paulo Valleriote on 2026-10-23T17:20:00-03:00, deadline 2026-11-20 (original; superseded by A-1 for the F1 core exit)
     - Amended by A-1 (2026-10-26): the F1 core exit no longer depends on this condition; the residue-on-devices part is tracked as C-02-residual with its own deadline 2026-12-20 (see "Amendments to this report").
 
 ### desktop_receive_pipeline — Desktop receive pipeline: latency, resilience, resources, drift, stall recovery
@@ -147,7 +147,7 @@
 - **Closure mode:** closed_with_exceptions
 - **Exit gate:** not_met
 - **Closed at:** 2026-10-23T17:20:00-03:00
-- **Statement:** F0 is closed with recorded exceptions. All five gate verdicts were issued as measured: two no_go (camera injection and the desktop receive pipeline) and three conditional (pairing handshake, codec interoperability, virtual audio and licensing). The phase exit gate is not met. The only matrix evidence recorded is one Google Chrome injection cell of 33.2845 s; it does not satisfy the 1800 s per-cell and five-category matrix criterion, so the injection gate remains no_go. No new matrix evidence was collected at closure. Conditions C-02, C-04 and C-05 are waived with resolution deadlines, and the environmental no_go obligations are carried to F3.
+- **Statement:** F0 is closed with recorded exceptions. All five gate verdicts were issued as measured: two no_go (camera injection and the desktop receive pipeline) and three conditional (pairing handshake, codec interoperability, virtual audio and licensing). The phase exit gate is not met. The only matrix evidence recorded is one Google Chrome injection cell of 33.2845 s; it does not satisfy the 1800 s per-cell and five-category matrix criterion, so the injection gate remains no_go. No new matrix evidence was collected at closure. Conditions C-02, C-04 and C-05 are waived with resolution deadlines (C-02 later amended by A-1, see "Amendments to this report"), and the environmental no_go obligations are carried to F3.
 
 **Sign-offs**
 
@@ -163,7 +163,7 @@
 |------|---------|-------------|--------|-------|----------|
 | camera_injection | no_go | carried | F3 | Paulo Valleriote | 2027-02-15 |
 | desktop_receive_pipeline | no_go | carried | F3 | Paulo Valleriote | 2027-02-15 |
-| pairing_handshake | conditional | waived | F1 | Paulo Valleriote | 2026-11-20 |
+| pairing_handshake | conditional | waived | F1 | Paulo Valleriote | 2026-11-20 (original; amended by A-1: F1 core exit 2026-11-20, C-02-residual 2026-12-20) |
 | codec_interoperability | conditional | waived | F2 | Paulo Valleriote | 2026-12-20 |
 | virtual_audio_and_licensing | conditional | waived | F3 | Paulo Valleriote | 2027-01-15 |
 
@@ -210,7 +210,7 @@
 
 ### A-1 — Separate the F1 core exit from the C-02 device residue (2026-10-26)
 
-- **Amended by:** Paulo Valleriote (technical_lead, as F1 exit owner); security_reviewer role retains C-02-residual.
+- **Amended by:** Paulo Valleriote (technical_lead, as F1 exit owner); the security_reviewer role retains C-02-residual, and the same person signs both roles, so the waiver authority for C-02-residual is recorded here as security_reviewer.
 - **Ticket:** REC-16
 - **Reason:** the single C-02 waiver (deadline 2026-11-20) tied the F1 exit to a residue-restart inspection that needs two named reference devices (Windows 11 and Android) that are not available. The F1 date would therefore depend on unavailable hardware.
 - **Change:**
@@ -220,7 +220,9 @@
 | F1 core exit | Protocol core, session core and product harness exit gate | technical_lead — Paulo Valleriote | 2026-11-20 | no |
 | C-02-residual | Residue inspection after application restart, same method as the session-end inspection, on two named reference devices | security_reviewer — Paulo Valleriote | 2026-12-20 | yes |
 
-- **Status effects:** F1 stays `conditional` (core exit plus C-02-residual and C-04); F2 now depends on the F1 core exit and on C-02-residual; F3 is unchanged.
+- **Deadline rationale:** 2026-12-20 is an assumption by the amender, not given in REC-16. It aligns with the C-04 deadline, falls before the F2 exit gate (the original rule that the inspection is recorded before F2) and before C-05 (2027-01-15) and the F3 carries (2027-02-15).
+- **ID mapping:** C-02-residual continues C-02-residue-restart (same inspection, same method); the original ID is retained in the records above for traceability.
+- **Status effects:** F1 stays `conditional`, but the F1 exit is the core exit only; C-02-residual and C-04 are tracked against F1/F2 and do not gate it; F2 now depends on the F1 core exit and on C-02-residual; F3 is unchanged.
 - **Unchanged:** all five gate verdicts, `pairing_handshake` stays `conditional`; C-04, C-05 and every carried obligation keep their dates.
 - **Note:** this report was originally rendered from `spikes/evidence/gate_report.json`; A-1 is a dated manual amendment and the F0 evidence record is not rewritten.
 
