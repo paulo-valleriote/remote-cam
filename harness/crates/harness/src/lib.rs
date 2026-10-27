@@ -1,4 +1,6 @@
-use remotecam_media_core::testing::SyntheticPhone;
+use remotecam_media_core::loss_scenario::{LossReport, run_loss_profile};
+use remotecam_media_core::output::MAX_REPEAT;
+use remotecam_media_core::testing::{LossProfile, ProfileLabel, SyntheticPhone};
 use remotecam_media_core::{FRAME_RING_SLOTS, MediaCore, RingMediaPort};
 use remotecam_pairing::{
     EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient, UnixClock,
@@ -398,6 +400,59 @@ pub struct RealMediaObservation {
     pub frames_dropped: u64,
     pub ring_slots: usize,
     pub receive_only: bool,
+    pub loss_recovery: LossRecoveryObservation,
+}
+
+/// Video under the single nominal loss profile (TDD §5.5): NACK and PLI counts,
+/// residual loss and the longest stretch without a fresh frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct LossRecoveryObservation {
+    pub profile: &'static str,
+    pub duration_seconds: u64,
+    pub packets_sent: u32,
+    pub packets_lost: u64,
+    pub packets_late: u64,
+    pub nack_requests: u64,
+    pub nacked_packets: u64,
+    pub plis: u64,
+    pub fresh_frames: u32,
+    pub repeated_frames: u32,
+    pub absent_ticks: u32,
+    pub longest_without_fresh_millis: u64,
+    pub jitter_depth_micros: u64,
+}
+
+const LOSS_RECOVERY_SECONDS: u64 = 10;
+
+impl LossRecoveryObservation {
+    fn from_report(report: &LossReport) -> Self {
+        Self {
+            profile: match report.label {
+                ProfileLabel::Nominal => "nominal",
+                ProfileLabel::OutOfProfile => "out_of_profile",
+            },
+            duration_seconds: report.seconds,
+            packets_sent: report.packets_sent,
+            packets_lost: report.packets_lost,
+            packets_late: report.packets_late,
+            nack_requests: report.nack_requests,
+            nacked_packets: report.nacked_packets,
+            plis: report.plis,
+            fresh_frames: report.fresh_frames,
+            repeated_frames: report.repeated_frames,
+            absent_ticks: report.absent_ticks,
+            longest_without_fresh_millis: u64::try_from(report.longest_without_fresh.as_millis())
+                .unwrap_or(u64::MAX),
+            jitter_depth_micros: u64::try_from(report.jitter_depth.as_micros()).unwrap_or(u64::MAX),
+        }
+    }
+
+    /// A gate passes only on the nominal profile, with no absence and no freeze of 2 s or more.
+    fn passes_gate(&self, report: &LossReport) -> bool {
+        report.label == ProfileLabel::Nominal
+            && report.absent_ticks == 0
+            && report.longest_without_fresh < MAX_REPEAT
+    }
 }
 
 impl HarnessReport {
@@ -560,7 +615,7 @@ impl RunReport {
             .count() as u32;
         let failed = scenarios.len() as u32 - passed;
         Self {
-            report_version: 5,
+            report_version: 6,
             contract_version: 1,
             commit,
             seed: options.seed,
@@ -1352,6 +1407,8 @@ impl RealMediaSession {
     async fn finish(self) -> Result<RealMediaObservation, &'static str> {
         let receive_only = self.core.is_receive_only().await;
         let (width, height) = self.port.last_dimensions().ok_or("internal_error")?;
+        let loss = run_loss_profile(LossProfile::NOMINAL, LOSS_RECOVERY_SECONDS);
+        let loss_recovery = LossRecoveryObservation::from_report(&loss);
         let observation = RealMediaObservation {
             pixel_format: "nv12",
             width,
@@ -1360,9 +1417,13 @@ impl RealMediaSession {
             frames_dropped: self.core.ring().dropped(),
             ring_slots: FRAME_RING_SLOTS,
             receive_only,
+            loss_recovery,
         };
         self.core.close().await.map_err(media_failure)?;
         self.phone.close().await.map_err(media_failure)?;
+        if !loss_recovery.passes_gate(&loss) {
+            return Err("media_failure");
+        }
         Ok(observation)
     }
 }

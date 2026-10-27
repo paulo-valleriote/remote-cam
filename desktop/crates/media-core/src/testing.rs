@@ -212,3 +212,128 @@ impl SyntheticPhone {
         self.connection.close().await.map_err(error)
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileLabel {
+    Nominal,
+    OutOfProfile,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LossProfile {
+    pub loss_per_mille: u32,
+    pub latency: Duration,
+    pub jitter: Duration,
+    pub media_only: bool,
+}
+
+impl LossProfile {
+    pub const NOMINAL: Self = Self {
+        loss_per_mille: 30,
+        latency: Duration::from_millis(30),
+        jitter: Duration::from_millis(10),
+        media_only: true,
+    };
+
+    pub fn label(&self) -> ProfileLabel {
+        if *self == Self::NOMINAL {
+            ProfileLabel::Nominal
+        } else {
+            ProfileLabel::OutOfProfile
+        }
+    }
+}
+
+pub struct LossyLink {
+    profile: LossProfile,
+    state: u64,
+}
+
+impl LossyLink {
+    pub fn new(profile: LossProfile, seed: u64) -> Self {
+        Self {
+            profile,
+            state: seed.max(1),
+        }
+    }
+
+    fn next(&mut self) -> u64 {
+        self.state ^= self.state >> 12;
+        self.state ^= self.state << 25;
+        self.state ^= self.state >> 27;
+        self.state.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 11
+    }
+
+    pub fn transmit(&mut self, sent_at: Duration) -> Option<Duration> {
+        if self.next() % 1_000 < u64::from(self.profile.loss_per_mille) {
+            return None;
+        }
+        let spread = u64::try_from(self.profile.jitter.as_micros()).unwrap_or(0) * 2;
+        let offset = if spread == 0 {
+            0
+        } else {
+            self.next() % (spread + 1)
+        };
+        let delay = self.profile.latency.as_micros() as u64 + offset;
+        Some(sent_at + Duration::from_micros(delay.saturating_sub(spread / 2)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_exact_nominal_profile_is_labelled_nominal() {
+        assert_eq!(LossProfile::NOMINAL.label(), ProfileLabel::Nominal);
+        let lossier = LossProfile {
+            loss_per_mille: 50,
+            ..LossProfile::NOMINAL
+        };
+        let slower = LossProfile {
+            latency: Duration::from_millis(80),
+            ..LossProfile::NOMINAL
+        };
+        let jumpier = LossProfile {
+            jitter: Duration::from_millis(40),
+            ..LossProfile::NOMINAL
+        };
+        let with_control = LossProfile {
+            media_only: false,
+            ..LossProfile::NOMINAL
+        };
+        for profile in [lossier, slower, jumpier, with_control] {
+            assert_eq!(profile.label(), ProfileLabel::OutOfProfile, "{profile:?}");
+        }
+    }
+
+    #[test]
+    fn the_link_loses_about_three_percent_and_delays_within_the_profile() {
+        let mut link = LossyLink::new(LossProfile::NOMINAL, 7);
+        let sent = 100_000_u32;
+        let mut lost = 0_u32;
+        for _ in 0..sent {
+            match link.transmit(Duration::ZERO) {
+                None => lost += 1,
+                Some(delay) => assert!(
+                    (Duration::from_millis(20)..=Duration::from_millis(40)).contains(&delay),
+                    "{delay:?}"
+                ),
+            }
+        }
+        let loss = f64::from(lost) / f64::from(sent);
+        assert!((0.027..=0.033).contains(&loss), "measured loss {loss}");
+    }
+
+    #[test]
+    fn the_same_seed_replays_the_same_pattern() {
+        let pattern = |seed| {
+            let mut link = LossyLink::new(LossProfile::NOMINAL, seed);
+            (0..64)
+                .map(|_| link.transmit(Duration::ZERO))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(pattern(3), pattern(3));
+        assert_ne!(pattern(3), pattern(4));
+    }
+}

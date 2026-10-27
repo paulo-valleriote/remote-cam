@@ -1,10 +1,17 @@
 pub mod core;
 pub mod decoder;
+pub mod engine;
 pub mod frame_ring;
+pub mod jitter_buffer;
+#[cfg(not(windows))]
+pub mod loss_scenario;
 pub mod nv12;
 pub mod outbound;
+pub mod output;
 pub mod pipeline;
 pub mod port;
+pub mod recovery;
+pub mod scaler;
 #[cfg(not(windows))]
 pub mod software_decoder;
 #[cfg(not(windows))]

@@ -16,7 +16,7 @@
   ],
   "properties": {
     "report_version": {
-      "const": 5
+      "const": 6
     },
     "contract_version": {
       "const": 1
@@ -582,7 +582,8 @@
         "frames_decoded",
         "frames_dropped",
         "ring_slots",
-        "receive_only"
+        "receive_only",
+        "loss_recovery"
       ],
       "properties": {
         "pixel_format": {
@@ -611,6 +612,81 @@
         },
         "receive_only": {
           "const": true
+        },
+        "loss_recovery": {
+          "$ref": "#/$defs/lossRecovery"
+        }
+      }
+    },
+    "lossRecovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "duration_seconds",
+        "packets_sent",
+        "packets_lost",
+        "packets_late",
+        "nack_requests",
+        "nacked_packets",
+        "plis",
+        "fresh_frames",
+        "repeated_frames",
+        "absent_ticks",
+        "longest_without_fresh_millis",
+        "jitter_depth_micros"
+      ],
+      "properties": {
+        "profile": {
+          "const": "nominal"
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "packets_sent": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "packets_lost": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "packets_late": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nack_requests": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nacked_packets": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "plis": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fresh_frames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "repeated_frames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "absent_ticks": {
+          "const": 0
+        },
+        "longest_without_fresh_millis": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMaximum": 2000
+        },
+        "jitter_depth_micros": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

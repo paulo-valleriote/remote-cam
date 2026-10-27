@@ -5,15 +5,22 @@ use std::time::Duration;
 use async_trait::async_trait;
 use remotecam_protocol::ReasonCode;
 use rtc::interceptor::Slot;
+use rtc::peer_connection::configuration::interceptor_registry::{
+    configure_rtcp_reports, configure_simulcast_extension_headers, configure_twcc_receiver_only,
+};
 use rtc::peer_connection::sdp::RTCSessionDescription;
+use rtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
+use rtc::rtcp::transport_feedbacks::transport_layer_nack::{
+    TransportLayerNack, nack_pairs_from_sequence_numbers,
+};
 use rtc::rtp_transceiver::RTCRtpTransceiverInit;
+use rtc::rtp_transceiver::rtp_sender::RTCPFeedback;
 use rtc::rtp_transceiver::rtp_sender::RtpCodecKind;
 use tokio::sync::Notify;
 use webrtc::media_stream::track_remote::{TrackRemote, TrackRemoteEvent};
 use webrtc::peer_connection::{
     MediaEngine, PeerConnection, PeerConnectionBuilder, PeerConnectionEventHandler,
     RTCConfigurationBuilder, RTCIceGatheringState, RTCIceServer, Registry,
-    register_default_interceptors,
 };
 use webrtc::rtp_transceiver::RTCRtpTransceiverDirection;
 
@@ -22,6 +29,7 @@ use crate::frame_ring::FrameRing;
 use crate::nv12::Nv12Frame;
 use crate::outbound::{OutboundRtpCounter, OutboundRtpTap};
 use crate::pipeline::{DecodePipeline, MediaStats, PacketSink};
+use crate::recovery::RecoveryRequest;
 
 const GATHERING_DEADLINE: Duration = Duration::from_secs(5);
 
@@ -56,6 +64,7 @@ fn connection_error(error: impl fmt::Display) -> MediaCoreError {
 
 struct EventSink {
     packets: Mutex<Option<PacketSink>>,
+    requests: Mutex<Option<tokio::sync::mpsc::Receiver<RecoveryRequest>>>,
     gathering_complete: Arc<Notify>,
 }
 
@@ -79,6 +88,24 @@ impl PeerConnectionEventHandler for EventSink {
         else {
             return;
         };
+        let requests = self
+            .requests
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(mut requests) = requests {
+            let feedback_track = Arc::clone(&track);
+            tokio::spawn(async move {
+                while let Some(request) = requests.recv().await {
+                    let Some(media_ssrc) = feedback_track.ssrcs().await.first().copied() else {
+                        continue;
+                    };
+                    let _ = feedback_track
+                        .write_rtcp(vec![feedback(request, media_ssrc)])
+                        .await;
+                }
+            });
+        }
         tokio::spawn(async move {
             while let Some(event) = track.poll().await {
                 if let TrackRemoteEvent::OnRtpPacket(packet) = event {
@@ -95,7 +122,35 @@ pub fn receive_only_registry(
 ) -> Result<Registry, MediaCoreError> {
     let wire_most_free_slot = Slot::CongestionControl;
     let tapped = Registry::new().with(wire_most_free_slot, OutboundRtpTap::new(outbound.clone()));
-    register_default_interceptors(tapped, media_engine).map_err(connection_error)
+    for parameter in ["", "pli"] {
+        media_engine.register_feedback(
+            RTCPFeedback {
+                typ: RTCP_FEEDBACK_NACK.to_owned(),
+                parameter: parameter.to_owned(),
+            },
+            RtpCodecKind::Video,
+        );
+    }
+    configure_simulcast_extension_headers(media_engine).map_err(connection_error)?;
+    let registry = configure_twcc_receiver_only(tapped, media_engine).map_err(connection_error)?;
+    Ok(configure_rtcp_reports(registry))
+}
+
+const SENDER_SSRC: u32 = 1;
+const RTCP_FEEDBACK_NACK: &str = "nack";
+
+fn feedback(request: RecoveryRequest, media_ssrc: u32) -> Box<dyn rtc::rtcp::Packet> {
+    match request {
+        RecoveryRequest::Nack(sequences) => Box::new(TransportLayerNack {
+            sender_ssrc: SENDER_SSRC,
+            media_ssrc,
+            nacks: nack_pairs_from_sequence_numbers(&sequences),
+        }),
+        RecoveryRequest::Pli => Box::new(PictureLossIndication {
+            sender_ssrc: SENDER_SSRC,
+            media_ssrc,
+        }),
+    }
 }
 
 pub struct MediaCore {
@@ -128,6 +183,7 @@ impl MediaCore {
         let gathering_complete = Arc::new(Notify::new());
         let sink = EventSink {
             packets: Mutex::new(Some(packets)),
+            requests: Mutex::new(pipeline.take_recovery_requests()),
             gathering_complete: Arc::clone(&gathering_complete),
         };
 
