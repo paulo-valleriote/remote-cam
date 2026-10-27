@@ -7,6 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+remotecam-media-core = { path = "../../../desktop/crates/media-core" }
 remotecam-pairing = { path = "../../../desktop/crates/pairing" }
 remotecam-protocol = { path = "../../../desktop/crates/protocol" }
 remotecam-session-core = { path = "../../../desktop/crates/session-core" }

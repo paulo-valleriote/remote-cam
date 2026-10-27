@@ -1,3 +1,5 @@
+use remotecam_media_core::testing::SyntheticPhone;
+use remotecam_media_core::{FRAME_RING_SLOTS, MediaCore, RingMediaPort};
 use remotecam_pairing::{
     EphemeralCertificate, PairingListener, PairingMaterialRequest, PinnedClient, UnixClock,
 };
@@ -64,9 +66,10 @@ pub enum ScenarioKind {
     StaleEpochDiscarded,
     ClockBackwardsWindow,
     RegenerationAfterRefusal,
+    RealMediaFrame,
 }
 
-pub const REPORTED_SCENARIOS: [ScenarioKind; 9] = [
+pub const REPORTED_SCENARIOS: [ScenarioKind; 10] = [
     ScenarioKind::Pairing,
     ScenarioKind::PinMismatch,
     ScenarioKind::QrExpiryRefused,
@@ -76,6 +79,7 @@ pub const REPORTED_SCENARIOS: [ScenarioKind; 9] = [
     ScenarioKind::StaleEpochDiscarded,
     ScenarioKind::ClockBackwardsWindow,
     ScenarioKind::RegenerationAfterRefusal,
+    ScenarioKind::RealMediaFrame,
 ];
 
 #[derive(Clone, Copy)]
@@ -146,6 +150,12 @@ impl ScenarioKind {
             Self::RegenerationAfterRefusal => ScenarioDefinition {
                 name: "regeneration-after-refusal",
                 seed_salt: 0x0007,
+                expected_outcome: Outcome::Accepted,
+                expected_reason_code: None,
+            },
+            Self::RealMediaFrame => ScenarioDefinition {
+                name: "real-media-frame",
+                seed_salt: 0x0008,
                 expected_outcome: Outcome::Accepted,
                 expected_reason_code: None,
             },
@@ -372,9 +382,24 @@ pub struct HarnessReport {
     pub issued_epochs: Vec<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol_violations: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub real_media: Option<RealMediaObservation>,
     pub resources: ResourceReport,
     pub verdict: Verdict,
     pub reason_code: Option<&'static str>,
+}
+
+/// What the real Media Core produced in the `real-media-frame` scenario. Every
+/// field is deterministic; nothing here depends on wall-clock timing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct RealMediaObservation {
+    pub pixel_format: &'static str,
+    pub width: u32,
+    pub height: u32,
+    pub frames_decoded: u64,
+    pub frames_dropped: u64,
+    pub ring_slots: usize,
+    pub receive_only: bool,
 }
 
 impl HarnessReport {
@@ -398,6 +423,7 @@ impl HarnessReport {
             late_frame_discarded: None,
             issued_epochs: Vec::new(),
             protocol_violations: None,
+            real_media: None,
             resources: ResourceReport::default(),
             verdict: if outcome == Outcome::Accepted {
                 Verdict::Pass
@@ -536,7 +562,7 @@ impl RunReport {
             .count() as u32;
         let failed = scenarios.len() as u32 - passed;
         Self {
-            report_version: 4,
+            report_version: 5,
             contract_version: 1,
             commit,
             seed: options.seed,
@@ -763,7 +789,13 @@ fn parse_run_options(
 }
 
 pub fn run_with(config: ScenarioConfig) -> HarnessReport {
-    run_with_runtime(config, Builder::new_current_thread().enable_io().build())
+    run_with_runtime(
+        config,
+        Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build(),
+    )
 }
 
 fn run_with_runtime(
@@ -1100,11 +1132,25 @@ async fn run_pairing_inner(
     drop(listener_guard);
     drop(connection_guard);
 
-    let mut media_port = SyntheticMediaPort::new(clock.clone(), config.seed, resources.clone());
+    let mut synthetic_port = SyntheticMediaPort::new(clock.clone(), config.seed, resources.clone());
+    let mut real_media = if config.scenario == ScenarioKind::RealMediaFrame {
+        match RealMediaSession::start(&clock, &resources).await {
+            Ok(session) => Some(session),
+            Err(reason_code) => {
+                return failed_report(config.scenario, core.state(), reason_code, message_sequence);
+            }
+        }
+    } else {
+        None
+    };
+    let media_port: &mut dyn MediaPort = match real_media.as_mut() {
+        Some(session) => &mut session.port,
+        None => &mut synthetic_port,
+    };
     media_port.start();
     let mut frames = Vec::new();
-    Ok(match config.scenario {
-        ScenarioKind::Pairing | ScenarioKind::PinMismatch => {
+    let mut report = match config.scenario {
+        ScenarioKind::Pairing | ScenarioKind::PinMismatch | ScenarioKind::RealMediaFrame => {
             for _ in 0..2 {
                 clock.advance(FRAME_INTERVAL_MILLIS);
                 let Some(frame) = media_port.next_frame() else {
@@ -1241,7 +1287,88 @@ async fn run_pairing_inner(
             });
             report
         }
-    })
+    };
+    if let Some(session) = real_media {
+        match session.finish().await {
+            Ok(observation) => report.real_media = Some(observation),
+            Err(reason_code) => {
+                return failed_report(
+                    config.scenario,
+                    SessionState::Ended,
+                    reason_code,
+                    report.message_sequence,
+                );
+            }
+        }
+    }
+    Ok(report)
+}
+
+const MEDIA_BIND: &str = "127.0.0.1:0";
+const REAL_MEDIA_FRAMES: u64 = 2;
+const REAL_MEDIA_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// The real Media Core and its synthetic phone, wired to the same injected
+/// clock as the Session Core. Wall-clock time is used only to wait for loopback
+/// delivery and never reaches the report.
+struct RealMediaSession {
+    core: Arc<MediaCore>,
+    phone: SyntheticPhone,
+    port: RingMediaPort<ManualClock>,
+    _guard: ResourceGuard,
+}
+
+impl RealMediaSession {
+    async fn start(clock: &ManualClock, resources: &ResourceTracker) -> Result<Self, &'static str> {
+        let core = Arc::new(
+            MediaCore::new(MEDIA_BIND)
+                .await
+                .map_err(|_| "internal_error")?,
+        );
+        let mut phone = SyntheticPhone::new(MEDIA_BIND)
+            .await
+            .map_err(|_| "internal_error")?;
+        let offer = phone.offer().await.map_err(|_| "internal_error")?;
+        let answer = core.answer(&offer).await.map_err(|_| "internal_error")?;
+        phone
+            .accept_answer(&answer)
+            .await
+            .map_err(|_| "internal_error")?;
+        phone.connected().await.map_err(|_| "internal_error")?;
+        for _ in 0..REAL_MEDIA_FRAMES {
+            phone.send_frame().await.map_err(|_| "internal_error")?;
+        }
+        tokio::time::timeout(REAL_MEDIA_DEADLINE, async {
+            while core.stats().decoded_frames() < REAL_MEDIA_FRAMES {
+                tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+            }
+        })
+        .await
+        .map_err(|_| "internal_error")?;
+        Ok(Self {
+            port: RingMediaPort::new(Arc::clone(&core), clock.clone()),
+            core,
+            phone,
+            _guard: resources.media_port(),
+        })
+    }
+
+    async fn finish(self) -> Result<RealMediaObservation, &'static str> {
+        let receive_only = self.core.is_receive_only().await;
+        let (width, height) = self.port.last_dimensions().ok_or("internal_error")?;
+        let observation = RealMediaObservation {
+            pixel_format: "nv12",
+            width,
+            height,
+            frames_decoded: self.core.stats().decoded_frames(),
+            frames_dropped: self.core.ring().dropped(),
+            ring_slots: FRAME_RING_SLOTS,
+            receive_only,
+        };
+        self.core.close().await.map_err(|_| "internal_error")?;
+        self.phone.close().await.map_err(|_| "internal_error")?;
+        Ok(observation)
+    }
 }
 
 struct DesktopRun<C: Clock, R: RandomSource> {

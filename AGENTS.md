@@ -44,7 +44,7 @@ remotecam/
 - **Documentation:** Every command documented in `README.md` must exist as a Makefile target.
 - **Structured logs:** JSON lines, no tokens/fingerprints/secrets/personal data. Redaction mandatory (hex ≥32 chars, absolute paths, correlation IDs = 32 lowercase hex).
 - **Dependencies:** `protocol/` is the source of truth. `desktop/`, `mobile/` and `harness/` consume, not define.
-- **Coverage:** ≥90% line coverage for the delivered packages (`desktop/crates/protocol`, `desktop/crates/session-core`, `desktop/crates/pairing` and `mobile/protocol`); the product Harness also has a REC-25-specific ≥90% line gate. `spikes/` is exempt.
+- **Coverage:** ≥90% line coverage for the delivered packages (`desktop/crates/protocol`, `desktop/crates/session-core`, `desktop/crates/pairing`, `desktop/crates/media-core` and `mobile/protocol`); the product Harness also has a REC-25-specific ≥90% line gate. `spikes/` is exempt.
 - **Build:** `make help` is the source of truth. Use `make build-desktop`, `make build-mobile`, `make harness`, `make test`, `make coverage`, `make lint`.
 - **Decisions:** record durable choices in `docs/adr/`; use `GLOSSARY.md` vocabulary in issues, code and tests.
 

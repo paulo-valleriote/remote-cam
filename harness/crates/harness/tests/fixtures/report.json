@@ -1,5 +1,5 @@
 {
-  "report_version": 4,
+  "report_version": 5,
   "contract_version": 1,
   "commit": "0000000000000000000000000000000000000000",
   "seed": 0,
@@ -490,12 +490,89 @@
       },
       "verdict": "pass",
       "reason_code": null
+    },
+    {
+      "scenario": "real-media-frame",
+      "outcome": "accepted",
+      "observed_state": "ended",
+      "message_sequence": [
+        "pair",
+        "paired",
+        "offer",
+        "answer"
+      ],
+      "state_trace": [
+        {
+          "from": "idle",
+          "to": "pairing_ready",
+          "at_millis": 0
+        },
+        {
+          "from": "pairing_ready",
+          "to": "handshaking",
+          "at_millis": 0
+        },
+        {
+          "from": "handshaking",
+          "to": "negotiating",
+          "at_millis": 0
+        },
+        {
+          "from": "negotiating",
+          "to": "connected",
+          "at_millis": 33
+        },
+        {
+          "from": "connected",
+          "to": "ended",
+          "at_millis": 66
+        }
+      ],
+      "frames": [
+        {
+          "sequence": 0,
+          "at_millis": 33
+        },
+        {
+          "sequence": 1,
+          "at_millis": 66
+        }
+      ],
+      "real_media": {
+        "pixel_format": "nv12",
+        "width": 64,
+        "height": 48,
+        "frames_decoded": 2,
+        "frames_dropped": 0,
+        "ring_slots": 3,
+        "receive_only": true
+      },
+      "resources": {
+        "listeners": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "connections": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "media_ports": {
+          "created": 1,
+          "active_after_close": 0
+        },
+        "tasks": {
+          "created": 1,
+          "active_after_close": 0
+        }
+      },
+      "verdict": "pass",
+      "reason_code": null
     }
   ],
   "verdict": "pass",
   "summary": {
-    "scenarios": 9,
-    "passed": 9,
+    "scenarios": 10,
+    "passed": 10,
     "failed": 0
   }
 }

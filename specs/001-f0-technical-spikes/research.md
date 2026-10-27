@@ -252,6 +252,8 @@ Required by constitution Principle I: *"problem solved, alternatives discarded, 
 | `serde` | 1.0.229 (exact) | Derive-based parsing of the JSON signaling contract and its vectors | Hand-written JSON traversal; `simd-json` (no benefit at this size) | Low — mature 1.x, exact pin for reproducible builds | MIT OR Apache-2.0 |
 | `serde_json` | 1.0.154 (exact) | JSON parsing for the contract consumer and the conformance binary | `simd-json`; `json` | Low — exact pin, no unsafe parsing | MIT OR Apache-2.0 |
 | `openh264` | 0.9.9 | Software H.264 decode **in CI only** | `ffmpeg-next` (LGPL) | Low — constrained baseline only, never the product path | BSD-2-Clause (Cisco), patent royalties covered |
+| `rtc` | 0.21.1 (exact) | Sans-I/O core of `webrtc`; RTP types and the H.264 depacketizer for the product Media Core (ADR-0021) | Writing an RFC 6184 depacketizer | Medium — always pinned with `webrtc` | MIT OR Apache-2.0 |
+| `async-trait` | 0.1.92 (exact) | `PeerConnectionEventHandler` is an async trait (ADR-0021) | Boxing futures by hand | Low | MIT OR Apache-2.0 |
 | `criterion` | 0.8.2 | Latency and jitter micro-benchmarks | `iai` | Low | MIT OR Apache-2.0 |
 
 ### Mobile (Kotlin)

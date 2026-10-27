@@ -1,0 +1,16 @@
+[package]
+name = "remotecam-media-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Receive-only Media Core: RTP H.264 to NV12 frames behind the Media Port"
+
+[dependencies]
+async-trait.workspace = true
+openh264.workspace = true
+remotecam-session-core = { path = "../session-core" }
+rtc.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+webrtc.workspace = true

@@ -11,12 +11,12 @@ const GOLDEN_REPORT: &str = include_str!("fixtures/report.json");
 fn the_reported_scenarios_pass_with_expected_results() {
     let report = run().expect("Git and the pinned Rust toolchain are available");
 
-    assert_eq!(report.report_version, 4);
+    assert_eq!(report.report_version, 5);
     assert_eq!(report.contract_version, 1);
-    assert_eq!(report.scenarios.len(), 9);
+    assert_eq!(report.scenarios.len(), 10);
     assert_eq!(report.verdict, Verdict::Pass);
-    assert_eq!(report.summary.scenarios, 9);
-    assert_eq!(report.summary.passed, 9);
+    assert_eq!(report.summary.scenarios, 10);
+    assert_eq!(report.summary.passed, 10);
     assert_eq!(report.summary.failed, 0);
 
     let happy_path = &report.scenarios[0];
@@ -247,7 +247,7 @@ fn every_rec_10_acceptance_scenario_reports_its_refusal_contract() {
         ),
     ];
 
-    assert_eq!(report.scenarios.len(), 9);
+    assert_eq!(report.scenarios.len(), 10);
     for (scenario, (name, outcome, reason, messages, epochs)) in
         report.scenarios[2..].iter().zip(expected)
     {
@@ -259,4 +259,45 @@ fn every_rec_10_acceptance_scenario_reports_its_refusal_contract() {
         assert_eq!(scenario.verdict, Verdict::Pass, "{name}");
     }
     assert_eq!(report.scenarios[6].protocol_violations, Some(1));
+}
+
+#[test]
+fn real_media_reaches_connected_with_a_decoded_nv12_frame() {
+    let report = run_with(ScenarioConfig {
+        scenario: ScenarioKind::RealMediaFrame,
+        seed: 0,
+        clock_start: Timestamp::ZERO,
+    });
+
+    assert_eq!(report.scenario, "real-media-frame");
+    assert_eq!(report.outcome, Outcome::Accepted);
+    assert_eq!(report.verdict, Verdict::Pass);
+    assert_eq!(report.observed_state, "ended");
+    assert!(
+        report
+            .state_trace
+            .iter()
+            .any(|transition| transition.to == "connected" && transition.at_millis == 33)
+    );
+    assert_eq!(report.frames.len(), 2);
+
+    let media = report.real_media.expect("the real Media Core observation");
+    assert_eq!(media.pixel_format, "nv12");
+    assert_eq!((media.width, media.height), (64, 48));
+    assert_eq!(media.frames_decoded, 2);
+    assert_eq!(media.frames_dropped, 0);
+    assert_eq!(media.ring_slots, 3);
+    assert!(media.receive_only);
+    assert_eq!(report.resources.media_ports.created, 1);
+    assert_eq!(report.resources.media_ports.active_after_close, 0);
+}
+
+#[test]
+fn real_media_runs_are_byte_identical_for_the_same_seed_and_clock() {
+    let config = ScenarioConfig {
+        scenario: ScenarioKind::RealMediaFrame,
+        seed: 7,
+        clock_start: Timestamp::from_millis(500),
+    };
+    assert_eq!(run_with(config), run_with(config));
 }

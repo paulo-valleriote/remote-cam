@@ -6,6 +6,7 @@ members = [
     "crates/session-core",
     "crates/pairing",
     "crates/scrub",
+    "crates/media-core",
 ]
 
 [workspace.package]
@@ -28,3 +29,7 @@ sha2 = "=0.11.1"
 p256 = { version = "=0.13.2", features = ["ecdsa", "pkcs8"] }
 subtle = "=2.6.1"
 zeroize = { version = "=1.9.1", features = ["derive"] }
+async-trait = "=0.1.92"
+rtc = "=0.21.1"
+webrtc = "=0.21.1"
+openh264 = "=0.9.9"

@@ -35,9 +35,10 @@ async fn scenario_flow(
         ScenarioKind::StaleEpochDiscarded => stale_epoch_discarded(world).await,
         ScenarioKind::ClockBackwardsWindow => clock_backwards_window(world).await,
         ScenarioKind::RegenerationAfterRefusal => regeneration_after_refusal(world).await,
-        ScenarioKind::Pairing | ScenarioKind::PinMismatch | ScenarioKind::FirstFrameTimeout => {
-            Err("internal_error")
-        }
+        ScenarioKind::Pairing
+        | ScenarioKind::PinMismatch
+        | ScenarioKind::FirstFrameTimeout
+        | ScenarioKind::RealMediaFrame => Err("internal_error"),
     }
 }
 
