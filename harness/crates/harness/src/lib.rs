@@ -1,3 +1,4 @@
+use remotecam_media_core::audio_scenario::{AudioReport, run_audio_profile};
 use remotecam_media_core::loss_scenario::{LossReport, run_loss_profile};
 use remotecam_media_core::output::MAX_REPEAT;
 use remotecam_media_core::testing::{LossProfile, ProfileLabel, SyntheticPhone};
@@ -401,6 +402,7 @@ pub struct RealMediaObservation {
     pub ring_slots: usize,
     pub receive_only: bool,
     pub loss_recovery: LossRecoveryObservation,
+    pub audio_continuity: AudioContinuityObservation,
 }
 
 /// Video under the single nominal loss profile (TDD §5.5): NACK and PLI counts,
@@ -423,6 +425,49 @@ pub struct LossRecoveryObservation {
 }
 
 const LOSS_RECOVERY_SECONDS: u64 = 10;
+const AUDIO_CONTINUITY_SECONDS: u64 = 600;
+
+/// Audio under the single nominal loss profile: ten simulated minutes measured by two
+/// independent dropout detectors (frame provenance and digital-silence content).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct AudioContinuityObservation {
+    pub profile: &'static str,
+    pub duration_seconds: u64,
+    pub frames_sent: u32,
+    pub frames_played: u64,
+    pub decoded_frames: u64,
+    pub concealed_frames: u64,
+    pub silent_frames: u64,
+    pub late_packets: u64,
+    pub underrun_dropouts: u64,
+    pub silence_dropouts: u64,
+    pub longest_underrun_millis: u64,
+    pub longest_silent_run_millis: u64,
+}
+
+impl AudioContinuityObservation {
+    fn from_report(report: &AudioReport) -> Self {
+        Self {
+            profile: match report.label {
+                ProfileLabel::Nominal => "nominal",
+                ProfileLabel::OutOfProfile => "out_of_profile",
+            },
+            duration_seconds: report.seconds,
+            frames_sent: report.frames_sent,
+            frames_played: report.frames_played,
+            decoded_frames: report.decoded,
+            concealed_frames: report.concealed,
+            silent_frames: report.silent,
+            late_packets: report.late,
+            underrun_dropouts: report.underrun_dropouts,
+            silence_dropouts: report.silence_dropouts,
+            longest_underrun_millis: u64::try_from(report.longest_underrun.as_millis())
+                .unwrap_or(u64::MAX),
+            longest_silent_run_millis: u64::try_from(report.longest_silent_run.as_millis())
+                .unwrap_or(u64::MAX),
+        }
+    }
+}
 
 impl LossRecoveryObservation {
     fn from_report(report: &LossReport) -> Self {
@@ -615,7 +660,7 @@ impl RunReport {
             .count() as u32;
         let failed = scenarios.len() as u32 - passed;
         Self {
-            report_version: 6,
+            report_version: 7,
             contract_version: 1,
             commit,
             seed: options.seed,
@@ -1409,6 +1454,8 @@ impl RealMediaSession {
         let (width, height) = self.port.last_dimensions().ok_or("internal_error")?;
         let loss = run_loss_profile(LossProfile::NOMINAL, LOSS_RECOVERY_SECONDS);
         let loss_recovery = LossRecoveryObservation::from_report(&loss);
+        let audio = run_audio_profile(LossProfile::NOMINAL, AUDIO_CONTINUITY_SECONDS);
+        let audio_continuity = AudioContinuityObservation::from_report(&audio);
         let observation = RealMediaObservation {
             pixel_format: "nv12",
             width,
@@ -1418,10 +1465,11 @@ impl RealMediaSession {
             ring_slots: FRAME_RING_SLOTS,
             receive_only,
             loss_recovery,
+            audio_continuity,
         };
         self.core.close().await.map_err(media_failure)?;
         self.phone.close().await.map_err(media_failure)?;
-        if !loss_recovery.passes_gate(&loss) {
+        if !loss_recovery.passes_gate(&loss) || !audio.passes_gate() {
             return Err("media_failure");
         }
         Ok(observation)

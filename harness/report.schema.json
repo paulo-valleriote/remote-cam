@@ -16,7 +16,7 @@
   ],
   "properties": {
     "report_version": {
-      "const": 6
+      "const": 7
     },
     "contract_version": {
       "const": 1
@@ -583,7 +583,8 @@
         "frames_dropped",
         "ring_slots",
         "receive_only",
-        "loss_recovery"
+        "loss_recovery",
+        "audio_continuity"
       ],
       "properties": {
         "pixel_format": {
@@ -615,6 +616,76 @@
         },
         "loss_recovery": {
           "$ref": "#/$defs/lossRecovery"
+        },
+        "audio_continuity": {
+          "$ref": "#/$defs/audioContinuity"
+        }
+      }
+    },
+    "audioContinuity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "duration_seconds",
+        "frames_sent",
+        "frames_played",
+        "decoded_frames",
+        "concealed_frames",
+        "silent_frames",
+        "late_packets",
+        "underrun_dropouts",
+        "silence_dropouts",
+        "longest_underrun_millis",
+        "longest_silent_run_millis"
+      ],
+      "properties": {
+        "profile": {
+          "const": "nominal"
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 600
+        },
+        "frames_sent": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frames_played": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "decoded_frames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "concealed_frames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "silent_frames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "late_packets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "underrun_dropouts": {
+          "const": 0
+        },
+        "silence_dropouts": {
+          "const": 0
+        },
+        "longest_underrun_millis": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMaximum": 50
+        },
+        "longest_silent_run_millis": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMaximum": 50
         }
       }
     },

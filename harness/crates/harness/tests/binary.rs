@@ -19,7 +19,7 @@ fn the_binary_emits_one_reproducible_aggregate_report_line() {
     let first = parse_report(&first);
     let second = parse_report(&second);
     assert_eq!(first["verdict"], "pass");
-    assert_eq!(first["report_version"], 6);
+    assert_eq!(first["report_version"], 7);
     assert_eq!(first["contract_version"], 1);
     assert_eq!(first["summary"]["scenarios"], 10);
     assert_eq!(first["summary"]["passed"], 10);
@@ -97,7 +97,7 @@ fn parse_report(output: &Output) -> Value {
 
 fn run_under_watchdog(arguments: &[&str]) -> Output {
     let mut command = Command::new("timeout");
-    command.args(["10s", env!("CARGO_BIN_EXE_remotecam-harness")]);
+    command.args(["60s", env!("CARGO_BIN_EXE_remotecam-harness")]);
     command.args(arguments);
     command
         .output()

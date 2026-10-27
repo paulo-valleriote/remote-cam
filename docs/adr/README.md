@@ -28,6 +28,7 @@ decision was made and why.
 | [0020](0020-f1-core-exit-separate-from-device-residue.md) | The F1 core exit is separate from the C-02 device residue inspection |
 | [0021](0021-media-core-dependencies-and-walking-skeleton.md) | Media Core crate, webrtc-rs and OpenH264 dependencies |
 | [0022](0022-video-under-loss-jitter-buffer-recovery-and-output-modes.md) | Video under loss: jitter buffer, loss recovery and output modes |
+| [0023](0023-continuous-audio-opus-jitter-buffer-and-silence.md) | Continuous audio: libopus, audio jitter buffer and uninterrupted silence |
 
 Add a new ADR by scanning this directory for the highest number and
 incrementing it. To revisit a decision, write a new ADR that supersedes the old

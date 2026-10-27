@@ -1,5 +1,5 @@
 {
-  "report_version": 6,
+  "report_version": 7,
   "contract_version": 1,
   "commit": "0000000000000000000000000000000000000000",
   "seed": 0,
@@ -560,6 +560,20 @@
           "absent_ticks": 0,
           "longest_without_fresh_millis": 100,
           "jitter_depth_micros": 23006
+        },
+        "audio_continuity": {
+          "profile": "nominal",
+          "duration_seconds": 600,
+          "frames_sent": 30000,
+          "frames_played": 29996,
+          "decoded_frames": 29120,
+          "concealed_frames": 876,
+          "silent_frames": 0,
+          "late_packets": 0,
+          "underrun_dropouts": 0,
+          "silence_dropouts": 0,
+          "longest_underrun_millis": 0,
+          "longest_silent_run_millis": 2
         }
       },
       "resources": {

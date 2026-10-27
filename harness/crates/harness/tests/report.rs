@@ -11,7 +11,7 @@ const GOLDEN_REPORT: &str = include_str!("fixtures/report.json");
 fn the_reported_scenarios_pass_with_expected_results() {
     let report = run().expect("Git and the pinned Rust toolchain are available");
 
-    assert_eq!(report.report_version, 6);
+    assert_eq!(report.report_version, 7);
     assert_eq!(report.contract_version, 1);
     assert_eq!(report.scenarios.len(), 10);
     assert_eq!(report.verdict, Verdict::Pass);
@@ -125,6 +125,30 @@ fn the_versioned_schema_rejects_a_loss_recovery_that_cannot_pass_the_gate() {
         assert!(
             validator.iter_errors(&invalid_instance).next().is_some(),
             "schema accepted a loss_recovery breaching {field}"
+        );
+    }
+}
+
+#[test]
+fn the_versioned_schema_rejects_an_audio_continuity_that_cannot_pass_the_gate() {
+    let report = run().expect("Git and the pinned Rust toolchain are available");
+    let schema: Value = serde_json::from_str(REPORT_SCHEMA).unwrap();
+    let validator = jsonschema::validator_for(&schema).expect("report schema is valid");
+    let instance: Value =
+        serde_json::from_str(&report.to_json().expect("report serialises")).unwrap();
+
+    let breaches = [
+        ("profile", serde_json::json!("out_of_profile")),
+        ("underrun_dropouts", serde_json::json!(1)),
+        ("silence_dropouts", serde_json::json!(1)),
+        ("duration_seconds", serde_json::json!(599)),
+    ];
+    for (field, value) in breaches {
+        let mut invalid_instance = instance.clone();
+        invalid_instance["scenarios"][9]["real_media"]["audio_continuity"][field] = value;
+        assert!(
+            validator.iter_errors(&invalid_instance).next().is_some(),
+            "schema accepted an audio_continuity breaching {field}"
         );
     }
 }
@@ -334,6 +358,23 @@ fn real_media_reports_the_nominal_loss_profile_with_nack_and_pli_observable() {
         "the video never froze for 2 s: {loss:?}"
     );
     assert!(loss.fresh_frames > 0 && loss.packets_sent > 0);
+}
+
+#[test]
+fn real_media_reports_ten_minutes_of_continuous_audio_with_two_agreeing_detectors() {
+    let report = run_with(ScenarioConfig {
+        scenario: ScenarioKind::RealMediaFrame,
+        seed: 0,
+        clock_start: Timestamp::ZERO,
+    });
+    let audio = report.real_media.expect("real media").audio_continuity;
+
+    assert_eq!(audio.profile, "nominal");
+    assert_eq!(audio.duration_seconds, 600);
+    assert_eq!(audio.underrun_dropouts, 0);
+    assert_eq!(audio.silence_dropouts, 0);
+    assert!(audio.concealed_frames > 0, "3 % loss exercises PLC");
+    assert!(audio.frames_played >= 600 * 50 - 4);
 }
 
 #[test]

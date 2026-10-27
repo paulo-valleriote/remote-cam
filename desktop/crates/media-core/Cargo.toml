@@ -13,6 +13,7 @@ remotecam-protocol = { path = "../protocol" }
 remotecam-session-core = { path = "../session-core" }
 rtc.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+opus.workspace = true
 webrtc.workspace = true
 
 # Linux/CI only: not compiled on Windows, so the software decoder is never
