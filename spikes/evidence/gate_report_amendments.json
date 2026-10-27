@@ -56,6 +56,54 @@
         "disposition:pairing_handshake": " (original; amended by A-1: F1 core exit 2026-11-20, C-02-residual 2026-12-20)",
         "waiver:C-02-residue-restart": "Amended by A-1: split into the F1 core exit (2026-11-20, no device dependency) and C-02-residual (device inspection, 2026-12-20). The inspection must still be recorded with the same method. Original waiver: "
       }
+    },
+    {
+      "id": "A-2",
+      "date": "2026-10-26",
+      "title": "Separate the F3 core exit from the F3 device exit",
+      "ticket": "REC-92 (ADR-0019, epic REC-4)",
+      "amended_by": "Paulo Valleriote (technical_lead, as F3 exit owner); the product_owner role keeps the C-05 licensing decision, and the same person signs both roles.",
+      "reason": "the single F3 exit gate in REC-4 mixed criteria that the Linux harness can prove (outbound media RTP at zero, loss resilience, A/V drift, latency budget) with criteria that need the Windows 11 Reference Device (application matrix, glass-to-glass latency, virtual audio path). The F3 date would therefore depend on hardware that is not available and on the C-05 licensing decision.",
+      "change_table": [
+        [
+          "F3 core exit",
+          "Media Core proven on the Linux harness with an injected clock and emulated network (REC-50 to REC-55)",
+          "technical_lead — Paulo Valleriote",
+          "2026-12-18",
+          "no"
+        ],
+        [
+          "F3 device exit",
+          "Virtual Devices on the Windows 11 Reference Device: Media Foundation decode, virtual camera matrix, WASAPI bridge and virtual audio device (REC-56 to REC-59)",
+          "technical_lead — Paulo Valleriote",
+          "2027-01-15",
+          "yes"
+        ]
+      ],
+      "deadline_rationale": "2026-12-18 is the REC-4 target and is kept for the core exit. 2027-01-15 was proposed by the amender and accepted by the project owner on 2026-10-26; it aligns with C-05 and falls before the 2027-02-15 limit of the carried camera_injection and desktop_receive_pipeline obligations, which the device exit resolves.",
+      "id_mapping": "the F3 core exit and the F3 device exit are new items; no F0 condition is renamed. The carried camera_injection and desktop_receive_pipeline obligations and C-05 keep their IDs and are resolved by the device exit.",
+      "status_effects": "F3 stays `conditional`; its exit is two gates. F4 depends on the F3 device exit. The F3 core exit has no device dependency. Audio stories never block the video stories; only the virtual audio device story is subject to C-05, with video-only mode as the approved plan B.",
+      "unchanged": "all five gate verdicts; C-02-residual (A-1), C-04 (VP8 stays out of F3 and opens a story only if C-04 fails), C-05 and the carried obligations keep their dates; the F3 dependency on the F2 exit is not altered by this amendment.",
+      "note": "the F0 evidence record (`f0_exit.json`, `D-EXIT-f0.md`) is not rewritten; this amendment is layered on top of it by `gate_report_amendments.json`, together with A-1.",
+      "downstream_status": {
+        "F3": {
+          "reason": "F3 is split by A-2 into the F3 core exit (2026-12-18, no device dependency) and the F3 device exit (2027-01-15). The F2 exit dependency and the carried injection and pipeline obligations are unchanged.",
+          "conditions": [
+            "F2 exit",
+            "F3 core exit (deadline 2026-12-18)",
+            "F3 device exit (deadline 2027-01-15)",
+            "C-05-licensing-decision (deadline 2027-01-15)",
+            "camera_injection carried (deadline 2027-02-15)",
+            "desktop_receive_pipeline carried (deadline 2027-02-15)"
+          ]
+        }
+      },
+      "annotations": {
+        "version": " (Amendment A-2, 2026-10-26)",
+        "statement": " The F3 exit was later split into a core exit and a device exit by A-2 (see \"Amendments to this report\").",
+        "disposition:camera_injection": " (amended by A-2: resolved by the F3 device exit, 2027-01-15; the 2027-02-15 limit is unchanged)",
+        "disposition:desktop_receive_pipeline": " (amended by A-2: resolved by the F3 device exit, 2027-01-15; the 2027-02-15 limit is unchanged)"
+      }
     }
   ]
 }
