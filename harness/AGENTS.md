@@ -62,7 +62,7 @@
 - The method is the one C-02 requires on the reference devices; the Linux evidence does not close that device run.
 - The binary installs `remotecam_scrub::ZeroizingAllocator`; it is outside the REC-25 coverage gate (`remotecam-harness` only).
 
-- Run tests per package (`cargo test -p remotecam-harness`, `cargo test -p remotecam-residue`), not `cargo test --workspace`: the Media Core pulls tokio's `rt-multi-thread` into a workspace build and the residue `session-end` sweep then fails intermittently (ADR-0021, open finding).
+- The probe takes one driver turn after the session drops (`yield_now`) while keeping its runtime alive: tokio frees a dropped socket's I/O registration only on a driver turn, and a parked probe never takes one, so the `session-end` sweep found stale stack bytes (a pairing token copy) in that registration when the Media Core's `rt-multi-thread` feature was unified into a workspace build (ADR-0021). Do not replace it with dropping the runtime: that would hide anything the runtime retains.
 
 ### 7. Before modifying
 

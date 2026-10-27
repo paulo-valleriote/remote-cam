@@ -68,20 +68,40 @@ harness workspace adds the `time` feature to `tokio` and a path dependency on
 - Out of scope here: loss recovery (NACK/PLI), adaptive jitter buffer (F3-03),
   audio (F3-04), Media Foundation (F3-07).
 
-### Residue finding (open)
+### Residue finding (resolved)
 
 `webrtc` forces tokio's `rt-multi-thread` feature. In the harness workspace,
 `cargo test --workspace` unifies that feature into the `remotecam-residue`
-binary, and its `session-end` sweep then finds the pairing token in the heap in
-about 20 % of runs (0 of 40 without the feature, also 0 of 40 on the previous
-commit). Dropping the probe's tokio runtime before the sweep removes the finding
-(0 of 40), so the copy is retained by the runtime, not by the Session Core.
-This was not fixed here: changing the probe changes the C-02 evidence method
-(ADR-0017), which is the project owner's call, and the product will be built
-with the feature on. Until it is decided, `make test` runs the harness and
-residue packages separately so the residue binary keeps its original feature
-set (`make residue` already builds it alone). Running `cargo test --workspace`
-inside `harness/` can fail intermittently.
+binary, and its `session-end` sweep found the pairing token in the heap in
+about 8-15 % of runs (6 of 40 and 6 of 80; 0 of 40 without the feature).
+
+Cause: the retained block is the `ScheduledIo` (272 bytes) of a `TcpStream`
+registration. Tokio does not free it when the socket drops; it parks it in the
+I/O driver's `pending_release` list and frees it on the next driver turn. The
+probe parked after `drop(session)` and never took one, so the block stayed
+allocated through the sweep. The token is not a field of the registration: it
+sits in uninitialised padding that `Arc::new(ScheduledIo)` copied from stale
+stack frames of the pairing. The feature only changes frame layout, hence which
+stale bytes land in the padding. Neither the Session Core nor the runtime
+retains the token.
+
+Fix: the probe takes one driver turn (`runtime.block_on(yield_now())`) after the
+session drops and keeps its runtime alive. 0 of 100 failures; `sleep(1 ms)` also
+gives 0 of 100. Dropping the runtime also gives 0, but it frees everything the
+runtime retains and would hide a real retention, so it was rejected.
+
+Method change (ADR-0017, C-02): `session-end` now measures a process that has
+taken one driver turn after the session, as the product does continuously, not
+a parked one. The `live-control` and canary controls are unchanged and still
+prove the method sees leaks. Linux evidence generated before this change is not
+comparable on the `session-end` scope.
+
+Residual risk, not fixed here: in the product there is a window of one driver
+turn between a socket drop and the release of its registration, during which
+stale stack bytes in the padding stay allocated. `scrub_stack()` before the
+registration is built would close it; track it as a separate ticket.
+
+`make test` runs `cargo test --workspace` in `harness/` again.
 
 ## Consequences
 

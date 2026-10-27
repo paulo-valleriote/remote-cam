@@ -86,6 +86,9 @@ pub fn run(
     say(&mut output, LIVE)?;
     wait_for(&mut input, END)?;
     drop(session);
+    // Tokio frees a dropped socket's I/O registration on the next driver turn. A parked probe
+    // never takes one, so give it one while keeping the runtime alive, as the product does.
+    runtime.block_on(tokio::task::yield_now());
     remotecam_scrub::scrub_stack();
     say(&mut output, ENDED)?;
     wait_for(&mut input, EXIT)
