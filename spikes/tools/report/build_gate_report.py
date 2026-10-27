@@ -642,6 +642,15 @@ def build_report() -> dict:
                 entry[optional] = decision[optional]
         decisions.append(entry)
 
+    # Amendments are layered over the schema-pinned report: only the downstream status is
+    # overridden here; render_report.py reads the same file for the dated narrative.
+    amendments = (_load(EVIDENCE_ROOT / "gate_report_amendments.json") or {}).get(
+        "amendments", []
+    )
+    for amendment in amendments:
+        for phase, override in amendment.get("downstream_status", {}).items():
+            downstream[phase].update(override)
+
     report = {
         "report_version": 2,
         "feature": "001-f0-technical-spikes",
