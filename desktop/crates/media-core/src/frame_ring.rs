@@ -1,13 +1,8 @@
-//! The Frame Ring: bounded hand-off of decoded frames between the network
-//! thread and the consumer. A full ring drops its oldest frame; `push` never
-//! waits for the consumer.
-
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::PoisonError;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Slots in the ring (GLOSSARY: Frame Ring, TDD §media core).
 pub const FRAME_RING_SLOTS: usize = 3;
 
 #[derive(Debug)]
@@ -24,8 +19,6 @@ impl<T> FrameRing<T> {
         }
     }
 
-    /// Stores `frame`; when the ring is full the oldest frame is dropped and
-    /// returned so the caller can account for it.
     pub fn push(&self, frame: T) -> Option<T> {
         let mut slots = self.slots.lock().unwrap_or_else(PoisonError::into_inner);
         let evicted = if slots.len() == FRAME_RING_SLOTS {
@@ -38,7 +31,6 @@ impl<T> FrameRing<T> {
         evicted
     }
 
-    /// Removes the oldest frame, if any.
     pub fn pop(&self) -> Option<T> {
         self.slots
             .lock()
@@ -57,12 +49,10 @@ impl<T> FrameRing<T> {
         self.len() == 0
     }
 
-    /// Frames discarded because the consumer lagged.
     pub fn dropped(&self) -> u64 {
         self.dropped.load(Ordering::Relaxed)
     }
 
-    /// Discards every pending frame without counting it as a lag drop.
     pub fn clear(&self) {
         self.slots
             .lock()

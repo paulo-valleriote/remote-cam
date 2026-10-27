@@ -1,7 +1,3 @@
-//! A synthetic phone: a `sendonly` H.264 WebRTC endpoint that stands in for the
-//! mobile app on the Linux harness and in tests. It encodes deterministic
-//! pictures with OpenH264 and sends them as RTP.
-
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -57,8 +53,6 @@ impl PeerConnectionEventHandler for PhoneEvents {
     }
 }
 
-/// The deterministic test picture for `index`: a horizontal luma ramp shifted by
-/// the index with flat chroma.
 pub fn synthetic_picture(index: u32) -> Vec<u8> {
     let luma = PICTURE_WIDTH * PICTURE_HEIGHT;
     let mut yuv = vec![128_u8; luma + luma / 2];
@@ -136,7 +130,6 @@ impl SyntheticPhone {
             .add_track(Arc::clone(&track) as Arc<dyn TrackLocal>)
             .await
             .map_err(error)?;
-        // `add_track` creates a `sendrecv` transceiver; the phone only sends.
         for transceiver in connection.get_transceivers().await {
             transceiver
                 .set_direction(RTCRtpTransceiverDirection::Sendonly)
@@ -165,7 +158,6 @@ impl SyntheticPhone {
         })
     }
 
-    /// The complete `sendonly` offer, after ICE gathering.
     pub async fn offer(&self) -> Result<String, MediaCoreError> {
         let offer = self.connection.create_offer(None).await.map_err(error)?;
         self.connection
@@ -190,14 +182,12 @@ impl SyntheticPhone {
             .map_err(error)
     }
 
-    /// Waits for DTLS/ICE to connect.
     pub async fn connected(&self) -> Result<(), MediaCoreError> {
         tokio::time::timeout(WAIT, self.connected.notified())
             .await
             .map_err(|_| MediaCoreError::PeerConnection("connection timed out".to_owned()))
     }
 
-    /// Encodes and sends the next synthetic picture.
     pub async fn send_frame(&mut self) -> Result<(), MediaCoreError> {
         let picture =
             YUVBuffer::from_vec(synthetic_picture(self.sent), PICTURE_WIDTH, PICTURE_HEIGHT);

@@ -1,6 +1,3 @@
-//! Receive-only Media Core (REC-50): RTP H.264 in, NV12 frames out, behind the
-//! Session Core's `MediaPort`. The Session Core never sees webrtc-rs or OpenH264.
-
 pub mod core;
 pub mod decoder;
 pub mod frame_ring;

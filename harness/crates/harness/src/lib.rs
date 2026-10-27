@@ -389,8 +389,6 @@ pub struct HarnessReport {
     pub reason_code: Option<&'static str>,
 }
 
-/// What the real Media Core produced in the `real-media-frame` scenario. Every
-/// field is deterministic; nothing here depends on wall-clock timing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct RealMediaObservation {
     pub pixel_format: &'static str,
@@ -1304,13 +1302,14 @@ async fn run_pairing_inner(
     Ok(report)
 }
 
-const MEDIA_BIND: &str = "127.0.0.1:0";
+const MEDIA_BIND_ADDRESS: &str = "127.0.0.1:0";
 const REAL_MEDIA_FRAMES: u64 = 2;
 const REAL_MEDIA_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
 
-/// The real Media Core and its synthetic phone, wired to the same injected
-/// clock as the Session Core. Wall-clock time is used only to wait for loopback
-/// delivery and never reaches the report.
+fn media_failure<E>(_: E) -> &'static str {
+    "internal_error"
+}
+
 struct RealMediaSession {
     core: Arc<MediaCore>,
     phone: SyntheticPhone,
@@ -1321,22 +1320,19 @@ struct RealMediaSession {
 impl RealMediaSession {
     async fn start(clock: &ManualClock, resources: &ResourceTracker) -> Result<Self, &'static str> {
         let core = Arc::new(
-            MediaCore::new(MEDIA_BIND)
+            MediaCore::new(MEDIA_BIND_ADDRESS)
                 .await
-                .map_err(|_| "internal_error")?,
+                .map_err(media_failure)?,
         );
-        let mut phone = SyntheticPhone::new(MEDIA_BIND)
+        let mut phone = SyntheticPhone::new(MEDIA_BIND_ADDRESS)
             .await
-            .map_err(|_| "internal_error")?;
-        let offer = phone.offer().await.map_err(|_| "internal_error")?;
-        let answer = core.answer(&offer).await.map_err(|_| "internal_error")?;
-        phone
-            .accept_answer(&answer)
-            .await
-            .map_err(|_| "internal_error")?;
-        phone.connected().await.map_err(|_| "internal_error")?;
+            .map_err(media_failure)?;
+        let offer = phone.offer().await.map_err(media_failure)?;
+        let answer = core.answer(&offer).await.map_err(media_failure)?;
+        phone.accept_answer(&answer).await.map_err(media_failure)?;
+        phone.connected().await.map_err(media_failure)?;
         for _ in 0..REAL_MEDIA_FRAMES {
-            phone.send_frame().await.map_err(|_| "internal_error")?;
+            phone.send_frame().await.map_err(media_failure)?;
         }
         tokio::time::timeout(REAL_MEDIA_DEADLINE, async {
             while core.stats().decoded_frames() < REAL_MEDIA_FRAMES {
@@ -1344,7 +1340,7 @@ impl RealMediaSession {
             }
         })
         .await
-        .map_err(|_| "internal_error")?;
+        .map_err(media_failure)?;
         Ok(Self {
             port: RingMediaPort::new(Arc::clone(&core), clock.clone()),
             core,
@@ -1365,8 +1361,8 @@ impl RealMediaSession {
             ring_slots: FRAME_RING_SLOTS,
             receive_only,
         };
-        self.core.close().await.map_err(|_| "internal_error")?;
-        self.phone.close().await.map_err(|_| "internal_error")?;
+        self.core.close().await.map_err(media_failure)?;
+        self.phone.close().await.map_err(media_failure)?;
         Ok(observation)
     }
 }

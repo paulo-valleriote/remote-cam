@@ -1,5 +1,3 @@
-//! Software H.264 decode (OpenH264) producing NV12 frames. Linux/CI only.
-
 use openh264::decoder::Decoder;
 use openh264::formats::YUVSource;
 

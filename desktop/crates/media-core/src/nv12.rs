@@ -1,13 +1,8 @@
-//! NV12 frames: a full-resolution Y plane followed by one interleaved U,V plane
-//! at half resolution in both directions, with a tight stride.
-
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FrameError {
-    /// NV12 subsamples chroma by two, so both dimensions must be even and non-zero.
     InvalidDimensions { width: u32, height: u32 },
-    /// The buffer does not hold exactly `width * height * 3 / 2` bytes.
     InvalidLength { expected: usize, actual: usize },
 }
 
@@ -29,7 +24,6 @@ impl fmt::Display for FrameError {
 
 impl std::error::Error for FrameError {}
 
-/// A decoded video frame in NV12.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Nv12Frame {
     width: u32,
@@ -71,7 +65,6 @@ impl Nv12Frame {
         self.height
     }
 
-    /// The 90 kHz RTP timestamp of the access unit this frame was decoded from.
     pub fn rtp_timestamp(&self) -> u32 {
         self.rtp_timestamp
     }
@@ -89,8 +82,6 @@ impl Nv12Frame {
     }
 }
 
-/// Repacks planar I420 (with arbitrary strides) into a tight NV12 buffer.
-/// U always lands on the even byte of a chroma row and V on the odd one.
 pub fn i420_to_nv12(
     width: usize,
     height: usize,
@@ -132,7 +123,6 @@ mod tests {
 
     #[test]
     fn drops_stride_padding_from_every_plane() {
-        // Strides are wider than the visible area; the padding bytes are 0xEE.
         let mut y = Vec::new();
         for row in 0..2_u8 {
             y.extend_from_slice(&[row * 2, row * 2 + 1, 0xEE, 0xEE]);

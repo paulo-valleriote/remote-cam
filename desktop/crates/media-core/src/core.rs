@@ -1,13 +1,6 @@
-//! The receive-only peer connection and the decode worker behind the Media Port.
-//!
-//! Threads: the WebRTC driver and the track task never decode and never wait
-//! for the consumer. They hand complete access units to a dedicated decode
-//! thread through a bounded queue (a full queue drops the unit) and the decode
-//! thread publishes frames into the Frame Ring.
-
 use std::fmt;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -31,8 +24,8 @@ use crate::decoder::VideoDecoder;
 use crate::frame_ring::FrameRing;
 use crate::nv12::Nv12Frame;
 
-/// Access units waiting for the decode thread before new ones are dropped.
 const ACCESS_UNIT_QUEUE: usize = 8;
+const DECODE_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const GATHERING_DEADLINE: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,7 +51,6 @@ fn connection_error(error: impl fmt::Display) -> MediaCoreError {
     MediaCoreError::PeerConnection(error.to_string())
 }
 
-/// Counters observable by tests and the harness.
 #[derive(Debug, Default)]
 pub struct MediaStats {
     packets: AtomicU64,
@@ -90,7 +82,6 @@ struct AccessUnit {
     annex_b: Vec<u8>,
 }
 
-/// Reassembles RTP packets of one H.264 stream into Annex-B access units.
 struct AccessUnitAssembler {
     depacketizer: H264Packet,
     pending: Vec<u8>,
@@ -104,7 +95,6 @@ impl AccessUnitAssembler {
         }
     }
 
-    /// Feeds one packet; returns the access unit when the marker bit closes it.
     fn push(&mut self, packet: &rtc::rtp::Packet) -> Option<AccessUnit> {
         match self.depacketizer.depacketize(&packet.payload) {
             Ok(nalus) => self.pending.extend_from_slice(&nalus),
@@ -129,14 +119,14 @@ struct Shared {
 struct EventSink {
     shared: Arc<Shared>,
     access_units: SyncSender<AccessUnit>,
-    gathered: Arc<Notify>,
+    gathering_complete: Arc<Notify>,
 }
 
 #[async_trait]
 impl PeerConnectionEventHandler for EventSink {
     async fn on_ice_gathering_state_change(&self, state: RTCIceGatheringState) {
         if state == RTCIceGatheringState::Complete {
-            self.gathered.notify_one();
+            self.gathering_complete.notify_one();
         }
     }
 
@@ -170,16 +160,13 @@ fn decode_loop(
     mut decoder: Box<dyn VideoDecoder>,
     queue: Receiver<AccessUnit>,
     shared: Arc<Shared>,
-    stop: Arc<std::sync::atomic::AtomicBool>,
+    stop_requested: Arc<AtomicBool>,
 ) {
-    while !stop.load(Ordering::Acquire) {
-        let unit = match queue.try_recv() {
+    while !stop_requested.load(Ordering::Acquire) {
+        let unit = match queue.recv_timeout(DECODE_POLL_INTERVAL) {
             Ok(unit) => unit,
-            Err(TryRecvError::Empty) => {
-                std::thread::sleep(Duration::from_millis(1));
-                continue;
-            }
-            Err(TryRecvError::Disconnected) => return,
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Disconnected) => return,
         };
         match decoder.decode(&unit.annex_b, unit.rtp_timestamp) {
             Ok(Some(frame)) => {
@@ -195,28 +182,24 @@ fn decode_loop(
     }
 }
 
-/// One receive-only session's media: peer connection, decode thread, Frame Ring.
 pub struct MediaCore {
     connection: Arc<dyn PeerConnection>,
     shared: Arc<Shared>,
-    gathered: Arc<Notify>,
-    stop: Arc<std::sync::atomic::AtomicBool>,
+    gathering_complete: Arc<Notify>,
+    stop_requested: Arc<AtomicBool>,
     worker: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl MediaCore {
-    /// Linux/CI Media Core with the OpenH264 software decoder.
     #[cfg(not(windows))]
-    pub async fn new(bind: &str) -> Result<Self, MediaCoreError> {
+    pub async fn new(bind_address: &str) -> Result<Self, MediaCoreError> {
         let decoder = crate::software_decoder::SoftwareH264Decoder::new()
             .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
-        Self::with_decoder(bind, Box::new(decoder)).await
+        Self::with_decoder(bind_address, Box::new(decoder)).await
     }
 
-    /// Builds a receive-only connection bound to `bind` (host candidates only,
-    /// no ICE servers) and starts the decode thread around `decoder`.
     pub async fn with_decoder(
-        bind: &str,
+        bind_address: &str,
         decoder: Box<dyn VideoDecoder>,
     ) -> Result<Self, MediaCoreError> {
         let mut media_engine = MediaEngine::default();
@@ -231,12 +214,12 @@ impl MediaCore {
             stats: MediaStats::default(),
             arrived: Notify::new(),
         });
-        let gathered = Arc::new(Notify::new());
+        let gathering_complete = Arc::new(Notify::new());
         let (access_units, queue) = sync_channel(ACCESS_UNIT_QUEUE);
         let sink = EventSink {
             shared: Arc::clone(&shared),
             access_units,
-            gathered: Arc::clone(&gathered),
+            gathering_complete: Arc::clone(&gathering_complete),
         };
 
         let connection = PeerConnectionBuilder::new()
@@ -248,7 +231,7 @@ impl MediaCore {
             .with_media_engine(media_engine)
             .with_interceptor_registry(registry)
             .with_handler(Arc::new(sink) as Arc<dyn PeerConnectionEventHandler>)
-            .with_udp_addrs(vec![bind.to_owned()])
+            .with_udp_addrs(vec![bind_address.to_owned()])
             .build()
             .await
             .map_err(connection_error)?;
@@ -264,27 +247,25 @@ impl MediaCore {
             .await
             .map_err(connection_error)?;
 
-        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop_requested = Arc::new(AtomicBool::new(false));
         let worker = std::thread::Builder::new()
             .name("media-core-decode".to_owned())
             .spawn({
                 let shared = Arc::clone(&shared);
-                let stop = Arc::clone(&stop);
-                move || decode_loop(decoder, queue, shared, stop)
+                let stop_requested = Arc::clone(&stop_requested);
+                move || decode_loop(decoder, queue, shared, stop_requested)
             })
             .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
 
         Ok(Self {
             connection,
             shared,
-            gathered,
-            stop,
+            gathering_complete,
+            stop_requested,
             worker: Mutex::new(Some(worker)),
         })
     }
 
-    /// Accepts the phone's offer and returns the complete answer SDP (ICE
-    /// gathering finished, so no trickle candidates are needed).
     pub async fn answer(&self, offer_sdp: &str) -> Result<String, MediaCoreError> {
         let offer = RTCSessionDescription::offer(offer_sdp.to_owned()).map_err(connection_error)?;
         self.connection
@@ -300,7 +281,7 @@ impl MediaCore {
             .set_local_description(answer)
             .await
             .map_err(connection_error)?;
-        tokio::time::timeout(GATHERING_DEADLINE, self.gathered.notified())
+        tokio::time::timeout(GATHERING_DEADLINE, self.gathering_complete.notified())
             .await
             .map_err(|_| MediaCoreError::GatheringTimedOut)?;
         self.connection
@@ -310,7 +291,6 @@ impl MediaCore {
             .ok_or_else(|| MediaCoreError::PeerConnection("local description missing".to_owned()))
     }
 
-    /// Waits until a decoded frame is available in the ring.
     pub async fn frame_available(&self) {
         while self.shared.ring.is_empty() {
             self.shared.arrived.notified().await;
@@ -325,8 +305,6 @@ impl MediaCore {
         &self.shared.stats
     }
 
-    /// True when every transceiver is receive-only: the Media Core never
-    /// originates media.
     pub async fn is_receive_only(&self) -> bool {
         let transceivers = self.connection.get_transceivers().await;
         let mut receive_only = !transceivers.is_empty();
@@ -338,14 +316,21 @@ impl MediaCore {
     }
 
     pub async fn close(&self) -> Result<(), MediaCoreError> {
-        self.stop.store(true, Ordering::Release);
+        self.stop_requested.store(true, Ordering::Release);
         let worker = self
             .worker
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
         if let Some(worker) = worker {
-            let _ = tokio::task::spawn_blocking(move || worker.join()).await;
+            let joined = tokio::task::spawn_blocking(move || worker.join())
+                .await
+                .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
+            if joined.is_err() {
+                self.shared.ring.clear();
+                let _ = self.connection.close().await;
+                return Err(MediaCoreError::Decoder("decode thread panicked".to_owned()));
+            }
         }
         self.shared.ring.clear();
         self.connection.close().await.map_err(connection_error)
@@ -395,7 +380,6 @@ mod tests {
     #[test]
     fn a_fragmented_nal_is_reassembled_across_fu_a_packets() {
         let mut assembler = AccessUnitAssembler::new();
-        // FU-A: indicator 0x7C (type 28, nri 3), header start / end with type 5.
         assert!(
             assembler
                 .push(&packet(&[0x7C, 0x85, 1, 2], false, 1))

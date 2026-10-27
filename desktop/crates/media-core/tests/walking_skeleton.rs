@@ -1,15 +1,15 @@
 #![cfg(not(windows))]
 
-//! REC-50: synthetic H.264 RTP arrives as a real NV12 `MediaFrame` through the
-//! Media Port, over a loopback WebRTC connection.
-
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use remotecam_media_core::testing::{
     PICTURE_HEIGHT, PICTURE_WIDTH, SyntheticPhone, synthetic_picture,
 };
-use remotecam_media_core::{FRAME_RING_SLOTS, MediaCore, RingMediaPort};
+use remotecam_media_core::{
+    DecodeError, FRAME_RING_SLOTS, MediaCore, Nv12Frame, RingMediaPort, VideoDecoder,
+};
 use remotecam_session_core::testing::ManualClock;
 use remotecam_session_core::{MediaPort, Timestamp};
 use tokio::time::timeout;
@@ -100,6 +100,85 @@ async fn a_lagging_consumer_loses_the_oldest_frames_not_the_stream() {
 
     assert_eq!(core.ring().len(), FRAME_RING_SLOTS);
     assert_eq!(core.ring().dropped(), sent - FRAME_RING_SLOTS as u64);
+    core.close().await.expect("close");
+    phone.close().await.expect("phone close");
+}
+
+struct ReleaseProbe {
+    released: Arc<AtomicBool>,
+}
+
+impl VideoDecoder for ReleaseProbe {
+    fn decode(&mut self, _: &[u8], _: u32) -> Result<Option<Nv12Frame>, DecodeError> {
+        Ok(None)
+    }
+}
+
+impl Drop for ReleaseProbe {
+    fn drop(&mut self) {
+        self.released.store(true, Ordering::SeqCst);
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn closing_the_media_core_releases_the_decoder_and_the_ring() {
+    let released = Arc::new(AtomicBool::new(false));
+    let probe = ReleaseProbe {
+        released: Arc::clone(&released),
+    };
+    let core = MediaCore::with_decoder(LOOPBACK, Box::new(probe))
+        .await
+        .expect("media core");
+    assert!(!released.load(Ordering::SeqCst));
+
+    core.close().await.expect("close");
+
+    assert!(
+        released.load(Ordering::SeqCst),
+        "the decode thread is joined and drops its decoder"
+    );
+    assert!(core.ring().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_consumer_racing_the_decode_thread_sees_ordered_frames_and_consistent_counts() {
+    let (core, mut phone) = negotiated().await;
+    let sent = 12_u64;
+    let consumer_core = Arc::clone(&core);
+    let consumer = tokio::spawn(async move {
+        let mut port = RingMediaPort::new(
+            consumer_core.clone(),
+            ManualClock::new(Timestamp::from_millis(0)),
+        );
+        port.start();
+        let mut sequences = Vec::new();
+        let mut rtp_timestamps = Vec::new();
+        timeout(DEADLINE, async {
+            while consumer_core.stats().decoded_frames() < sent || !consumer_core.ring().is_empty()
+            {
+                if let Some(media_frame) = port.next_frame() {
+                    sequences.push(media_frame.sequence);
+                    rtp_timestamps.push(port.current_frame().expect("pixels").rtp_timestamp());
+                } else {
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+            }
+        })
+        .await
+        .expect("the consumer drains the ring");
+        (sequences, rtp_timestamps)
+    });
+    for _ in 0..sent {
+        phone.send_frame().await.expect("send");
+    }
+    let (sequences, rtp_timestamps) = consumer.await.expect("consumer");
+
+    assert!(sequences.windows(2).all(|pair| pair[1] == pair[0] + 1));
+    assert!(rtp_timestamps.windows(2).all(|pair| pair[1] > pair[0]));
+    assert_eq!(
+        sequences.len() as u64 + core.ring().dropped(),
+        core.stats().decoded_frames()
+    );
     core.close().await.expect("close");
     phone.close().await.expect("phone close");
 }
