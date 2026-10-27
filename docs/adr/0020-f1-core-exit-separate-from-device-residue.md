@@ -1,4 +1,4 @@
-# ADR-0017 — The F1 core exit is separate from the C-02 device residue inspection
+# ADR-0020 — The F1 core exit is separate from the C-02 device residue inspection
 
 - **Status:** accepted
 - **Date:** 2026-10-26

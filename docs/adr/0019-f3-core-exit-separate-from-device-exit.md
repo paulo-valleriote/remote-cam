@@ -2,7 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-10-26
-- **Relates to:** ADR-0017, REC-4, F0 gate report
+- **Relates to:** ADR-0020, REC-4, F0 gate report
 
 ## Context
 
