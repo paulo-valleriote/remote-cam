@@ -27,5 +27,5 @@ available, so the F1 date depended on unavailable hardware.
 
 ## Consequences
 
-- The 2026-12-20 date is an assumption by the amender, not given in REC-16.
+- The 2026-12-20 date was proposed by the amender (REC-16 gives none) and confirmed by the project owner on 2026-10-26.
 - Regenerating the gate report keeps A-1; dropping the amendments file drops it.

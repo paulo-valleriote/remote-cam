@@ -8,10 +8,22 @@
       "amended_by": "Paulo Valleriote (technical_lead, as F1 exit owner); the security_reviewer role retains C-02-residual, and the same person signs both roles, so the waiver authority for C-02-residual is recorded here as security_reviewer.",
       "reason": "the single C-02 waiver (deadline 2026-11-20) tied the F1 exit to a residue-restart inspection that needs two named reference devices (Windows 11 and Android) that are not available. The F1 date would therefore depend on unavailable hardware.",
       "change_table": [
-        ["F1 core exit", "Protocol core, session core and product harness exit gate", "technical_lead — Paulo Valleriote", "2026-11-20", "no"],
-        ["C-02-residual", "Residue inspection after application restart, same method as the session-end inspection, on two named reference devices", "security_reviewer — Paulo Valleriote", "2026-12-20", "yes"]
+        [
+          "F1 core exit",
+          "Protocol core, session core and product harness exit gate",
+          "technical_lead — Paulo Valleriote",
+          "2026-11-20",
+          "no"
+        ],
+        [
+          "C-02-residual",
+          "Residue inspection after application restart, same method as the session-end inspection, on two named reference devices",
+          "security_reviewer — Paulo Valleriote",
+          "2026-12-20",
+          "yes"
+        ]
       ],
-      "deadline_rationale": "2026-12-20 is an assumption by the amender, not given in REC-16. It aligns with the C-04 deadline, falls before the F2 exit gate (the original rule that the inspection is recorded before F2) and before C-05 (2027-01-15) and the F3 carries (2027-02-15).",
+      "deadline_rationale": "2026-12-20 was proposed by the amender (REC-16 gives none) and confirmed by the project owner on 2026-10-26. It aligns with the C-04 deadline, falls before the F2 exit gate (the original rule that the inspection is recorded before F2) and before C-05 (2027-01-15) and the F3 carries (2027-02-15).",
       "id_mapping": "C-02-residual continues C-02-residue-restart (same inspection, same method); the original ID is retained in the records above for traceability.",
       "status_effects": "F1 stays `conditional`, but the F1 exit is the core exit only; C-02-residual and C-04 are tracked against F1/F2 and do not gate it; F2 now depends on the F1 core exit and on C-02-residual; F3 is unchanged.",
       "unchanged": "all five gate verdicts, `pairing_handshake` stays `conditional`; C-04, C-05 and every carried obligation keep their dates.",
@@ -19,11 +31,20 @@
       "downstream_status": {
         "F1": {
           "reason": "F0 is closed with exceptions; the F1 core exit (2026-11-20) does not depend on unavailable devices. The device residue inspection (C-02-residual, 2026-12-20) and C-04 remain open (amended by A-1).",
-          "conditions": ["F1 core exit (deadline 2026-11-20)", "C-02-residual (deadline 2026-12-20)", "C-04-interop-live-run (deadline 2026-12-20)"]
+          "conditions": [
+            "F1 core exit (deadline 2026-11-20)",
+            "C-02-residual (deadline 2026-12-20)",
+            "C-04-interop-live-run (deadline 2026-12-20)"
+          ]
         },
         "F2": {
           "reason": "F2 depends on the F1 core exit, C-02-residual and the codec and licensing conditions.",
-          "conditions": ["F1 core exit", "C-02-residual (deadline 2026-12-20)", "C-04-interop-live-run (deadline 2026-12-20)", "C-05-licensing-decision (deadline 2027-01-15)"]
+          "conditions": [
+            "F1 core exit",
+            "C-02-residual (deadline 2026-12-20)",
+            "C-04-interop-live-run (deadline 2026-12-20)",
+            "C-05-licensing-decision (deadline 2027-01-15)"
+          ]
         }
       },
       "annotations": {

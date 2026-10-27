@@ -220,7 +220,7 @@
 | F1 core exit | Protocol core, session core and product harness exit gate | technical_lead — Paulo Valleriote | 2026-11-20 | no |
 | C-02-residual | Residue inspection after application restart, same method as the session-end inspection, on two named reference devices | security_reviewer — Paulo Valleriote | 2026-12-20 | yes |
 
-- **Deadline rationale:** 2026-12-20 is an assumption by the amender, not given in REC-16. It aligns with the C-04 deadline, falls before the F2 exit gate (the original rule that the inspection is recorded before F2) and before C-05 (2027-01-15) and the F3 carries (2027-02-15).
+- **Deadline rationale:** 2026-12-20 was proposed by the amender (REC-16 gives none) and confirmed by the project owner on 2026-10-26. It aligns with the C-04 deadline, falls before the F2 exit gate (the original rule that the inspection is recorded before F2) and before C-05 (2027-01-15) and the F3 carries (2027-02-15).
 - **ID mapping:** C-02-residual continues C-02-residue-restart (same inspection, same method); the original ID is retained in the records above for traceability.
 - **Status effects:** F1 stays `conditional`, but the F1 exit is the core exit only; C-02-residual and C-04 are tracked against F1/F2 and do not gate it; F2 now depends on the F1 core exit and on C-02-residual; F3 is unchanged.
 - **Unchanged:** all five gate verdicts, `pairing_handshake` stays `conditional`; C-04, C-05 and every carried obligation keep their dates.
