@@ -68,6 +68,8 @@ impl AudioEngine {
         self.stats
     }
 
+    /// Lifts a 32-bit RTP timestamp onto the 64-bit schedule. Truncating the cursor to
+    /// `u32` is deliberate: the wrapping signed difference is the distance across a wrap.
     fn extend(&self, timestamp: u32) -> u64 {
         let delta = i64::from(timestamp.wrapping_sub(self.cursor as u32) as i32);
         self.cursor.saturating_add_signed(delta)

@@ -13,6 +13,8 @@ use crate::testing::{LossProfile, LossyLink, ProfileLabel};
 const STEP: Duration = Duration::from_millis(1);
 const FRAME_INTERVAL: Duration = Duration::from_millis(20);
 const DROPOUT_SAMPLES: usize = (SAMPLE_RATE_HZ as usize) * 50 / 1_000;
+/// Whole frames that reach the 50 ms threshold: 50 ms rounds up to three 20 ms frames.
+const DROPOUT_FRAMES: usize = DROPOUT_SAMPLES.div_ceil(FRAME_SAMPLES);
 const TONE_HZ: f64 = 440.0;
 const TONE_PEAK: f64 = 8_000.0;
 const OPUS_PAYLOAD_TYPE: u8 = 111;
@@ -39,7 +41,7 @@ impl UnderrunDetector {
             return;
         }
         self.run += 1;
-        if self.run * FRAME_SAMPLES == DROPOUT_SAMPLES.next_multiple_of(FRAME_SAMPLES) {
+        if self.run == DROPOUT_FRAMES {
             self.dropouts += 1;
         }
         self.longest = self.longest.max(self.run);
