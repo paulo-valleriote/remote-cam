@@ -570,9 +570,9 @@
           "concealed_frames": 876,
           "silent_frames": 0,
           "late_packets": 0,
-          "delivery_dropouts": 0,
+          "underrun_dropouts": 0,
           "silence_dropouts": 0,
-          "longest_delivery_gap_millis": 20,
+          "longest_underrun_millis": 0,
           "longest_silent_run_millis": 2
         }
       },

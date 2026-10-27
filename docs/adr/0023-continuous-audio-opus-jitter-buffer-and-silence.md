@@ -48,15 +48,22 @@ continuous silence, never a hole. Audio is never retransmitted.
   counted late and dropped. There is no NACK and no retransmission for audio.
 - The v1 phone sends 20 ms frames; a packet that decodes to any other length counts
   as a decode error and is concealed.
-- A timestamp jump beyond 2 s re-anchors the schedule instead of emitting an
-  unbounded run of silence.
+- A timestamp jump beyond 2 s, forward or backward (phone restart), re-anchors the
+  schedule instead of emitting an unbounded run of silence or dropping every packet
+  as late.
 
 ## Dropout measurement
 
-A dropout is a stretch of ≥ 50 ms in which the output stopped being a live signal.
-Two independent detectors measure it and must agree: one watches **delivery timing**
-(the gap between consecutive sink writes), the other watches **content** (runs of
-exact digital zero in a source that is never silent). The harness reports both.
+A dropout is a stretch of ≥ 50 ms with no audio at all. PLC is the specified
+recovery, so concealed frames are audio: at 3 % uniform loss a run of three lost
+packets (60 ms of PLC) is expected about once in ten minutes and is not a dropout.
+Two detectors with different observables measure it and must agree: one watches
+**provenance** (consecutive frames the engine had to fill with digital silence,
+reported through `FrameOrigin`), the other watches **content** (runs of exact digital
+zero in the samples of a source that is never silent). The gate passes only when both
+report zero; the harness reports both and whether they agree. Timing between sink
+writes is not measured: the engine writes one frame per slot by construction, so such
+a detector could not fail.
 
 ## Consequences
 

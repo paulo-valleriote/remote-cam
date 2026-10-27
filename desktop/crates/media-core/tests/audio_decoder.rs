@@ -64,3 +64,17 @@ fn rejects_a_malformed_packet() {
     assert!(matches!(error, AudioError::Decoder(_)));
     assert!(error.to_string().contains("opus decoder error"));
 }
+
+#[test]
+fn conceals_one_20_ms_frame_even_after_a_longer_packet() {
+    let mut encoder =
+        Encoder::new(SAMPLE_RATE_HZ, Channels::Mono, Application::Voip).expect("encoder");
+    let mut packet = vec![0_u8; 800];
+    let length = encoder
+        .encode(&[1_000_i16; 2 * FRAME_SAMPLES], &mut packet)
+        .expect("encode");
+    let mut decoder = OpusDecoder::new().expect("decoder");
+    let pcm = decoder.decode(&packet[..length]).expect("decode");
+    assert_eq!(pcm.len(), 2 * FRAME_SAMPLES);
+    assert_eq!(decoder.conceal().expect("plc").len(), FRAME_SAMPLES);
+}

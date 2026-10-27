@@ -634,9 +634,9 @@
         "concealed_frames",
         "silent_frames",
         "late_packets",
-        "delivery_dropouts",
+        "underrun_dropouts",
         "silence_dropouts",
-        "longest_delivery_gap_millis",
+        "longest_underrun_millis",
         "longest_silent_run_millis"
       ],
       "properties": {
@@ -671,13 +671,13 @@
           "type": "integer",
           "minimum": 0
         },
-        "delivery_dropouts": {
+        "underrun_dropouts": {
           "const": 0
         },
         "silence_dropouts": {
           "const": 0
         },
-        "longest_delivery_gap_millis": {
+        "longest_underrun_millis": {
           "type": "integer",
           "minimum": 0,
           "exclusiveMaximum": 50

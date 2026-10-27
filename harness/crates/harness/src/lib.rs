@@ -428,7 +428,7 @@ const LOSS_RECOVERY_SECONDS: u64 = 10;
 const AUDIO_CONTINUITY_SECONDS: u64 = 600;
 
 /// Audio under the single nominal loss profile: ten simulated minutes measured by two
-/// independent dropout detectors (delivery timing and digital-silence content).
+/// independent dropout detectors (frame provenance and digital-silence content).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct AudioContinuityObservation {
     pub profile: &'static str,
@@ -439,9 +439,9 @@ pub struct AudioContinuityObservation {
     pub concealed_frames: u64,
     pub silent_frames: u64,
     pub late_packets: u64,
-    pub delivery_dropouts: u64,
+    pub underrun_dropouts: u64,
     pub silence_dropouts: u64,
-    pub longest_delivery_gap_millis: u64,
+    pub longest_underrun_millis: u64,
     pub longest_silent_run_millis: u64,
 }
 
@@ -459,9 +459,9 @@ impl AudioContinuityObservation {
             concealed_frames: report.concealed,
             silent_frames: report.silent,
             late_packets: report.late,
-            delivery_dropouts: report.delivery_dropouts,
+            underrun_dropouts: report.underrun_dropouts,
             silence_dropouts: report.silence_dropouts,
-            longest_delivery_gap_millis: u64::try_from(report.longest_delivery_gap.as_millis())
+            longest_underrun_millis: u64::try_from(report.longest_underrun.as_millis())
                 .unwrap_or(u64::MAX),
             longest_silent_run_millis: u64::try_from(report.longest_silent_run.as_millis())
                 .unwrap_or(u64::MAX),

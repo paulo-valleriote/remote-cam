@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use opus::{Application, Channels, Encoder};
 use remotecam_media_core::audio::{FRAME_SAMPLES, OpusDecoder, SAMPLE_RATE_HZ};
-use remotecam_media_core::audio_engine::{AudioEngine, AudioSink};
+use remotecam_media_core::audio_engine::{AudioEngine, AudioSink, FrameOrigin};
 use rtc::rtp::Packet;
 use rtc::rtp::header::Header;
 
@@ -12,7 +12,7 @@ type Frames = Arc<Mutex<Vec<Vec<i16>>>>;
 struct RecordingSink(Frames);
 
 impl AudioSink for RecordingSink {
-    fn write(&mut self, pcm: &[i16]) {
+    fn write(&mut self, pcm: &[i16], _origin: FrameOrigin) {
         self.0.lock().expect("frames").push(pcm.to_vec());
     }
 }
@@ -207,4 +207,94 @@ fn dropping_the_engine_releases_the_sink_and_writes_nothing_after() {
     drop(engine);
     assert_eq!(Arc::strong_count(&frames), 1, "the sink is released");
     assert_eq!(frames.lock().unwrap().len(), 1, "nothing is written after");
+}
+
+#[test]
+fn a_timestamp_jump_backwards_beyond_two_seconds_re_anchors_too() {
+    let (mut engine, frames) = engine();
+    let mut phone = Phone::new();
+    engine.ingest(phone.packet(500), ms(0));
+    let restarted = phone.packet(0);
+    engine.ingest(restarted, ms(40));
+    assert_eq!(engine.stats().resyncs, 1);
+    assert_eq!(engine.stats().late, 0);
+    engine.advance(ms(100));
+    assert_eq!(frames.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn a_packet_between_slots_is_played_once_and_a_stale_one_counts_late() {
+    let (mut engine, frames) = engine();
+    let mut phone = Phone::new();
+    engine.ingest(phone.packet(0), ms(0));
+    let mut off_grid = phone.packet(1);
+    off_grid.header.timestamp += 100;
+    let mut stale = phone.packet(1);
+    stale.header.timestamp += 200;
+    engine.ingest(off_grid, ms(10));
+    engine.ingest(stale, ms(11));
+    engine.advance(ms(120));
+    assert_eq!(frames.lock().unwrap().len(), 4);
+    assert_eq!(engine.stats().decoded, 2, "one packet per slot");
+    assert_eq!(
+        engine.stats().late,
+        1,
+        "the second one in the slot is stale"
+    );
+}
+
+#[test]
+fn a_muted_microphone_is_decoded_silence_and_the_stream_keeps_its_cadence() {
+    let (mut engine, frames) = engine();
+    let mut encoder =
+        Encoder::new(SAMPLE_RATE_HZ, Channels::Mono, Application::Voip).expect("encoder");
+    for frame in 0..50_u32 {
+        let mut payload = vec![0_u8; 400];
+        let length = encoder
+            .encode(&[0_i16; FRAME_SAMPLES], &mut payload)
+            .expect("encode");
+        payload.truncate(length);
+        let packet = Packet {
+            header: Header {
+                sequence_number: frame as u16,
+                timestamp: frame * FRAME_SAMPLES as u32,
+                ..Default::default()
+            },
+            payload: payload.into(),
+        };
+        engine.ingest(packet, ms(u64::from(frame) * 20));
+    }
+    engine.advance(ms(60 + 49 * 20));
+    let played = frames.lock().unwrap().clone();
+    assert_eq!(played.len(), 50);
+    assert!(played.iter().all(|frame| frame.len() == FRAME_SAMPLES));
+    let loudest = played
+        .iter()
+        .map(|frame| frame.iter().map(|s| s.unsigned_abs()).max().unwrap())
+        .max()
+        .unwrap();
+    assert!(
+        loudest < 64,
+        "decoded mute stays near silence, peak {loudest}"
+    );
+    assert_eq!(engine.stats().decode_errors, 0);
+}
+
+#[test]
+fn the_sink_is_told_where_each_frame_came_from() {
+    struct Origins(Arc<Mutex<Vec<FrameOrigin>>>);
+    impl AudioSink for Origins {
+        fn write(&mut self, _pcm: &[i16], origin: FrameOrigin) {
+            self.0.lock().unwrap().push(origin);
+        }
+    }
+    let origins = Arc::new(Mutex::new(Vec::new()));
+    let mut engine = AudioEngine::new(Box::new(Origins(Arc::clone(&origins)))).unwrap();
+    let mut phone = Phone::new();
+    engine.ingest(phone.packet(0), ms(0));
+    engine.advance(ms(60 + 20 * 6));
+    let seen = origins.lock().unwrap().clone();
+    assert_eq!(seen[0], FrameOrigin::Decoded);
+    assert!(seen[1..6].iter().all(|o| *o == FrameOrigin::Concealed));
+    assert_eq!(seen[6], FrameOrigin::Silence);
 }

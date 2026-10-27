@@ -7,47 +7,52 @@ use rtc::rtp::Packet;
 use rtc::rtp::header::Header;
 
 use crate::audio::{FRAME_SAMPLES, SAMPLE_RATE_HZ};
-use crate::audio_engine::{AudioEngine, AudioSink};
+use crate::audio_engine::{AudioEngine, AudioSink, FrameOrigin};
 use crate::testing::{LossProfile, LossyLink, ProfileLabel};
 
 const STEP: Duration = Duration::from_millis(1);
 const FRAME_INTERVAL: Duration = Duration::from_millis(20);
-const DROPOUT: Duration = Duration::from_millis(50);
 const DROPOUT_SAMPLES: usize = (SAMPLE_RATE_HZ as usize) * 50 / 1_000;
-const TONE_HZ: f32 = 440.0;
-const TONE_PEAK: f32 = 8_000.0;
+const TONE_HZ: f64 = 440.0;
+const TONE_PEAK: f64 = 8_000.0;
 const OPUS_PAYLOAD_TYPE: u8 = 111;
 
-/// Timing detector: the gap between two consecutive writes to the sink.
+/// Provenance detector: a run of frames with no audio at all. PLC is the specified
+/// recovery and counts as audio; only frames the engine had to fill with digital
+/// silence are a hole. It watches what the engine reports, where
+/// `SilenceRunDetector` watches the samples themselves.
 #[derive(Debug, Default)]
-pub struct DeliveryGapDetector {
-    last: Option<Duration>,
-    longest: Duration,
+pub struct UnderrunDetector {
+    run: usize,
+    longest: usize,
     dropouts: u64,
 }
 
-impl DeliveryGapDetector {
+impl UnderrunDetector {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn observe(&mut self, now: Duration) {
-        if let Some(last) = self.last {
-            let gap = now.saturating_sub(last);
-            self.longest = self.longest.max(gap);
-            if gap >= DROPOUT {
-                self.dropouts += 1;
-            }
+    pub fn observe(&mut self, origin: FrameOrigin) {
+        if origin != FrameOrigin::Silence {
+            self.run = 0;
+            return;
         }
-        self.last = Some(now);
+        self.run += 1;
+        if self.run * FRAME_SAMPLES == DROPOUT_SAMPLES.next_multiple_of(FRAME_SAMPLES) {
+            self.dropouts += 1;
+        }
+        self.longest = self.longest.max(self.run);
     }
 
     pub fn dropouts(&self) -> u64 {
         self.dropouts
     }
 
-    pub fn longest_gap(&self) -> Duration {
-        self.longest
+    pub fn longest_run(&self) -> Duration {
+        Duration::from_micros(
+            (self.longest * FRAME_SAMPLES) as u64 * 1_000_000 / u64::from(SAMPLE_RATE_HZ),
+        )
     }
 }
 
@@ -98,40 +103,44 @@ pub struct AudioReport {
     pub silent: u64,
     pub late: u64,
     pub decode_errors: u64,
-    pub delivery_dropouts: u64,
+    pub underrun_dropouts: u64,
     pub silence_dropouts: u64,
-    pub longest_delivery_gap: Duration,
+    pub longest_underrun: Duration,
     pub longest_silent_run: Duration,
 }
 
 impl AudioReport {
+    /// The two detectors reach the same verdict: both saw an outage or neither did.
+    pub fn detectors_agree(&self) -> bool {
+        (self.underrun_dropouts > 0) == (self.silence_dropouts > 0)
+    }
+
     /// Both detectors must agree on zero, over at least ten minutes of the single
     /// nominal profile.
     pub fn passes_gate(&self) -> bool {
         self.label == ProfileLabel::Nominal
             && self.seconds >= 600
-            && self.delivery_dropouts == 0
+            && self.underrun_dropouts == 0
             && self.silence_dropouts == 0
+            && self.detectors_agree()
             && self.decode_errors == 0
     }
 }
 
 #[derive(Default)]
 struct Observed {
-    now: Duration,
     played: u64,
-    delivery: DeliveryGapDetector,
+    underrun: UnderrunDetector,
     silence: SilenceRunDetector,
 }
 
 struct DetectingSink(Arc<Mutex<Observed>>);
 
 impl AudioSink for DetectingSink {
-    fn write(&mut self, pcm: &[i16]) {
+    fn write(&mut self, pcm: &[i16], origin: FrameOrigin) {
         let mut observed = self.0.lock().expect("observed");
-        let now = observed.now;
         observed.played += 1;
-        observed.delivery.observe(now);
+        observed.underrun.observe(origin);
         observed.silence.observe(pcm);
     }
 }
@@ -140,7 +149,8 @@ fn tone(frame: u32) -> Vec<i16> {
     (0..FRAME_SAMPLES)
         .map(|index| {
             let position = frame as usize * FRAME_SAMPLES + index;
-            let phase = position as f32 * TONE_HZ * std::f32::consts::TAU / SAMPLE_RATE_HZ as f32;
+            let phase =
+                position as f64 * TONE_HZ * std::f64::consts::TAU / f64::from(SAMPLE_RATE_HZ);
             (phase.sin() * TONE_PEAK) as i16
         })
         .collect()
@@ -186,7 +196,6 @@ pub fn run_audio_profile(profile: LossProfile, seconds: u64) -> AudioReport {
             }
             engine.ingest(entry.remove(), now);
         }
-        observed.lock().expect("observed").now = now;
         engine.advance(now);
         now += STEP;
     }
@@ -202,9 +211,9 @@ pub fn run_audio_profile(profile: LossProfile, seconds: u64) -> AudioReport {
         silent: stats.silent,
         late: stats.late,
         decode_errors: stats.decode_errors,
-        delivery_dropouts: observed.delivery.dropouts(),
+        underrun_dropouts: observed.underrun.dropouts(),
         silence_dropouts: observed.silence.dropouts(),
-        longest_delivery_gap: observed.delivery.longest_gap(),
+        longest_underrun: observed.underrun.longest_run(),
         longest_silent_run: observed.silence.longest_run(),
     }
 }

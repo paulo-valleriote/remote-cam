@@ -12,7 +12,15 @@ const RESYNC_TICKS: u64 = 2 * SAMPLE_RATE_HZ as u64;
 
 /// Where decoded PCM goes. The Media Core does not know what is behind it.
 pub trait AudioSink: Send {
-    fn write(&mut self, pcm: &[i16]);
+    fn write(&mut self, pcm: &[i16], origin: FrameOrigin);
+}
+
+/// Whether a frame is audio the phone sent or something the engine made up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameOrigin {
+    Decoded,
+    Concealed,
+    Silence,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -79,14 +87,13 @@ impl AudioEngine {
             self.anchor_at(first, now);
         }
         let extended = self.extend(packet.header.timestamp);
-        if extended < self.cursor {
-            self.stats.late += 1;
-            return;
-        }
-        if extended - self.cursor > RESYNC_TICKS {
+        if extended.abs_diff(self.cursor) > RESYNC_TICKS {
             self.pending.clear();
             self.anchor_at(extended, now);
             self.stats.resyncs += 1;
+        } else if extended < self.cursor {
+            self.stats.late += 1;
+            return;
         }
         if self.pending.contains_key(&extended) {
             self.stats.duplicates += 1;
@@ -107,25 +114,31 @@ impl AudioEngine {
             if self.due(schedule) > now {
                 break;
             }
+            while let Some(stale) = self.pending.first_entry()
+                && *stale.key() < self.cursor
+            {
+                stale.remove();
+                self.stats.late += 1;
+            }
             let slot_end = self.cursor + FRAME_TICKS;
             let payload = self
                 .pending
                 .first_entry()
                 .filter(|entry| *entry.key() < slot_end)
                 .map(|entry| entry.remove());
-            let pcm = self.frame(payload);
-            self.sink.write(&pcm);
+            let (pcm, origin) = self.frame(payload);
+            self.sink.write(&pcm, origin);
             self.cursor = slot_end;
         }
     }
 
-    fn frame(&mut self, payload: Option<Vec<u8>>) -> Vec<i16> {
+    fn frame(&mut self, payload: Option<Vec<u8>>) -> (Vec<i16>, FrameOrigin) {
         if let Some(payload) = payload {
             match self.decoder.decode(&payload) {
                 Ok(pcm) if pcm.len() == FRAME_SAMPLES => {
                     self.concealed_run = 0;
                     self.stats.decoded += 1;
-                    return pcm;
+                    return (pcm, FrameOrigin::Decoded);
                 }
                 _ => self.stats.decode_errors += 1,
             }
@@ -135,9 +148,9 @@ impl AudioEngine {
         {
             self.concealed_run += 1;
             self.stats.concealed += 1;
-            return pcm;
+            return (pcm, FrameOrigin::Concealed);
         }
         self.stats.silent += 1;
-        vec![0; FRAME_SAMPLES]
+        (vec![0; FRAME_SAMPLES], FrameOrigin::Silence)
     }
 }

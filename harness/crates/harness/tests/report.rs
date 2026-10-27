@@ -139,7 +139,7 @@ fn the_versioned_schema_rejects_an_audio_continuity_that_cannot_pass_the_gate() 
 
     let breaches = [
         ("profile", serde_json::json!("out_of_profile")),
-        ("delivery_dropouts", serde_json::json!(1)),
+        ("underrun_dropouts", serde_json::json!(1)),
         ("silence_dropouts", serde_json::json!(1)),
         ("duration_seconds", serde_json::json!(599)),
     ];
@@ -371,7 +371,7 @@ fn real_media_reports_ten_minutes_of_continuous_audio_with_two_agreeing_detector
 
     assert_eq!(audio.profile, "nominal");
     assert_eq!(audio.duration_seconds, 600);
-    assert_eq!(audio.delivery_dropouts, 0);
+    assert_eq!(audio.underrun_dropouts, 0);
     assert_eq!(audio.silence_dropouts, 0);
     assert!(audio.concealed_frames > 0, "3 % loss exercises PLC");
     assert!(audio.frames_played >= 600 * 50 - 4);

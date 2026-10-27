@@ -30,7 +30,6 @@ fn decoder_error(error: opus::Error) -> AudioError {
 /// Opus 48 kHz mono to signed 16-bit PCM. Knows nothing about the output device.
 pub struct OpusDecoder {
     inner: Decoder,
-    last_frame_samples: usize,
     decoded_any: bool,
 }
 
@@ -38,7 +37,6 @@ impl OpusDecoder {
     pub fn new() -> Result<Self, AudioError> {
         Ok(Self {
             inner: Decoder::new(SAMPLE_RATE_HZ, Channels::Mono).map_err(decoder_error)?,
-            last_frame_samples: FRAME_SAMPLES,
             decoded_any: false,
         })
     }
@@ -55,17 +53,17 @@ impl OpusDecoder {
             .decode(packet, &mut pcm, false)
             .map_err(decoder_error)?;
         pcm.truncate(samples);
-        self.last_frame_samples = samples;
         self.decoded_any = true;
         Ok(pcm)
     }
 
-    /// Packet loss concealment: extrapolates the previous audio for one frame.
+    /// Packet loss concealment: extrapolates the previous audio for one 20 ms frame,
+    /// whatever the length of the last decoded packet.
     pub fn conceal(&mut self) -> Result<Vec<i16>, AudioError> {
         if !self.decoded_any {
-            return Ok(vec![0; self.last_frame_samples]);
+            return Ok(vec![0; FRAME_SAMPLES]);
         }
-        let mut pcm = vec![0_i16; self.last_frame_samples];
+        let mut pcm = vec![0_i16; FRAME_SAMPLES];
         let samples = self
             .inner
             .decode(&[], &mut pcm, false)
