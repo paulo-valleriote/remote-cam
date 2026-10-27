@@ -25,6 +25,7 @@ decision was made and why.
 | [0017](0017-zero-persistence-inspection-and-memory-scrubbing.md) | Zero persistence is proven by one inspection method; the desktop scrubs freed memory |
 | [0018](0018-kotlin-session-core-parity.md) | The Kotlin session core is a pure-JVM mirror, compared by handshake scenarios |
 | [0019](0019-f3-core-exit-separate-from-device-exit.md) | The F3 exit is split into a Core Exit and a Device Exit |
+| [0020](0020-f1-core-exit-separate-from-device-residue.md) | The F1 core exit is separate from the C-02 device residue inspection |
 
 Add a new ADR by scanning this directory for the highest number and
 incrementing it. To revisit a decision, write a new ADR that supersedes the old
