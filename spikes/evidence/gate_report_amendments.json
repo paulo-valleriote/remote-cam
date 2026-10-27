@@ -1,0 +1,40 @@
+{
+  "amendments": [
+    {
+      "id": "A-1",
+      "date": "2026-10-26",
+      "title": "Separate the F1 core exit from the C-02 device residue",
+      "ticket": "REC-16",
+      "amended_by": "Paulo Valleriote (technical_lead, as F1 exit owner); the security_reviewer role retains C-02-residual, and the same person signs both roles, so the waiver authority for C-02-residual is recorded here as security_reviewer.",
+      "reason": "the single C-02 waiver (deadline 2026-11-20) tied the F1 exit to a residue-restart inspection that needs two named reference devices (Windows 11 and Android) that are not available. The F1 date would therefore depend on unavailable hardware.",
+      "change_table": [
+        ["F1 core exit", "Protocol core, session core and product harness exit gate", "technical_lead — Paulo Valleriote", "2026-11-20", "no"],
+        ["C-02-residual", "Residue inspection after application restart, same method as the session-end inspection, on two named reference devices", "security_reviewer — Paulo Valleriote", "2026-12-20", "yes"]
+      ],
+      "deadline_rationale": "2026-12-20 is an assumption by the amender, not given in REC-16. It aligns with the C-04 deadline, falls before the F2 exit gate (the original rule that the inspection is recorded before F2) and before C-05 (2027-01-15) and the F3 carries (2027-02-15).",
+      "id_mapping": "C-02-residual continues C-02-residue-restart (same inspection, same method); the original ID is retained in the records above for traceability.",
+      "status_effects": "F1 stays `conditional`, but the F1 exit is the core exit only; C-02-residual and C-04 are tracked against F1/F2 and do not gate it; F2 now depends on the F1 core exit and on C-02-residual; F3 is unchanged.",
+      "unchanged": "all five gate verdicts, `pairing_handshake` stays `conditional`; C-04, C-05 and every carried obligation keep their dates.",
+      "note": "the F0 evidence record (`f0_exit.json`, `D-EXIT-f0.md`) is not rewritten; this amendment is layered on top of it by `gate_report_amendments.json`.",
+      "downstream_status": {
+        "F1": {
+          "reason": "F0 is closed with exceptions; the F1 core exit (2026-11-20) does not depend on unavailable devices. The device residue inspection (C-02-residual, 2026-12-20) and C-04 remain open (amended by A-1).",
+          "conditions": ["F1 core exit (deadline 2026-11-20)", "C-02-residual (deadline 2026-12-20)", "C-04-interop-live-run (deadline 2026-12-20)"]
+        },
+        "F2": {
+          "reason": "F2 depends on the F1 core exit, C-02-residual and the codec and licensing conditions.",
+          "conditions": ["F1 core exit", "C-02-residual (deadline 2026-12-20)", "C-04-interop-live-run (deadline 2026-12-20)", "C-05-licensing-decision (deadline 2027-01-15)"]
+        }
+      },
+      "annotations": {
+        "version": " (Amendment A-1, 2026-10-26; see \"Amendments to this report\")",
+        "condition_status:C-02-residue-restart": "; amended by A-1, 2026-10-26: the device part continues as C-02-residual",
+        "condition_waiver:C-02-residue-restart": " (original; superseded by A-1 for the F1 core exit)",
+        "condition_note:C-02-residue-restart": "Amended by A-1 (2026-10-26): the F1 core exit no longer depends on this condition; the residue-on-devices part is tracked as C-02-residual with its own deadline 2026-12-20 (see \"Amendments to this report\").",
+        "statement": " Condition C-02 was later amended by A-1 (see \"Amendments to this report\").",
+        "disposition:pairing_handshake": " (original; amended by A-1: F1 core exit 2026-11-20, C-02-residual 2026-12-20)",
+        "waiver:C-02-residue-restart": "Amended by A-1: split into the F1 core exit (2026-11-20, no device dependency) and C-02-residual (device inspection, 2026-12-20). The inspection must still be recorded with the same method. Original waiver: "
+      }
+    }
+  ]
+}

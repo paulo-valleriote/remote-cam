@@ -367,17 +367,19 @@
   "downstream_status": {
     "F1": {
       "status": "conditional",
-      "reason": "F0 is closed with exceptions; F1 may proceed under the C-02 and C-04 waivers.",
+      "reason": "F0 is closed with exceptions; the F1 core exit (2026-11-20) does not depend on unavailable devices. The device residue inspection (C-02-residual, 2026-12-20) and C-04 remain open (amended by A-1).",
       "conditions": [
-        "C-02-residue-restart (deadline 2026-11-20)",
+        "F1 core exit (deadline 2026-11-20)",
+        "C-02-residual (deadline 2026-12-20)",
         "C-04-interop-live-run (deadline 2026-12-20)"
       ]
     },
     "F2": {
       "status": "conditional",
-      "reason": "F2 depends on the F1 exit and on the codec and licensing conditions.",
+      "reason": "F2 depends on the F1 core exit, C-02-residual and the codec and licensing conditions.",
       "conditions": [
-        "F1 exit",
+        "F1 core exit",
+        "C-02-residual (deadline 2026-12-20)",
         "C-04-interop-live-run (deadline 2026-12-20)",
         "C-05-licensing-decision (deadline 2027-01-15)"
       ]

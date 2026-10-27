@@ -147,7 +147,7 @@
 - **Closure mode:** closed_with_exceptions
 - **Exit gate:** not_met
 - **Closed at:** 2026-10-23T17:20:00-03:00
-- **Statement:** F0 is closed with recorded exceptions. All five gate verdicts were issued as measured: two no_go (camera injection and the desktop receive pipeline) and three conditional (pairing handshake, codec interoperability, virtual audio and licensing). The phase exit gate is not met. The only matrix evidence recorded is one Google Chrome injection cell of 33.2845 s; it does not satisfy the 1800 s per-cell and five-category matrix criterion, so the injection gate remains no_go. No new matrix evidence was collected at closure. Conditions C-02, C-04 and C-05 are waived with resolution deadlines (C-02 later amended by A-1, see "Amendments to this report"), and the environmental no_go obligations are carried to F3.
+- **Statement:** F0 is closed with recorded exceptions. All five gate verdicts were issued as measured: two no_go (camera injection and the desktop receive pipeline) and three conditional (pairing handshake, codec interoperability, virtual audio and licensing). The phase exit gate is not met. The only matrix evidence recorded is one Google Chrome injection cell of 33.2845 s; it does not satisfy the 1800 s per-cell and five-category matrix criterion, so the injection gate remains no_go. No new matrix evidence was collected at closure. Conditions C-02, C-04 and C-05 are waived with resolution deadlines, and the environmental no_go obligations are carried to F3. Condition C-02 was later amended by A-1 (see "Amendments to this report").
 
 **Sign-offs**
 
@@ -171,7 +171,7 @@
 
 | Condition | Phases | Waived by | Deadline | Resolution conditions |
 |-----------|--------|-----------|----------|-----------------------|
-| C-02-residue-restart | F1 | Paulo Valleriote | 2026-11-20 | Amended by A-1: split into the F1 core exit (2026-11-20, no device dependency) and C-02-residual (device inspection, 2026-12-20). The inspection must still be recorded with the same method. |
+| C-02-residue-restart | F1 | Paulo Valleriote | 2026-11-20 | Amended by A-1: split into the F1 core exit (2026-11-20, no device dependency) and C-02-residual (device inspection, 2026-12-20). The inspection must still be recorded with the same method. Original waiver: F1 may build the protocol core without the restart inspection, but the inspection must be recorded with the same method before the F1 exit gate. |
 | C-04-interop-live-run | F1, F2 | Paulo Valleriote | 2026-12-20 | The F1 contract may use the documented H.264 High Profile Level 3.1 baseline with VP8 fallback while the live run is pending; the run must be recorded before the F2 exit gate. |
 | C-05-licensing-decision | F2, F3 | Paulo Valleriote | 2027-01-15 | Licensing does not block the start of F1 or F2; the decision must be signed, or video-only selected, before the F3 audio scope begins. |
 
@@ -224,7 +224,7 @@
 - **ID mapping:** C-02-residual continues C-02-residue-restart (same inspection, same method); the original ID is retained in the records above for traceability.
 - **Status effects:** F1 stays `conditional`, but the F1 exit is the core exit only; C-02-residual and C-04 are tracked against F1/F2 and do not gate it; F2 now depends on the F1 core exit and on C-02-residual; F3 is unchanged.
 - **Unchanged:** all five gate verdicts, `pairing_handshake` stays `conditional`; C-04, C-05 and every carried obligation keep their dates.
-- **Note:** this report was originally rendered from `spikes/evidence/gate_report.json`; A-1 is a dated manual amendment and the F0 evidence record is not rewritten.
+- **Note:** the F0 evidence record (`f0_exit.json`, `D-EXIT-f0.md`) is not rewritten; this amendment is layered on top of it by `gate_report_amendments.json`.
 
 ## Decision index
 

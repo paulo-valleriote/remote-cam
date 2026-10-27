@@ -16,6 +16,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 REPORT_PATH = REPO_ROOT / "spikes" / "evidence" / "gate_report.json"
+AMENDMENTS_PATH = REPO_ROOT / "spikes" / "evidence" / "gate_report_amendments.json"
 OUT_PATH = REPO_ROOT / "docs" / "spike" / "gate-report-f0.md"
 
 
@@ -31,6 +32,14 @@ def _role(role: dict) -> str:
     return f"{role.get('role_type', 'unknown')} — {role.get('person_name', 'not named')}"
 
 
+def _notes(report: dict, anchor: str) -> str:
+    """Concatenate the amendment annotations attached to one place in the report."""
+    return "".join(
+        amendment.get("annotations", {}).get(anchor, "")
+        for amendment in report.get("amendments", [])
+    )
+
+
 def render(report: dict) -> str:
     lines: list[str] = []
 
@@ -38,7 +47,8 @@ def render(report: dict) -> str:
     lines.append("")
     lines.append(f"**Feature:** {report['feature']}")
     lines.append(f"**Phase review at:** {report['phase_review_at']}")
-    lines.append(f"**Report version:** {report['report_version']}")
+    version = report["report_version"] + len(report.get("amendments", []))
+    lines.append(f"**Report version:** {version}{_notes(report, 'version')}")
     if report.get("report_prepared_by"):
         lines.append(f"**Prepared by:** {report['report_prepared_by']}")
     lines.append("")
@@ -199,16 +209,21 @@ def render(report: dict) -> str:
                 phases = ", ".join(c["conditioned_phases"])
                 lines.append(
                     f"  - {c['condition_id']}: {c['description']} "
-                    f"(status: {c['status']}, conditioned phases: {phases})"
+                    f"(status: {c['status']}, conditioned phases: {phases}"
+                    f"{_notes(report, 'condition_status:' + c['condition_id'])})"
                 )
                 if c.get("waiver"):
                     w = c["waiver"]
                     who = w.get("waived_by", {}).get("person_name", "unknown")
                     deadline = w.get("resolution_deadline", "none")
+                    waiver_note = _notes(report, "condition_waiver:" + c["condition_id"])
                     lines.append(
                         f"    - Waiver: waived by {who} on {w.get('waived_at', 'unknown')}, "
-                        f"deadline {deadline}"
+                        f"deadline {deadline}{waiver_note}"
                     )
+                    note = _notes(report, "condition_note:" + c["condition_id"])
+                    if note:
+                        lines.append(f"    - {note}")
             lines.append("")
 
     exit_record = report.get("exit")
@@ -218,7 +233,8 @@ def render(report: dict) -> str:
         lines.append(f"- **Closure mode:** {exit_record.get('closure_mode', 'unknown')}")
         lines.append(f"- **Exit gate:** {exit_record.get('exit_gate', 'unknown')}")
         lines.append(f"- **Closed at:** {exit_record.get('closed_at', 'unknown')}")
-        lines.append(f"- **Statement:** {exit_record.get('statement', '')}")
+        statement = exit_record.get("statement", "")
+        lines.append(f"- **Statement:** {statement}{_notes(report, 'statement')}")
         lines.append("")
 
         lines.append("**Sign-offs**")
@@ -242,7 +258,8 @@ def render(report: dict) -> str:
             lines.append(
                 f"| {disposition.get('gate_id', '')} | {disposition.get('verdict', '')} "
                 f"| {disposition.get('disposition', '')} | {disposition.get('target_phase', '')} "
-                f"| {owner.get('person_name', 'not named')} | {disposition.get('deadline', '')} |"
+                f"| {owner.get('person_name', 'not named')} | {disposition.get('deadline', '')}"
+                f"{_notes(report, 'disposition:' + disposition.get('gate_id', ''))} |"
             )
         lines.append("")
 
@@ -257,7 +274,8 @@ def render(report: dict) -> str:
                 f"| {', '.join(waiver.get('conditioned_phases', []))} "
                 f"| {waived_by.get('person_name', 'not named')} "
                 f"| {waiver.get('resolution_deadline', '')} "
-                f"| {waiver.get('waiver_conditions', '')} |"
+                f"| {_notes(report, 'waiver:' + waiver.get('condition_id', ''))}"
+                f"{waiver.get('waiver_conditions', '')} |"
             )
         lines.append("")
 
@@ -311,6 +329,30 @@ def render(report: dict) -> str:
         if st.get("conditions"):
             lines.append(f"  - Conditions: {', '.join(st['conditions'])}")
     lines.append("")
+
+    amendments = report.get("amendments", [])
+    if amendments:
+        lines.append("## Amendments to this report")
+        lines.append("")
+        for a in amendments:
+            lines.append(f"### {a['id']} — {a['title']} ({a['date']})")
+            lines.append("")
+            lines.append(f"- **Amended by:** {a['amended_by']}")
+            lines.append(f"- **Ticket:** {a['ticket']}")
+            lines.append(f"- **Reason:** {a['reason']}")
+            lines.append("- **Change:**")
+            lines.append("")
+            lines.append("| Item | Scope | Owner role | Deadline | Depends on devices |")
+            lines.append("|------|-------|------------|----------|--------------------|")
+            for row in a.get("change_table", []):
+                lines.append("| " + " | ".join(row) + " |")
+            lines.append("")
+            lines.append(f"- **Deadline rationale:** {a['deadline_rationale']}")
+            lines.append(f"- **ID mapping:** {a['id_mapping']}")
+            lines.append(f"- **Status effects:** {a['status_effects']}")
+            lines.append(f"- **Unchanged:** {a['unchanged']}")
+            lines.append(f"- **Note:** {a['note']}")
+            lines.append("")
 
     lines.append("## Decision index")
     lines.append("")
@@ -368,6 +410,8 @@ def main() -> int:
 
     with REPORT_PATH.open("r", encoding="utf-8") as fh:
         report = json.load(fh)
+    if AMENDMENTS_PATH.exists():
+        report["amendments"] = json.loads(AMENDMENTS_PATH.read_text(encoding="utf-8"))["amendments"]
 
     markdown = render(report)
 
