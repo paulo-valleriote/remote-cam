@@ -254,6 +254,7 @@ Required by constitution Principle I: *"problem solved, alternatives discarded, 
 | `openh264` | 0.9.9 | Software H.264 decode **in CI only** | `ffmpeg-next` (LGPL) | Low — constrained baseline only, never the product path | BSD-2-Clause. Cisco's H.264 patent grant covers only binaries Cisco builds and distributes, not a source build; the product therefore never ships it (not compiled on Windows, ADR-0021) |
 | `rtc` | 0.21.1 (exact) | Sans-I/O core of `webrtc`; RTP types and the H.264 depacketizer for the product Media Core (ADR-0021) | Writing an RFC 6184 depacketizer | Medium — always pinned with `webrtc` | MIT OR Apache-2.0 |
 | `async-trait` | 0.1.92 (exact) | `PeerConnectionEventHandler` is an async trait (ADR-0021) | Boxing futures by hand | Low | MIT OR Apache-2.0 |
+| `opus` | 0.4.0 (exact) | Opus 48 kHz mono decode with PLC to 16-bit PCM for the product Media Core (ADR-0023) | `audiopus_sys` (system libopus on Linux, extra setup) | Medium — bundles libopus built from source via `cmake` on every clean build | `opus` MIT OR Apache-2.0; `opusic-sys` and libopus BSD-3-Clause, no patent obligation on the distributed binary |
 | `criterion` | 0.8.2 | Latency and jitter micro-benchmarks | `iai` | Low | MIT OR Apache-2.0 |
 
 ### Mobile (Kotlin)

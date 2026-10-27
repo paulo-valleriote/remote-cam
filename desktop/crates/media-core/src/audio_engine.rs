@@ -4,6 +4,7 @@ use std::time::Duration;
 use rtc::rtp::Packet;
 
 use crate::audio::{AudioError, FRAME_SAMPLES, OpusDecoder, SAMPLE_RATE_HZ};
+use crate::av_sync::{AudioClock, extend_timestamp, first_extended_timestamp};
 
 const FRAME_TICKS: u64 = FRAME_SAMPLES as u64;
 const PLAYOUT_DEPTH: Duration = Duration::from_millis(60);
@@ -49,6 +50,7 @@ pub struct AudioEngine {
     cursor: u64,
     concealed_run: u32,
     stats: AudioStats,
+    clock: Option<AudioClock>,
 }
 
 impl AudioEngine {
@@ -61,16 +63,24 @@ impl AudioEngine {
             cursor: 0,
             concealed_run: 0,
             stats: AudioStats::default(),
+            clock: None,
         })
+    }
+
+    /// Publishes the presented position on `clock` so the video can follow it.
+    #[must_use]
+    pub fn with_clock(mut self, clock: AudioClock) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
+    /// Packets held for their slot. Audio only: video never enters this buffer.
+    pub fn pending_len(&self) -> usize {
+        self.pending.len()
     }
 
     pub fn stats(&self) -> AudioStats {
         self.stats
-    }
-
-    fn extend(&self, timestamp: u32) -> u64 {
-        let delta = i64::from(timestamp.wrapping_sub(self.cursor as u32) as i32);
-        self.cursor.saturating_add_signed(delta)
     }
 
     fn anchor_at(&mut self, extended: u64, now: Duration) {
@@ -83,10 +93,10 @@ impl AudioEngine {
 
     pub fn ingest(&mut self, packet: Packet, now: Duration) {
         if self.schedule.is_none() {
-            let first = u64::from(packet.header.timestamp) | (1 << 32);
+            let first = first_extended_timestamp(packet.header.timestamp);
             self.anchor_at(first, now);
         }
-        let extended = self.extend(packet.header.timestamp);
+        let extended = extend_timestamp(self.cursor, packet.header.timestamp);
         if extended.abs_diff(self.cursor) > RESYNC_TICKS {
             self.pending.clear();
             self.anchor_at(extended, now);
@@ -103,16 +113,21 @@ impl AudioEngine {
     }
 
     fn due(&self, schedule: &Schedule) -> Duration {
-        let ticks = self.cursor - schedule.origin;
-        schedule.anchor
-            + Duration::from_micros(ticks * 1_000_000 / u64::from(SAMPLE_RATE_HZ))
-            + PLAYOUT_DEPTH
+        schedule.anchor + Self::media_time(self.cursor - schedule.origin) + PLAYOUT_DEPTH
+    }
+
+    fn media_time(ticks: u64) -> Duration {
+        Duration::from_micros(ticks * 1_000_000 / u64::from(SAMPLE_RATE_HZ))
     }
 
     pub fn advance(&mut self, now: Duration) {
         while let Some(schedule) = &self.schedule {
-            if self.due(schedule) > now {
+            let due = self.due(schedule);
+            if due > now {
                 break;
+            }
+            if let Some(clock) = &self.clock {
+                clock.publish(Self::media_time(self.cursor - schedule.origin), due);
             }
             while let Some(stale) = self.pending.first_entry()
                 && *stale.key() < self.cursor

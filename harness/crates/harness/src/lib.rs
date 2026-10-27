@@ -17,6 +17,9 @@ use remotecam_session_core::{
     SessionCore, SessionEvent, SessionState, Timestamp,
 };
 mod acceptance;
+mod av_sync;
+
+pub use av_sync::{AvRun, AvSyncObservation, DriftLimitRun};
 
 use serde::Serialize;
 use std::sync::{
@@ -403,6 +406,7 @@ pub struct RealMediaObservation {
     pub receive_only: bool,
     pub loss_recovery: LossRecoveryObservation,
     pub audio_continuity: AudioContinuityObservation,
+    pub av_sync: AvSyncObservation,
 }
 
 /// Video under the single nominal loss profile (TDD §5.5): NACK and PLI counts,
@@ -448,10 +452,7 @@ pub struct AudioContinuityObservation {
 impl AudioContinuityObservation {
     fn from_report(report: &AudioReport) -> Self {
         Self {
-            profile: match report.label {
-                ProfileLabel::Nominal => "nominal",
-                ProfileLabel::OutOfProfile => "out_of_profile",
-            },
+            profile: av_sync::profile_name(report.label),
             duration_seconds: report.seconds,
             frames_sent: report.frames_sent,
             frames_played: report.frames_played,
@@ -461,10 +462,8 @@ impl AudioContinuityObservation {
             late_packets: report.late,
             underrun_dropouts: report.underrun_dropouts,
             silence_dropouts: report.silence_dropouts,
-            longest_underrun_millis: u64::try_from(report.longest_underrun.as_millis())
-                .unwrap_or(u64::MAX),
-            longest_silent_run_millis: u64::try_from(report.longest_silent_run.as_millis())
-                .unwrap_or(u64::MAX),
+            longest_underrun_millis: av_sync::saturating_millis(report.longest_underrun),
+            longest_silent_run_millis: av_sync::saturating_millis(report.longest_silent_run),
         }
     }
 }
@@ -660,7 +659,7 @@ impl RunReport {
             .count() as u32;
         let failed = scenarios.len() as u32 - passed;
         Self {
-            report_version: 7,
+            report_version: 8,
             contract_version: 1,
             commit,
             seed: options.seed,
@@ -1456,6 +1455,7 @@ impl RealMediaSession {
         let loss_recovery = LossRecoveryObservation::from_report(&loss);
         let audio = run_audio_profile(LossProfile::NOMINAL, AUDIO_CONTINUITY_SECONDS);
         let audio_continuity = AudioContinuityObservation::from_report(&audio);
+        let av_sync = av_sync::observe()?;
         let observation = RealMediaObservation {
             pixel_format: "nv12",
             width,
@@ -1466,6 +1466,7 @@ impl RealMediaSession {
             receive_only,
             loss_recovery,
             audio_continuity,
+            av_sync,
         };
         self.core.close().await.map_err(media_failure)?;
         self.phone.close().await.map_err(media_failure)?;

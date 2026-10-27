@@ -2,6 +2,9 @@ pub mod audio;
 pub mod audio_engine;
 #[cfg(not(windows))]
 pub mod audio_scenario;
+#[cfg(not(windows))]
+pub mod av_scenario;
+pub mod av_sync;
 pub mod core;
 pub mod decoder;
 pub mod engine;

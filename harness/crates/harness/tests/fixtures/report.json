@@ -1,5 +1,5 @@
 {
-  "report_version": 7,
+  "report_version": 8,
   "contract_version": 1,
   "commit": "0000000000000000000000000000000000000000",
   "seed": 0,
@@ -574,6 +574,40 @@
           "silence_dropouts": 0,
           "longest_underrun_millis": 0,
           "longest_silent_run_millis": 2
+        },
+        "av_sync": {
+          "nominal": {
+            "profile": "nominal",
+            "duration_seconds": 3600,
+            "mode": "audio_master",
+            "video_frames_sent": 108002,
+            "presented": 98260,
+            "measured": 98259,
+            "skipped": 6582,
+            "over_target": 0,
+            "max_drift_micros": 16333,
+            "max_frame_offset_micros": 107667
+          },
+          "audio_absent": {
+            "profile": "nominal",
+            "duration_seconds": 10,
+            "mode": "video_free",
+            "video_frames_sent": 300,
+            "presented": 256,
+            "measured": 0,
+            "skipped": 30,
+            "over_target": 0,
+            "max_drift_micros": 0,
+            "max_frame_offset_micros": 0
+          },
+          "drift_limit": {
+            "injected_video_delay_millis": 150,
+            "stopped_at_millis": 212,
+            "max_drift_micros": 128000,
+            "session_state": "ended",
+            "close_reason": "media_failure",
+            "close_before_release": true
+          }
         }
       },
       "resources": {
