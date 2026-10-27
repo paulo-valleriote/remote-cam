@@ -17,6 +17,9 @@ use remotecam_session_core::{
     SessionCore, SessionEvent, SessionState, Timestamp,
 };
 mod acceptance;
+mod av_sync;
+
+pub use av_sync::{AvRun, AvSyncObservation, DriftLimitRun};
 
 use serde::Serialize;
 use std::sync::{
@@ -403,6 +406,7 @@ pub struct RealMediaObservation {
     pub receive_only: bool,
     pub loss_recovery: LossRecoveryObservation,
     pub audio_continuity: AudioContinuityObservation,
+    pub av_sync: AvSyncObservation,
 }
 
 /// Video under the single nominal loss profile (TDD §5.5): NACK and PLI counts,
@@ -660,7 +664,7 @@ impl RunReport {
             .count() as u32;
         let failed = scenarios.len() as u32 - passed;
         Self {
-            report_version: 7,
+            report_version: 8,
             contract_version: 1,
             commit,
             seed: options.seed,
@@ -1456,6 +1460,7 @@ impl RealMediaSession {
         let loss_recovery = LossRecoveryObservation::from_report(&loss);
         let audio = run_audio_profile(LossProfile::NOMINAL, AUDIO_CONTINUITY_SECONDS);
         let audio_continuity = AudioContinuityObservation::from_report(&audio);
+        let av_sync = av_sync::observe()?;
         let observation = RealMediaObservation {
             pixel_format: "nv12",
             width,
@@ -1466,6 +1471,7 @@ impl RealMediaSession {
             receive_only,
             loss_recovery,
             audio_continuity,
+            av_sync,
         };
         self.core.close().await.map_err(media_failure)?;
         self.phone.close().await.map_err(media_failure)?;

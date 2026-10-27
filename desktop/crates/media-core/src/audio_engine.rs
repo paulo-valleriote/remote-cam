@@ -4,6 +4,7 @@ use std::time::Duration;
 use rtc::rtp::Packet;
 
 use crate::audio::{AudioError, FRAME_SAMPLES, OpusDecoder, SAMPLE_RATE_HZ};
+use crate::av_sync::AudioClock;
 
 const FRAME_TICKS: u64 = FRAME_SAMPLES as u64;
 const PLAYOUT_DEPTH: Duration = Duration::from_millis(60);
@@ -49,6 +50,7 @@ pub struct AudioEngine {
     cursor: u64,
     concealed_run: u32,
     stats: AudioStats,
+    clock: Option<AudioClock>,
 }
 
 impl AudioEngine {
@@ -61,7 +63,20 @@ impl AudioEngine {
             cursor: 0,
             concealed_run: 0,
             stats: AudioStats::default(),
+            clock: None,
         })
+    }
+
+    /// Publishes the presented position on `clock` so the video can follow it.
+    #[must_use]
+    pub fn with_clock(mut self, clock: AudioClock) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
+    /// Packets held for their slot. Audio only: video never enters this buffer.
+    pub fn pending_len(&self) -> usize {
+        self.pending.len()
     }
 
     pub fn stats(&self) -> AudioStats {
@@ -105,16 +120,21 @@ impl AudioEngine {
     }
 
     fn due(&self, schedule: &Schedule) -> Duration {
-        let ticks = self.cursor - schedule.origin;
-        schedule.anchor
-            + Duration::from_micros(ticks * 1_000_000 / u64::from(SAMPLE_RATE_HZ))
-            + PLAYOUT_DEPTH
+        schedule.anchor + Self::media_time(self.cursor - schedule.origin) + PLAYOUT_DEPTH
+    }
+
+    fn media_time(ticks: u64) -> Duration {
+        Duration::from_micros(ticks * 1_000_000 / u64::from(SAMPLE_RATE_HZ))
     }
 
     pub fn advance(&mut self, now: Duration) {
         while let Some(schedule) = &self.schedule {
-            if self.due(schedule) > now {
+            let due = self.due(schedule);
+            if due > now {
                 break;
+            }
+            if let Some(clock) = &self.clock {
+                clock.publish(Self::media_time(self.cursor - schedule.origin), due);
             }
             while let Some(stale) = self.pending.first_entry()
                 && *stale.key() < self.cursor

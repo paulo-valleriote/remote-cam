@@ -19,7 +19,7 @@ fn the_binary_emits_one_reproducible_aggregate_report_line() {
     let first = parse_report(&first);
     let second = parse_report(&second);
     assert_eq!(first["verdict"], "pass");
-    assert_eq!(first["report_version"], 7);
+    assert_eq!(first["report_version"], 8);
     assert_eq!(first["contract_version"], 1);
     assert_eq!(first["summary"]["scenarios"], 10);
     assert_eq!(first["summary"]["passed"], 10);

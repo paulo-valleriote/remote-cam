@@ -16,7 +16,7 @@
   ],
   "properties": {
     "report_version": {
-      "const": 7
+      "const": 8
     },
     "contract_version": {
       "const": 1
@@ -584,7 +584,8 @@
         "ring_slots",
         "receive_only",
         "loss_recovery",
-        "audio_continuity"
+        "audio_continuity",
+        "av_sync"
       ],
       "properties": {
         "pixel_format": {
@@ -619,6 +620,172 @@
         },
         "audio_continuity": {
           "$ref": "#/$defs/audioContinuity"
+        },
+        "av_sync": {
+          "$ref": "#/$defs/avSync"
+        }
+      }
+    },
+    "avSync": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nominal",
+        "audio_absent",
+        "drift_limit"
+      ],
+      "properties": {
+        "nominal": {
+          "$ref": "#/$defs/avNominalRun"
+        },
+        "audio_absent": {
+          "$ref": "#/$defs/avAudioAbsentRun"
+        },
+        "drift_limit": {
+          "$ref": "#/$defs/avDriftLimitRun"
+        }
+      }
+    },
+    "avNominalRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "duration_seconds",
+        "mode",
+        "video_frames_sent",
+        "presented",
+        "measured",
+        "skipped",
+        "over_target",
+        "max_drift_micros",
+        "max_frame_offset_micros"
+      ],
+      "properties": {
+        "profile": {
+          "const": "nominal"
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 3600
+        },
+        "mode": {
+          "const": "audio_master"
+        },
+        "video_frames_sent": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "presented": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "measured": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "over_target": {
+          "const": 0
+        },
+        "max_drift_micros": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20000
+        },
+        "max_frame_offset_micros": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "avAudioAbsentRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "duration_seconds",
+        "mode",
+        "video_frames_sent",
+        "presented",
+        "measured",
+        "skipped",
+        "over_target",
+        "max_drift_micros",
+        "max_frame_offset_micros"
+      ],
+      "properties": {
+        "profile": {
+          "const": "nominal"
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "mode": {
+          "const": "video_free"
+        },
+        "video_frames_sent": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "presented": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "measured": {
+          "const": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "over_target": {
+          "const": 0
+        },
+        "max_drift_micros": {
+          "const": 0
+        },
+        "max_frame_offset_micros": {
+          "const": 0
+        }
+      }
+    },
+    "avDriftLimitRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "injected_video_delay_millis",
+        "stopped_at_millis",
+        "max_drift_micros",
+        "session_state",
+        "close_reason",
+        "close_before_release"
+      ],
+      "properties": {
+        "injected_video_delay_millis": {
+          "type": "integer",
+          "minimum": 101
+        },
+        "stopped_at_millis": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_drift_micros": {
+          "type": "integer",
+          "minimum": 100001
+        },
+        "session_state": {
+          "const": "ended"
+        },
+        "close_reason": {
+          "const": "media_failure"
+        },
+        "close_before_release": {
+          "const": true
         }
       }
     },

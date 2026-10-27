@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::Arc;
 use std::sync::{Mutex, PoisonError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use remotecam_protocol::ReasonCode;
 use remotecam_protocol::signaling::{
@@ -66,6 +66,31 @@ impl Timestamp {
 pub const FIRST_MEDIA_FRAME_TIMEOUT_MILLIS: u64 = 3_000;
 
 pub const PAIRING_WINDOW_MILLIS: u64 = 120_000;
+
+/// The A/V Drift above which the session ends with `media_failure` (TDD §5.5).
+pub const AV_DRIFT_LIMIT: Duration = Duration::from_millis(100);
+
+/// A measured A/V Drift: the absolute offset between the audio clock and the video
+/// presented for the same instant, in microseconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AvDrift(u64);
+
+impl AvDrift {
+    /// Builds a drift from a measured offset, saturating at `u64::MAX` microseconds.
+    pub fn from_duration(offset: Duration) -> Self {
+        Self(u64::try_from(offset.as_micros()).unwrap_or(u64::MAX))
+    }
+
+    /// The offset as a duration.
+    pub const fn as_duration(self) -> Duration {
+        Duration::from_micros(self.0)
+    }
+
+    /// Whether the offset is strictly above the hard limit.
+    pub const fn exceeds_limit(self) -> bool {
+        self.0 > AV_DRIFT_LIMIT.as_micros() as u64
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MediaFrame {
@@ -204,6 +229,8 @@ pub enum SessionEvent {
     FirstFrameTimedOut,
     /// One side ended an established session.
     EndSession,
+    /// The Media Core measured the A/V Drift of the video it just presented.
+    AvDrift(AvDrift),
 }
 
 /// An action an adapter performs after the Session Core decides.
@@ -764,6 +791,21 @@ impl<C: Clock, R: RandomSource> SessionCore<C, R> {
                 self.first_frame_deadline = None;
                 self.clear_pairing();
                 Some((SessionState::Idle, vec![Effect::End]))
+            }
+            (SessionState::Connected, SessionEvent::AvDrift(drift)) => {
+                if !drift.exceeds_limit() {
+                    return Some((SessionState::Connected, Vec::new()));
+                }
+                self.pending_qr = None;
+                Some((
+                    SessionState::Ended,
+                    vec![
+                        Effect::SendClose {
+                            reason: CloseCode::MediaFailure,
+                        },
+                        Effect::End,
+                    ],
+                ))
             }
             (SessionState::Connected, SessionEvent::EndSession) => {
                 self.pending_qr = None;

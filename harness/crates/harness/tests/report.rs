@@ -11,7 +11,7 @@ const GOLDEN_REPORT: &str = include_str!("fixtures/report.json");
 fn the_reported_scenarios_pass_with_expected_results() {
     let report = run().expect("Git and the pinned Rust toolchain are available");
 
-    assert_eq!(report.report_version, 7);
+    assert_eq!(report.report_version, 8);
     assert_eq!(report.contract_version, 1);
     assert_eq!(report.scenarios.len(), 10);
     assert_eq!(report.verdict, Verdict::Pass);
@@ -375,6 +375,91 @@ fn real_media_reports_ten_minutes_of_continuous_audio_with_two_agreeing_detector
     assert_eq!(audio.silence_dropouts, 0);
     assert!(audio.concealed_frames > 0, "3 % loss exercises PLC");
     assert!(audio.frames_played >= 600 * 50 - 4);
+}
+
+fn real_media_av_sync() -> remotecam_harness::AvSyncObservation {
+    run_with(ScenarioConfig {
+        scenario: ScenarioKind::RealMediaFrame,
+        seed: 0,
+        clock_start: Timestamp::ZERO,
+    })
+    .real_media
+    .expect("real media")
+    .av_sync
+}
+
+#[test]
+fn real_media_reports_one_logical_hour_of_av_sync_inside_the_twenty_millisecond_target() {
+    let nominal = real_media_av_sync().nominal;
+
+    assert_eq!(nominal.profile, "nominal");
+    assert_eq!(nominal.duration_seconds, 3_600);
+    assert_eq!(nominal.mode, "audio_master");
+    assert!(nominal.max_drift_micros <= 20_000, "{nominal:?}");
+    assert_eq!(nominal.over_target, 0);
+    assert!(
+        nominal.max_frame_offset_micros >= nominal.max_drift_micros,
+        "the raw per-frame offset is published beside the windowed drift"
+    );
+    assert!(nominal.presented >= 3_600 * 25, "video must keep flowing");
+}
+
+#[test]
+fn real_media_marks_the_free_running_mode_when_the_audio_is_missing() {
+    let free = real_media_av_sync().audio_absent;
+
+    assert_eq!(free.mode, "video_free");
+    assert!(
+        free.presented > 0,
+        "the video keeps playing without a master"
+    );
+    assert_eq!(
+        free.measured, 0,
+        "there is nothing to measure drift against"
+    );
+}
+
+#[test]
+fn real_media_ends_the_session_with_media_failure_when_the_drift_passes_one_hundred_milliseconds() {
+    let limit = real_media_av_sync().drift_limit;
+
+    assert!(limit.max_drift_micros > 100_000);
+    assert_eq!(limit.session_state, "ended");
+    assert_eq!(limit.close_reason, "media_failure");
+    assert!(
+        limit.close_before_release,
+        "close goes out before the resources are released"
+    );
+}
+
+#[test]
+fn the_versioned_schema_rejects_an_av_sync_that_cannot_pass_the_gate() {
+    let report = run().expect("Git and the pinned Rust toolchain are available");
+    let schema: Value = serde_json::from_str(REPORT_SCHEMA).unwrap();
+    let validator = jsonschema::validator_for(&schema).expect("report schema is valid");
+    let instance: Value =
+        serde_json::from_str(&report.to_json().expect("report serialises")).unwrap();
+
+    let breaches = [
+        ("/nominal/profile", serde_json::json!("out_of_profile")),
+        ("/nominal/mode", serde_json::json!("video_free")),
+        ("/nominal/max_drift_micros", serde_json::json!(20_001)),
+        ("/nominal/over_target", serde_json::json!(1)),
+        ("/nominal/duration_seconds", serde_json::json!(3_599)),
+        ("/audio_absent/mode", serde_json::json!("audio_master")),
+        ("/drift_limit/session_state", serde_json::json!("connected")),
+        ("/drift_limit/close_reason", serde_json::json!("timeout")),
+    ];
+    for (pointer, value) in breaches {
+        let mut invalid_instance = instance.clone();
+        *invalid_instance["scenarios"][9]["real_media"]["av_sync"]
+            .pointer_mut(pointer)
+            .expect("field exists") = value;
+        assert!(
+            validator.iter_errors(&invalid_instance).next().is_some(),
+            "schema accepted an av_sync breaching {pointer}"
+        );
+    }
 }
 
 #[test]
