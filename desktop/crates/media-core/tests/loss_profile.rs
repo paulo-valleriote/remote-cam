@@ -1,10 +1,5 @@
 #![cfg(not(windows))]
 
-//! REC-52: video under the nominal loss profile (3 % uniform loss, 30 ms added
-//! latency, ±10 ms jitter, media only). A real H.264 encoder feeds a
-//! deterministic lossy link; the receive engine and the frame pacer run on
-//! virtual time, so the run is reproducible and takes no wall-clock time.
-
 use std::time::Duration;
 
 use remotecam_media_core::loss_scenario::run_loss_profile;

@@ -1,7 +1,3 @@
-//! A deterministic loss scenario: a real H.264 encode crosses a lossy link into
-//! the receive engine and the frame pacer, all on virtual time. Shared by the
-//! integration tests and the product harness report.
-
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
@@ -24,7 +20,6 @@ const FRAME_INTERVAL_MICROS: u64 = 33_333;
 const MTU: usize = 1_200;
 const FEEDBACK_DELAY: Duration = Duration::from_millis(30);
 
-/// What a loss scenario observed, from the consumer's side.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LossReport {
     pub label: ProfileLabel,
@@ -32,7 +27,6 @@ pub struct LossReport {
     pub packets_sent: u32,
     pub fresh_frames: u32,
     pub repeated_frames: u32,
-    /// Ticks after the first frame where the video was signalled absent.
     pub absent_ticks: u32,
     pub longest_without_fresh: Duration,
     pub packets_lost: u64,
@@ -150,8 +144,6 @@ impl Scenario {
     }
 }
 
-/// Streams a real H.264 encode through `profile` into the receive engine and the
-/// frame pacer on virtual time, and reports what the consumer saw.
 pub fn run_loss_profile(profile: LossProfile, seconds: u64) -> LossReport {
     let decoder = SoftwareH264Decoder::new().expect("decoder");
     let mut engine = ReceiveEngine::new(Box::new(decoder));
@@ -185,7 +177,6 @@ pub fn run_loss_profile(profile: LossProfile, seconds: u64) -> LossReport {
                     last_fresh = now;
                 }
                 Paced::Repeated(_) => tally.repeated += 1,
-                // Before the first frame there is nothing to be absent from.
                 Paced::Absent if tally.fresh > 0 => tally.absent += 1,
                 Paced::Absent => {}
             }

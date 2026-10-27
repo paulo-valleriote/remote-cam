@@ -17,6 +17,11 @@ wire vocabulary in `protocol/README.md`, `protocol/qr-payload.md` and
 | **Media Core** | The receive-only subsystem that turns the RTP media of an active **Session** into **Media Frames** and continuous audio, behind the **Media Port**. It never originates media. |
 | **Frame Ring** | The bounded buffer of decoded video frames between the **Media Core** and the **Virtual Device** producer. When the consumer lags it drops the oldest frame; it never blocks the network thread. |
 | **Receive-only Invariant** | The desktop never originates media RTP, in any state of a **Session**. Control RTCP is allowed. A non-zero count of outbound media RTP is a failure, not a metric. |
+| **Jitter Buffer** | The Media Core's adaptive reordering buffer over RTP. Its depth follows the measured interarrival jitter and a gap holds the stream back only briefly, waiting for a retransmission. See ADR-0022. |
+| **Recovery** | The single source of loss feedback of the Media Core: NACK for missing packets and PLI for a keyframe, rate limited. See ADR-0022. |
+| **Frame Pacer** | The consumer-side tick that turns decoded frames into an **Output Mode** at 30 fps: a fresh frame, the previous frame repeated for at most 2 s, or **Absent**. |
+| **Output Mode** | One of the published video sizes: 640×480, 1280×720 or 1920×1080, at 30 fps. |
+| **Absent** | The pacer result once no fresh frame arrived for 2 s: the absence is signalled, never a frozen picture. |
 | **Virtual Device** | The camera or microphone the desktop publishes so that other applications consume the phone's media. The virtual camera is user-mode; the virtual microphone is a third-party audio device the app detects and verifies but does not redistribute. |
 | **A/V Drift** | The offset between the audio and the video presented for the same instant, with audio as the master clock. The target is 20 ms over one hour; 100 ms is the hard limit and ends the **Session** with `media_failure`. |
 | **Pairing** | The act of establishing trust between a mobile device and a desktop: scan the desktop-displayed QR payload, complete a TLS 1.3 handshake against the exact pinned certificate, then authenticate with the single-use pairing token. Pairing is the only way a session starts. |

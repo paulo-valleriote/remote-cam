@@ -1,9 +1,5 @@
 #![cfg(not(windows))]
 
-//! REC-52: the Media Port publishes a requested mode at 30 fps. The synthetic
-//! phone sends 64x48 pictures, so every published frame is rescaled; a manual
-//! clock stands in for the consumer's 30 fps cadence.
-
 use std::sync::Arc;
 use std::time::Duration;
 

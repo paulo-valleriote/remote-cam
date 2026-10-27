@@ -1,7 +1,3 @@
-//! The synchronous heart of the receive path: jitter buffer, depacketizer,
-//! decoder and loss recovery, with time injected by the caller. The pipeline
-//! drives it from a worker thread; tests drive it with virtual time.
-
 use std::time::Duration;
 
 use rtc::rtp::Packet;
@@ -21,6 +17,7 @@ struct AccessUnit {
 struct AccessUnitAssembler {
     depacketizer: H264Packet,
     pending: Vec<u8>,
+    pending_timestamp: u32,
 }
 
 impl AccessUnitAssembler {
@@ -28,10 +25,15 @@ impl AccessUnitAssembler {
         Self {
             depacketizer: H264Packet::default(),
             pending: Vec::new(),
+            pending_timestamp: 0,
         }
     }
 
     fn push(&mut self, packet: &Packet) -> Option<AccessUnit> {
+        if packet.header.timestamp != self.pending_timestamp {
+            self.pending.clear();
+            self.pending_timestamp = packet.header.timestamp;
+        }
         match self.depacketizer.depacketize(&packet.payload) {
             Ok(nalus) => self.pending.extend_from_slice(&nalus),
             Err(_) => self.pending.clear(),
@@ -46,7 +48,6 @@ impl AccessUnitAssembler {
     }
 }
 
-/// What one step of the engine produced.
 #[derive(Debug, Default)]
 pub struct Output {
     pub frames: Vec<Nv12Frame>,
@@ -67,6 +68,7 @@ pub struct ReceiveEngine {
     assembler: AccessUnitAssembler,
     recovery: Recovery,
     reference_lost: bool,
+    lost_seen: u64,
 }
 
 impl ReceiveEngine {
@@ -77,6 +79,7 @@ impl ReceiveEngine {
             assembler: AccessUnitAssembler::new(),
             recovery: Recovery::new(),
             reference_lost: false,
+            lost_seen: 0,
         }
     }
 
@@ -84,10 +87,14 @@ impl ReceiveEngine {
         self.jitter.push(packet, arrival);
     }
 
-    /// Releases what is due at `now`, decodes it and decides on recovery requests.
     pub fn advance(&mut self, now: Duration) -> Output {
         let due = self.jitter.poll(now);
         let mut output = self.release(due);
+        let lost = self.jitter.stats().lost;
+        if lost > self.lost_seen {
+            self.lost_seen = lost;
+            self.reference_lost = true;
+        }
         let missing = self.jitter.missing();
         output
             .requests
@@ -96,7 +103,6 @@ impl ReceiveEngine {
         output
     }
 
-    /// Releases everything held, ignoring the schedule: end of stream.
     pub fn flush(&mut self) -> Output {
         let held = self.jitter.flush();
         self.release(held)

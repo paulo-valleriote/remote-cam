@@ -1,6 +1,3 @@
-//! Loss recovery decisions: which RTCP feedback to ask for. Pure and clocked by
-//! an injected monotonic [`Duration`]; sending the RTCP is the caller's job.
-
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -17,7 +14,6 @@ pub struct RecoveryStats {
     pub plis: u64,
 }
 
-/// Roughly one round trip on the nominal profile (30 ms added latency each way).
 const NACK_RETRY_INTERVAL: Duration = Duration::from_millis(50);
 const NACK_MAX_ATTEMPTS: u8 = 3;
 const PLI_MIN_INTERVAL: Duration = Duration::from_millis(500);
@@ -32,7 +28,6 @@ struct Outstanding {
 pub struct Recovery {
     outstanding: BTreeMap<u16, Outstanding>,
     last_pli: Option<Duration>,
-    /// A keyframe was wanted but held back by the rate limit.
     pli_pending: bool,
     stats: RecoveryStats,
 }
@@ -46,8 +41,6 @@ impl Recovery {
         self.stats
     }
 
-    /// `missing` is the current list of packets still outstanding;
-    /// `reference_lost` is set when the decoder cannot continue without a keyframe.
     pub fn poll(
         &mut self,
         missing: &[u16],

@@ -213,11 +213,9 @@ impl SyntheticPhone {
     }
 }
 
-/// Whether a network profile is the single nominal gate profile (TDD §5.5, D-30).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProfileLabel {
     Nominal,
-    /// Any deviation: reported, never allowed to pass a gate.
     OutOfProfile,
 }
 
@@ -230,7 +228,6 @@ pub struct LossProfile {
 }
 
 impl LossProfile {
-    /// 3 % uniform loss, 30 ms added latency, ±10 ms jitter, media only.
     pub const NOMINAL: Self = Self {
         loss_per_mille: 30,
         latency: Duration::from_millis(30),
@@ -247,7 +244,6 @@ impl LossProfile {
     }
 }
 
-/// A deterministic one-way media link: uniform loss, fixed latency, uniform jitter.
 pub struct LossyLink {
     profile: LossProfile,
     state: u64,
@@ -262,14 +258,12 @@ impl LossyLink {
     }
 
     fn next(&mut self) -> u64 {
-        // xorshift64*: small, seedable and good enough for a loss pattern.
         self.state ^= self.state >> 12;
         self.state ^= self.state << 25;
         self.state ^= self.state >> 27;
         self.state.wrapping_mul(0x2545_f491_4f6c_dd1d) >> 11
     }
 
-    /// When a packet sent at `sent_at` arrives, or `None` when the link loses it.
     pub fn transmit(&mut self, sent_at: Duration) -> Option<Duration> {
         if self.next() % 1_000 < u64::from(self.profile.loss_per_mille) {
             return None;

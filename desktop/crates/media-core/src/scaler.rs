@@ -1,13 +1,8 @@
-//! NV12 fit-to-canvas scaling for the published output modes: nearest-neighbour,
-//! aspect preserving, black bars. A frame that already has the canvas size is
-//! never touched.
-
 use crate::nv12::Nv12Frame;
 
 const BLACK_LUMA: u8 = 16;
 const NEUTRAL_CHROMA: u8 = 128;
 
-/// Largest even size with the source aspect ratio that fits the canvas.
 fn fitted_size(source: (u32, u32), canvas: (u32, u32)) -> (u32, u32) {
     let (source_width, source_height) = (u64::from(source.0), u64::from(source.1));
     let (canvas_width, canvas_height) = (u64::from(canvas.0), u64::from(canvas.1));
@@ -19,7 +14,6 @@ fn fitted_size(source: (u32, u32), canvas: (u32, u32)) -> (u32, u32) {
     ((width & !1).max(2) as u32, (height & !1).max(2) as u32)
 }
 
-/// Fits `frame` into a `width` x `height` canvas.
 pub fn fit(frame: &Nv12Frame, width: u32, height: u32) -> Nv12Frame {
     if (frame.width(), frame.height()) == (width, height) {
         return frame.clone();

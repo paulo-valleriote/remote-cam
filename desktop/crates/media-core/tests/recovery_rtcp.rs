@@ -1,9 +1,5 @@
 #![cfg(not(windows))]
 
-//! REC-52: the desktop must keep advertising NACK and PLI so the phone
-//! retransmits and answers keyframe requests, while the loss recovery decisions
-//! stay in the Media Core (one source of NACK, observable in the stats).
-
 use remotecam_media_core::MediaCore;
 use remotecam_media_core::testing::SyntheticPhone;
 

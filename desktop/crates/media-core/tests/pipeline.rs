@@ -5,6 +5,7 @@ use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 
 use remotecam_media_core::decoder::{DecodeError, VideoDecoder};
+use remotecam_media_core::pipeline::ElapsedClock;
 use remotecam_media_core::recovery::RecoveryRequest;
 use remotecam_media_core::{DecodePipeline, FRAME_RING_SLOTS, Nv12Frame};
 use rtc::rtp::Packet;
@@ -16,6 +17,7 @@ const NEEDS_MORE: u8 = 0xDD;
 
 type Seen = Arc<Mutex<Vec<Vec<u8>>>>;
 
+#[derive(Default)]
 struct FakeDecoder {
     seen: Seen,
     gate: Option<Receiver<()>>,
@@ -53,7 +55,6 @@ fn pipeline(
     (pipeline, sink, seen)
 }
 
-/// Hands out consecutive RTP sequence numbers, as a real sender would.
 #[derive(Default)]
 struct Rtp(u16);
 
@@ -264,4 +265,41 @@ async fn frame_available_resolves_after_the_first_decoded_frame() {
     assert_eq!(pipeline.ring().pop().expect("frame").rtp_timestamp(), 11);
     drop(sink);
     drain(&pipeline);
+}
+
+#[derive(Default)]
+struct ManualElapsed(std::sync::atomic::AtomicU64);
+
+impl ManualElapsed {
+    fn set_millis(&self, millis: u64) {
+        self.0
+            .store(millis * 1_000, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl ElapsedClock for ManualElapsed {
+    fn elapsed(&self) -> std::time::Duration {
+        std::time::Duration::from_micros(self.0.load(std::sync::atomic::Ordering::SeqCst))
+    }
+}
+
+fn jitter_depth_after(arrivals_millis: &[u64]) -> u64 {
+    let clock = Arc::new(ManualElapsed::default());
+    let (pipeline, mut sink) =
+        DecodePipeline::with_clock(Box::new(FakeDecoder::default()), clock.clone())
+            .expect("pipeline");
+    let mut rtp = Rtp::default();
+    for (index, arrival) in arrivals_millis.iter().enumerate() {
+        clock.set_millis(*arrival);
+        sink.push(&rtp.next(&[0x65, 1, 1], true, index as u32 * 9_000));
+    }
+    drop(sink);
+    drain(&pipeline);
+    pipeline.stats().jitter_depth_micros()
+}
+
+#[test]
+fn the_jitter_depth_follows_the_injected_clock_not_the_wall_clock() {
+    assert_eq!(jitter_depth_after(&[0, 100, 200, 300, 400]), 0);
+    assert!(jitter_depth_after(&[0, 100, 250, 300, 460]) > 0);
 }

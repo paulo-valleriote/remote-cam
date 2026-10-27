@@ -1,10 +1,3 @@
-//! Packets in, NV12 frames out, with no network: reorder RTP in the adaptive
-//! jitter buffer, depacketize into access units, decode on a dedicated thread
-//! and publish into the Frame Ring. The network task only calls
-//! [`PacketSink::push`]; it never decodes and never waits for the consumer (a
-//! full queue drops the packet). Loss recovery requests (NACK/PLI) come out of
-//! the same worker through [`DecodePipeline::take_recovery_requests`].
-
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -23,7 +16,6 @@ use crate::recovery::RecoveryRequest;
 
 const PACKET_QUEUE: usize = 1_024;
 const RECOVERY_REQUEST_QUEUE: usize = 32;
-/// How often the worker wakes to release packets whose playout time arrived.
 const WORKER_TICK: Duration = Duration::from_millis(2);
 
 macro_rules! counters {
@@ -60,10 +52,38 @@ struct Shared {
     arrived: Notify,
 }
 
+pub trait ElapsedClock: Send + Sync {
+    fn elapsed(&self) -> Duration;
+}
+
+pub struct SystemElapsed {
+    origin: Instant,
+}
+
+impl SystemElapsed {
+    pub fn new() -> Self {
+        Self {
+            origin: Instant::now(),
+        }
+    }
+}
+
+impl Default for SystemElapsed {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ElapsedClock for SystemElapsed {
+    fn elapsed(&self) -> Duration {
+        self.origin.elapsed()
+    }
+}
+
 /// The network side of the pipeline.
 pub struct PacketSink {
     packets: SyncSender<(rtc::rtp::Packet, Duration)>,
-    origin: Instant,
+    clock: Arc<dyn ElapsedClock>,
     shared: Arc<Shared>,
 }
 
@@ -72,7 +92,7 @@ impl PacketSink {
         self.shared.stats.packets.fetch_add(1, Ordering::Relaxed);
         if self
             .packets
-            .try_send((packet.clone(), self.origin.elapsed()))
+            .try_send((packet.clone(), self.clock.elapsed()))
             .is_err()
         {
             self.shared
@@ -109,7 +129,6 @@ impl Worker {
             self.shared.arrived.notify_one();
         }
         for request in output.requests {
-            // A full queue means the consumer is behind; the next poll asks again.
             let _ = self.requests.try_send(request);
         }
         self.publish_stats();
@@ -141,7 +160,7 @@ impl Worker {
 fn decode_loop(
     mut worker: Worker,
     queue: Receiver<(rtc::rtp::Packet, Duration)>,
-    origin: Instant,
+    clock: Arc<dyn ElapsedClock>,
     stop_requested: Arc<AtomicBool>,
 ) {
     while !stop_requested.load(Ordering::Acquire) {
@@ -157,20 +176,26 @@ fn decode_loop(
         while let Ok((packet, arrival)) = queue.try_recv() {
             worker.engine.ingest(packet, arrival);
         }
-        let output = worker.engine.advance(origin.elapsed());
+        let output = worker.engine.advance(clock.elapsed());
         worker.deliver(output);
     }
 }
 
 impl DecodePipeline {
     pub fn new(decoder: Box<dyn VideoDecoder>) -> Result<(Self, PacketSink), MediaCoreError> {
+        Self::with_clock(decoder, Arc::new(SystemElapsed::new()))
+    }
+
+    pub fn with_clock(
+        decoder: Box<dyn VideoDecoder>,
+        clock: Arc<dyn ElapsedClock>,
+    ) -> Result<(Self, PacketSink), MediaCoreError> {
         let shared = Arc::new(Shared {
             ring: FrameRing::new(),
             stats: MediaStats::default(),
             arrived: Notify::new(),
         });
         let stop_requested = Arc::new(AtomicBool::new(false));
-        let origin = Instant::now();
         let (packets, queue) = sync_channel(PACKET_QUEUE);
         let (request_sender, request_receiver) = tokio::sync::mpsc::channel(RECOVERY_REQUEST_QUEUE);
         let worker = Worker {
@@ -182,12 +207,13 @@ impl DecodePipeline {
             .name("media-core-decode".to_owned())
             .spawn({
                 let stop_requested = Arc::clone(&stop_requested);
-                move || decode_loop(worker, queue, origin, stop_requested)
+                let clock = Arc::clone(&clock);
+                move || decode_loop(worker, queue, clock, stop_requested)
             })
             .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
         let sink = PacketSink {
             packets,
-            origin,
+            clock,
             shared: Arc::clone(&shared),
         };
         Ok((
@@ -209,8 +235,6 @@ impl DecodePipeline {
         &self.shared.stats
     }
 
-    /// The NACK/PLI requests the caller must send as RTCP, once. The stream ends
-    /// when the worker does.
     pub fn take_recovery_requests(&self) -> Option<RequestReceiver<RecoveryRequest>> {
         self.requests
             .lock()

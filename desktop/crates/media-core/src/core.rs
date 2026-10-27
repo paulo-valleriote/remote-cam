@@ -122,9 +122,6 @@ pub fn receive_only_registry(
 ) -> Result<Registry, MediaCoreError> {
     let wire_most_free_slot = Slot::CongestionControl;
     let tapped = Registry::new().with(wire_most_free_slot, OutboundRtpTap::new(outbound.clone()));
-    // The default set minus its NACK generator: the Media Core's own recovery is the
-    // only NACK/PLI source, so what the stats report is what goes on the wire. The
-    // feedback stays advertised so the phone retransmits and answers keyframe requests.
     for parameter in ["", "pli"] {
         media_engine.register_feedback(
             RTCPFeedback {

@@ -1,34 +1,24 @@
-//! Adaptive jitter buffer over RTP. Pure state machine: time is injected as a
-//! monotonic [`Duration`], so tests run with no sleeping and no real clock.
-
 use std::collections::BTreeMap;
 use std::time::Duration;
 
 use rtc::rtp::Packet;
 
 const VIDEO_CLOCK_HZ: u64 = 90_000;
-/// The target depth is this many times the smoothed interarrival jitter.
 const DEPTH_JITTER_FACTOR: u64 = 2;
 const MAX_DEPTH: Duration = Duration::from_millis(200);
-/// How long a gap at the head holds the stream back for a retransmission: a bit
-/// over one round trip on the nominal profile (60 ms ±20 ms), and the price of
-/// loss only; a gapless stream is never held.
 const RETRANSMISSION_WAIT: Duration = Duration::from_millis(120);
-/// Bounds the NACK batch after a very large gap.
 const MAX_MISSING_LISTED: usize = 64;
-/// RFC 3550 §6.4.1 smoothing gain (1/16).
 const JITTER_GAIN: i64 = 16;
 
 struct Entry {
     packet: Packet,
+    arrival: Duration,
     playout: Duration,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct JitterStats {
-    /// Packets never received by the time a later packet was released.
     pub lost: u64,
-    /// Packets that arrived after their successor was already released.
     pub late: u64,
     pub duplicates: u64,
 }
@@ -36,17 +26,11 @@ pub struct JitterStats {
 #[derive(Default)]
 pub struct JitterBuffer {
     stats: JitterStats,
-    /// Extended sequence number expected next in the released stream.
     next: Option<u64>,
-    /// When the gap at the head of the stream was first seen.
-    gap_since: Option<Duration>,
     pending: BTreeMap<u64, Entry>,
-    /// Arrival time and RTP timestamp of the first packet: the playout schedule origin.
     origin: Option<(Duration, u32)>,
     highest: Option<u64>,
-    /// RFC 3550 interarrival jitter estimate, in microseconds.
     jitter_micros: i64,
-    /// Transit time (arrival minus RTP time) of the latest new frame, in microseconds.
     last_transit: Option<(u32, i64)>,
 }
 
@@ -81,14 +65,11 @@ impl JitterBuffer {
         }
     }
 
-    /// How long the buffer holds media beyond its arrival schedule right now.
     pub fn target_depth(&self) -> Duration {
         let micros = self.jitter_micros.unsigned_abs() * DEPTH_JITTER_FACTOR;
         Duration::from_micros(micros).min(MAX_DEPTH)
     }
 
-    /// Updates the jitter estimate once per frame: every packet of a frame shares
-    /// its RTP timestamp, so only the first one measures network behaviour.
     fn measure(&mut self, timestamp: u32, now: Duration) {
         let Some((origin_arrival, origin_timestamp)) = self.origin else {
             return;
@@ -107,8 +88,6 @@ impl JitterBuffer {
         }
     }
 
-    /// Sequence numbers still outstanding below the highest packet held, oldest
-    /// first. Gaps already skipped as lost are no longer listed.
     pub fn missing(&self) -> Vec<u16> {
         let Some(highest_pending) = self.pending.last_key_value().map(|(key, _)| *key) else {
             return Vec::new();
@@ -138,20 +117,23 @@ impl JitterBuffer {
             self.stats.duplicates += 1;
             return;
         }
-        if self.next.is_some_and(|next| extended > next) {
-            self.gap_since.get_or_insert(now);
-        }
         let playout = self.playout(packet.header.timestamp, now);
         self.measure(packet.header.timestamp, now);
         let playout = playout + self.target_depth();
-        self.pending.insert(extended, Entry { packet, playout });
+        self.pending.insert(
+            extended,
+            Entry {
+                packet,
+                arrival: now,
+                playout,
+            },
+        );
     }
 
     pub fn poll(&mut self, now: Duration) -> Vec<Packet> {
         self.release(Some(now))
     }
 
-    /// Releases everything held, in order, ignoring the playout schedule.
     pub fn flush(&mut self) -> Vec<Packet> {
         self.release(None)
     }
@@ -164,15 +146,13 @@ impl JitterBuffer {
             }
             let sequence = *entry.key();
             if let Some(next) = self.next.filter(|next| sequence > *next) {
-                if let Some(now) = due_at {
-                    let since = *self.gap_since.get_or_insert(now);
-                    if now.saturating_sub(since) < RETRANSMISSION_WAIT {
-                        break;
-                    }
+                if let Some(now) = due_at
+                    && now.saturating_sub(entry.get().arrival) < RETRANSMISSION_WAIT
+                {
+                    break;
                 }
                 self.stats.lost += sequence - next;
             }
-            self.gap_since = None;
             self.next = Some(sequence + 1);
             released.push(entry.remove().packet);
         }
@@ -243,6 +223,17 @@ mod tests {
         buffer.push(packet(0, 3_000), ms(60));
         assert_eq!(sequences(&buffer.poll(ms(200))), [65_535, 0, 1]);
         assert_eq!(buffer.stats().lost, 0);
+    }
+
+    #[test]
+    fn gaps_seen_together_wait_for_their_retransmission_together() {
+        let mut buffer = JitterBuffer::new();
+        buffer.push(packet(0, 0), ms(0));
+        assert_eq!(sequences(&buffer.poll(ms(0))), [0]);
+        buffer.push(packet(2, 3_000), ms(100));
+        buffer.push(packet(4, 6_000), ms(100));
+        assert_eq!(sequences(&buffer.poll(ms(230))), [2, 4]);
+        assert_eq!(buffer.stats().lost, 2);
     }
 
     const FRAME_SPACING_MS: u64 = 33;

@@ -30,9 +30,6 @@ impl<C: Clock> RingMediaPort<C> {
         }
     }
 
-    /// Publishes `mode` at its frame rate: every `next_frame` call is one consumer
-    /// tick, which yields the newest frame rescaled to the mode, the previous one
-    /// repeated, or nothing once the video has been absent for too long.
     #[must_use]
     pub fn with_output_mode(mut self, mode: OutputMode) -> Self {
         self.pacer = Some(FramePacer::new(mode));
@@ -48,7 +45,6 @@ impl<C: Clock> RingMediaPort<C> {
             return self.core.ring().pop().map(Arc::new);
         };
         let now = Duration::from_millis(self.clock.now().as_millis());
-        // A consumer that fell behind jumps to the newest picture.
         let newest = std::iter::from_fn(|| self.core.ring().pop()).last();
         if let Some(frame) = newest {
             pacer.offer(frame, now);
@@ -78,7 +74,6 @@ impl<C: Clock> MediaPort for RingMediaPort<C> {
         let following_sequence = self.next_sequence.checked_add(1)?;
         let Some(frame) = self.pop_for_consumer() else {
             if self.pacer.is_some() {
-                // Absent video: no stale picture stays exposed.
                 self.current = None;
             }
             return None;

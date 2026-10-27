@@ -1,8 +1,3 @@
-//! Output modes and frame pacing. The consumer ticks at the mode's frame rate;
-//! each tick yields the newest frame, the previous frame repeated to complete
-//! the rate, or [`Paced::Absent`] once nothing fresh arrived for too long: a
-//! frozen picture is never presented as live video.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -40,9 +35,7 @@ pub enum Paced {
 
 pub struct FramePacer {
     mode: OutputMode,
-    /// Offered since the last tick.
     pending: Option<Arc<Nv12Frame>>,
-    /// The newest frame and when it arrived; what a tick repeats.
     latest: Option<(Arc<Nv12Frame>, Duration)>,
 }
 
