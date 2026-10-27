@@ -182,13 +182,29 @@ impl MediaCore {
     }
 
     pub async fn is_receive_only(&self) -> bool {
-        let transceivers = self.connection.get_transceivers().await;
-        let mut receive_only = !transceivers.is_empty();
-        for transceiver in transceivers {
-            receive_only &=
-                transceiver.direction().await.ok() == Some(RTCRtpTransceiverDirection::Recvonly);
+        let directions = self.directions().await;
+        !directions.is_empty()
+            && directions
+                .iter()
+                .all(|direction| *direction == Some(RTCRtpTransceiverDirection::Recvonly))
+    }
+
+    /// True when any transceiver may originate media. An unreadable direction counts as sending.
+    pub async fn has_sending_transceiver(&self) -> bool {
+        self.directions().await.iter().any(|direction| {
+            !matches!(
+                direction,
+                Some(RTCRtpTransceiverDirection::Recvonly | RTCRtpTransceiverDirection::Inactive)
+            )
+        })
+    }
+
+    async fn directions(&self) -> Vec<Option<RTCRtpTransceiverDirection>> {
+        let mut directions = Vec::new();
+        for transceiver in self.connection.get_transceivers().await {
+            directions.push(transceiver.direction().await.ok());
         }
-        receive_only
+        directions
     }
 
     pub async fn close(&self) -> Result<(), MediaCoreError> {
