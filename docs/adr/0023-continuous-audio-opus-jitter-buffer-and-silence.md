@@ -46,6 +46,8 @@ continuous silence, never a hole. Audio is never retransmitted.
 - Every frame slot produces exactly one 20 ms frame: decoded audio, PLC (at most
   5 consecutive frames) or digital silence. A packet that arrives after its slot is
   counted late and dropped. There is no NACK and no retransmission for audio.
+- The v1 phone sends 20 ms frames; a packet that decodes to any other length counts
+  as a decode error and is concealed.
 - A timestamp jump beyond 2 s re-anchors the schedule instead of emitting an
   unbounded run of silence.
 

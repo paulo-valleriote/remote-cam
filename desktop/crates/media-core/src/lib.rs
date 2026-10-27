@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod audio_engine;
 pub mod core;
 pub mod decoder;
 pub mod engine;
