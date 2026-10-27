@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use remotecam_protocol::ReasonCode;
+use rtc::interceptor::Slot;
 use rtc::peer_connection::sdp::RTCSessionDescription;
 use rtc::rtp_transceiver::RTCRtpTransceiverInit;
 use rtc::rtp_transceiver::rtp_sender::RtpCodecKind;
@@ -18,6 +20,7 @@ use webrtc::rtp_transceiver::RTCRtpTransceiverDirection;
 use crate::decoder::VideoDecoder;
 use crate::frame_ring::FrameRing;
 use crate::nv12::Nv12Frame;
+use crate::outbound::{OutboundRtpCounter, OutboundRtpTap};
 use crate::pipeline::{DecodePipeline, MediaStats, PacketSink};
 
 const GATHERING_DEADLINE: Duration = Duration::from_secs(5);
@@ -27,6 +30,7 @@ pub enum MediaCoreError {
     PeerConnection(String),
     Decoder(String),
     GatheringTimedOut,
+    ReceiveOnlyViolation(ReasonCode),
 }
 
 impl fmt::Display for MediaCoreError {
@@ -35,6 +39,11 @@ impl fmt::Display for MediaCoreError {
             Self::PeerConnection(message) => write!(formatter, "peer connection error: {message}"),
             Self::Decoder(message) => write!(formatter, "decoder error: {message}"),
             Self::GatheringTimedOut => formatter.write_str("ICE gathering did not complete"),
+            Self::ReceiveOnlyViolation(reason) => write!(
+                formatter,
+                "receive-only invariant violated: outbound media RTP ({})",
+                reason.as_str()
+            ),
         }
     }
 }
@@ -84,6 +93,7 @@ pub struct MediaCore {
     connection: Arc<dyn PeerConnection>,
     pipeline: DecodePipeline,
     gathering_complete: Arc<Notify>,
+    outbound: OutboundRtpCounter,
 }
 
 impl MediaCore {
@@ -102,8 +112,16 @@ impl MediaCore {
         media_engine
             .register_default_codecs()
             .map_err(connection_error)?;
-        let registry = register_default_interceptors(Registry::new(), &mut media_engine)
-            .map_err(connection_error)?;
+        let outbound = OutboundRtpCounter::new();
+        // Wire-most slot, free in the default chain: it sees every packet that really leaves.
+        let registry = register_default_interceptors(
+            Registry::new().with(
+                Slot::CongestionControl,
+                OutboundRtpTap::new(outbound.clone()),
+            ),
+            &mut media_engine,
+        )
+        .map_err(connection_error)?;
 
         let (pipeline, packets) = DecodePipeline::new(decoder)?;
         let gathering_complete = Arc::new(Notify::new());
@@ -141,6 +159,7 @@ impl MediaCore {
             connection,
             pipeline,
             gathering_complete,
+            outbound,
         })
     }
 
@@ -179,6 +198,17 @@ impl MediaCore {
 
     pub fn stats(&self) -> &MediaStats {
         self.pipeline.stats()
+    }
+
+    pub fn outbound(&self) -> &OutboundRtpCounter {
+        &self.outbound
+    }
+
+    /// Fails with the closed reason code once any media RTP was written toward the wire.
+    pub fn assert_receive_only(&self) -> Result<(), MediaCoreError> {
+        self.outbound.violation().map_or(Ok(()), |reason| {
+            Err(MediaCoreError::ReceiveOnlyViolation(reason))
+        })
     }
 
     pub async fn is_receive_only(&self) -> bool {
@@ -220,7 +250,8 @@ impl MediaCore {
             }
         }
         self.pipeline.ring().clear();
-        self.connection.close().await.map_err(connection_error)
+        self.connection.close().await.map_err(connection_error)?;
+        self.assert_receive_only()
     }
 }
 
