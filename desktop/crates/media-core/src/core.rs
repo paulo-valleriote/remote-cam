@@ -191,6 +191,21 @@ impl MediaCore {
         receive_only
     }
 
+    /// Transceivers that may originate media. An unreadable direction counts as sending.
+    pub async fn send_transceiver_count(&self) -> usize {
+        let mut sending = 0;
+        for transceiver in self.connection.get_transceivers().await {
+            let direction = transceiver.direction().await.ok();
+            if !matches!(
+                direction,
+                Some(RTCRtpTransceiverDirection::Recvonly | RTCRtpTransceiverDirection::Inactive)
+            ) {
+                sending += 1;
+            }
+        }
+        sending
+    }
+
     pub async fn close(&self) -> Result<(), MediaCoreError> {
         self.pipeline.request_stop();
         if let Some(worker) = self.pipeline.take_worker() {
