@@ -89,6 +89,15 @@ impl PeerConnectionEventHandler for EventSink {
     }
 }
 
+pub fn receive_only_registry(
+    media_engine: &mut MediaEngine,
+    outbound: &OutboundRtpCounter,
+) -> Result<Registry, MediaCoreError> {
+    let wire_most_free_slot = Slot::CongestionControl;
+    let tapped = Registry::new().with(wire_most_free_slot, OutboundRtpTap::new(outbound.clone()));
+    register_default_interceptors(tapped, media_engine).map_err(connection_error)
+}
+
 pub struct MediaCore {
     connection: Arc<dyn PeerConnection>,
     pipeline: DecodePipeline,
@@ -113,15 +122,7 @@ impl MediaCore {
             .register_default_codecs()
             .map_err(connection_error)?;
         let outbound = OutboundRtpCounter::new();
-        // Wire-most slot, free in the default chain: it sees every packet that really leaves.
-        let registry = register_default_interceptors(
-            Registry::new().with(
-                Slot::CongestionControl,
-                OutboundRtpTap::new(outbound.clone()),
-            ),
-            &mut media_engine,
-        )
-        .map_err(connection_error)?;
+        let registry = receive_only_registry(&mut media_engine, &outbound)?;
 
         let (pipeline, packets) = DecodePipeline::new(decoder)?;
         let gathering_complete = Arc::new(Notify::new());
@@ -204,11 +205,14 @@ impl MediaCore {
         &self.outbound
     }
 
-    /// Fails with the closed reason code once any media RTP was written toward the wire.
     pub fn assert_receive_only(&self) -> Result<(), MediaCoreError> {
         self.outbound.violation().map_or(Ok(()), |reason| {
             Err(MediaCoreError::ReceiveOnlyViolation(reason))
         })
+    }
+
+    pub async fn receive_only_violated(&self) -> MediaCoreError {
+        MediaCoreError::ReceiveOnlyViolation(self.outbound.violated().await)
     }
 
     pub async fn is_receive_only(&self) -> bool {
@@ -238,6 +242,12 @@ impl MediaCore {
     }
 
     pub async fn close(&self) -> Result<(), MediaCoreError> {
+        let teardown = self.tear_down().await;
+        self.assert_receive_only()?;
+        teardown
+    }
+
+    async fn tear_down(&self) -> Result<(), MediaCoreError> {
         self.pipeline.request_stop();
         if let Some(worker) = self.pipeline.take_worker() {
             let joined = tokio::task::spawn_blocking(move || worker.join())
@@ -250,8 +260,7 @@ impl MediaCore {
             }
         }
         self.pipeline.ring().clear();
-        self.connection.close().await.map_err(connection_error)?;
-        self.assert_receive_only()
+        self.connection.close().await.map_err(connection_error)
     }
 }
 

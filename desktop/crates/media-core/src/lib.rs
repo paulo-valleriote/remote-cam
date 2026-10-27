@@ -10,7 +10,7 @@ pub mod software_decoder;
 #[cfg(not(windows))]
 pub mod testing;
 
-pub use core::{MediaCore, MediaCoreError};
+pub use core::{MediaCore, MediaCoreError, receive_only_registry};
 pub use decoder::{DecodeError, VideoDecoder};
 pub use frame_ring::{FRAME_RING_SLOTS, FrameRing};
 pub use nv12::{FrameError, Nv12Frame};

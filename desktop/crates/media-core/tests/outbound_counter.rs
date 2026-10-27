@@ -102,3 +102,70 @@ fn once_a_recorder_saw_its_failure_every_observer_sees_the_violation() {
         Some(ReasonCode::SecurityViolation)
     );
 }
+
+#[test]
+fn an_unclassified_packet_is_a_violation_counted_apart_from_media() {
+    let counter = OutboundRtpCounter::new();
+
+    assert_eq!(
+        counter.record(OutboundKind::Unclassified),
+        Err(ReasonCode::SecurityViolation)
+    );
+
+    assert_eq!(counter.unclassified(), 1);
+    assert_eq!(counter.media_rtp(), 0);
+    assert_eq!(counter.violation(), Some(ReasonCode::SecurityViolation));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn violated_stays_pending_until_the_first_forbidden_packet() {
+    let counter = OutboundRtpCounter::new();
+    assert_eq!(counter.record(OutboundKind::ControlRtcp), Ok(()));
+
+    let early =
+        tokio::time::timeout(std::time::Duration::from_millis(50), counter.violated()).await;
+    assert!(early.is_err(), "control RTCP never wakes the watcher");
+
+    let waiter = tokio::spawn({
+        let counter = counter.clone();
+        async move { counter.violated().await }
+    });
+    tokio::task::yield_now().await;
+    assert!(counter.record(OutboundKind::MediaRtp).is_err());
+
+    assert_eq!(waiter.await.unwrap(), ReasonCode::SecurityViolation);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn violated_resolves_at_once_for_a_violation_that_already_happened() {
+    let counter = OutboundRtpCounter::new();
+    assert!(counter.record(OutboundKind::MediaRtp).is_err());
+
+    let reason = tokio::time::timeout(std::time::Duration::from_secs(1), counter.violated())
+        .await
+        .expect("no wakeup is lost for an earlier violation");
+
+    assert_eq!(reason, ReasonCode::SecurityViolation);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_concurrent_watcher_is_woken_by_one_violation() {
+    let counter = OutboundRtpCounter::new();
+    let watchers: Vec<_> = (0..16)
+        .map(|_| {
+            let counter = counter.clone();
+            tokio::spawn(async move { counter.violated().await })
+        })
+        .collect();
+    tokio::task::yield_now().await;
+
+    assert!(counter.record(OutboundKind::MediaRtp).is_err());
+
+    for watcher in watchers {
+        let reason = tokio::time::timeout(std::time::Duration::from_secs(5), watcher)
+            .await
+            .expect("watcher woke")
+            .unwrap();
+        assert_eq!(reason, ReasonCode::SecurityViolation);
+    }
+}

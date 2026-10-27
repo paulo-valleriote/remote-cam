@@ -7,23 +7,25 @@ use remotecam_protocol::ReasonCode;
 use rtc::interceptor::{Interceptor, Packet, StreamInfo, TaggedPacket};
 use rtc::sansio::Protocol;
 use rtc::shared::error::Error;
+use tokio::sync::Notify;
 
-/// What the desktop sent: control RTCP is allowed, media RTP never is (Receive-only Invariant).
+const RECEIVE_ONLY_VIOLATION: ReasonCode = ReasonCode::SecurityViolation;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutboundKind {
     MediaRtp,
     ControlRtcp,
+    Unclassified,
 }
 
 #[derive(Default)]
 struct Counts {
     media_rtp: AtomicU64,
     control_rtcp: AtomicU64,
+    unclassified: AtomicU64,
+    violated: Notify,
 }
 
-/// Counts outbound packets and fails on the first media RTP one.
-///
-/// Clones share the same counts, so the packet tap and the owner observe one state.
 #[derive(Clone, Default)]
 pub struct OutboundRtpCounter {
     counts: Arc<Counts>,
@@ -34,18 +36,18 @@ impl OutboundRtpCounter {
         Self::default()
     }
 
-    /// Records one outbound packet. Media RTP is a failure carrying a closed reason code.
     pub fn record(&self, kind: OutboundKind) -> Result<(), ReasonCode> {
-        match kind {
+        let forbidden = match kind {
             OutboundKind::ControlRtcp => {
                 self.counts.control_rtcp.fetch_add(1, Ordering::SeqCst);
-                Ok(())
+                return Ok(());
             }
-            OutboundKind::MediaRtp => {
-                self.counts.media_rtp.fetch_add(1, Ordering::SeqCst);
-                Err(ReasonCode::SecurityViolation)
-            }
-        }
+            OutboundKind::MediaRtp => &self.counts.media_rtp,
+            OutboundKind::Unclassified => &self.counts.unclassified,
+        };
+        forbidden.fetch_add(1, Ordering::SeqCst);
+        self.counts.violated.notify_waiters();
+        Err(RECEIVE_ONLY_VIOLATION)
     }
 
     pub fn media_rtp(&self) -> u64 {
@@ -56,16 +58,38 @@ impl OutboundRtpCounter {
         self.counts.control_rtcp.load(Ordering::SeqCst)
     }
 
-    /// The standing verdict: once any media RTP was recorded it never clears.
+    pub fn unclassified(&self) -> u64 {
+        self.counts.unclassified.load(Ordering::SeqCst)
+    }
+
     pub fn violation(&self) -> Option<ReasonCode> {
-        (self.media_rtp() > 0).then_some(ReasonCode::SecurityViolation)
+        (self.media_rtp() + self.unclassified() > 0).then_some(RECEIVE_ONLY_VIOLATION)
+    }
+
+    pub async fn violated(&self) -> ReasonCode {
+        loop {
+            let notified = self.counts.violated.notified();
+            if let Some(reason) = self.violation() {
+                return reason;
+            }
+            notified.await;
+        }
     }
 }
 
-/// Interceptor that watches every packet the desktop writes toward the wire.
-///
-/// Control RTCP passes through. Media RTP is counted as a violation and dropped, so it never
-/// leaves the process even if something upstream tried to send it.
+fn is_attribute_carrier(packets: &[Box<dyn rtc::rtcp::Packet>]) -> bool {
+    packets.is_empty()
+}
+
+fn classify(packet: &Packet) -> Option<OutboundKind> {
+    match packet {
+        Packet::Rtp(_) => Some(OutboundKind::MediaRtp),
+        Packet::Rtcp(packets) if is_attribute_carrier(packets) => None,
+        Packet::Rtcp(_) => Some(OutboundKind::ControlRtcp),
+        _ => Some(OutboundKind::Unclassified),
+    }
+}
+
 pub struct OutboundRtpTap {
     counter: OutboundRtpCounter,
     read_queue: VecDeque<TaggedPacket>,
@@ -99,21 +123,10 @@ impl Protocol<TaggedPacket, TaggedPacket, ()> for OutboundRtpTap {
     }
 
     fn handle_write(&mut self, msg: TaggedPacket) -> Result<(), Self::Error> {
-        match &msg.message.packet {
-            Packet::Rtp(_) => {
-                // The failure is the standing verdict on the counter; the packet is dropped.
-                let _ = self.counter.record(OutboundKind::MediaRtp);
-            }
-            // An empty compound packet is an attribute carrier that never reaches the wire.
-            Packet::Rtcp(packets) if packets.is_empty() => self.write_queue.push_back(msg),
-            Packet::Rtcp(_) => {
-                let _ = self.counter.record(OutboundKind::ControlRtcp);
-                self.write_queue.push_back(msg);
-            }
-            _ => {
-                // A packet kind this tap cannot classify is not allowed to pass.
-                let _ = self.counter.record(OutboundKind::MediaRtp);
-            }
+        let allowed =
+            classify(&msg.message.packet).map_or(Ok(()), |kind| self.counter.record(kind));
+        if allowed.is_ok() {
+            self.write_queue.push_back(msg);
         }
         Ok(())
     }

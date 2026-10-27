@@ -90,3 +90,33 @@ fn the_violation_error_names_the_closed_reason_code() {
 
     assert!(error.to_string().contains("security_violation"));
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_media_core_announces_a_violation_without_being_polled() {
+    let core = MediaCore::new(LOOPBACK).await.expect("media core");
+    let mut tap = OutboundRtpTap::new(core.outbound().clone());
+    let announced = timeout(DEADLINE, core.receive_only_violated());
+
+    tap.handle_write(media_packet()).unwrap();
+
+    assert_eq!(
+        announced.await.expect("announced"),
+        MediaCoreError::ReceiveOnlyViolation(ReasonCode::SecurityViolation)
+    );
+    let _ = core.close().await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_violation_wins_over_a_failing_teardown() {
+    let core = MediaCore::new(LOOPBACK).await.expect("media core");
+    core.close().await.expect("first close");
+    let mut tap = OutboundRtpTap::new(core.outbound().clone());
+    tap.handle_write(media_packet()).unwrap();
+
+    assert_eq!(
+        core.close().await,
+        Err(MediaCoreError::ReceiveOnlyViolation(
+            ReasonCode::SecurityViolation
+        ))
+    );
+}
