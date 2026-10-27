@@ -86,6 +86,7 @@ pub fn run(
     say(&mut output, LIVE)?;
     wait_for(&mut input, END)?;
     drop(session);
+    runtime.block_on(tokio::task::yield_now());
     remotecam_scrub::scrub_stack();
     say(&mut output, ENDED)?;
     wait_for(&mut input, EXIT)

@@ -19,10 +19,10 @@ fn the_binary_emits_one_reproducible_aggregate_report_line() {
     let first = parse_report(&first);
     let second = parse_report(&second);
     assert_eq!(first["verdict"], "pass");
-    assert_eq!(first["report_version"], 4);
+    assert_eq!(first["report_version"], 5);
     assert_eq!(first["contract_version"], 1);
-    assert_eq!(first["summary"]["scenarios"], 9);
-    assert_eq!(first["summary"]["passed"], 9);
+    assert_eq!(first["summary"]["scenarios"], 10);
+    assert_eq!(first["summary"]["passed"], 10);
     assert_eq!(first["scenarios"][0]["scenario"], "pairing-happy-path");
     assert_eq!(first["scenarios"][0]["outcome"], "accepted");
     assert_eq!(first["scenarios"][0]["reason_code"], Value::Null);

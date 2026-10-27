@@ -16,7 +16,7 @@
   ],
   "properties": {
     "report_version": {
-      "const": 4
+      "const": 5
     },
     "contract_version": {
       "const": 1
@@ -40,8 +40,8 @@
     },
     "scenarios": {
       "type": "array",
-      "minItems": 9,
-      "maxItems": 9,
+      "minItems": 10,
+      "maxItems": 10,
       "prefixItems": [
         {
           "$ref": "#/$defs/pairingHappyPath"
@@ -69,6 +69,9 @@
         },
         {
           "$ref": "#/$defs/regenerationAfterRefusal"
+        },
+        {
+          "$ref": "#/$defs/realMediaFrame"
         }
       ],
       "items": false
@@ -226,6 +229,9 @@
         "protocol_violations": {
           "type": "integer",
           "minimum": 0
+        },
+        "real_media": {
+          "$ref": "#/$defs/realMedia"
         }
       }
     },
@@ -391,17 +397,17 @@
       ],
       "properties": {
         "scenarios": {
-          "const": 9
+          "const": 10
         },
         "passed": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9
+          "maximum": 10
         },
         "failed": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9
+          "maximum": 10
         }
       }
     },
@@ -552,6 +558,74 @@
           "properties": {
             "scenario": {
               "const": "regeneration-after-refusal"
+            },
+            "outcome": {
+              "const": "accepted"
+            },
+            "verdict": {
+              "const": "pass"
+            },
+            "reason_code": {
+              "const": null
+            }
+          }
+        }
+      ]
+    },
+    "realMedia": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pixel_format",
+        "width",
+        "height",
+        "frames_decoded",
+        "frames_dropped",
+        "ring_slots",
+        "receive_only"
+      ],
+      "properties": {
+        "pixel_format": {
+          "const": "nv12"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 2,
+          "multipleOf": 2
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 2,
+          "multipleOf": 2
+        },
+        "frames_decoded": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frames_dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ring_slots": {
+          "const": 3
+        },
+        "receive_only": {
+          "const": true
+        }
+      }
+    },
+    "realMediaFrame": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scenarioBase"
+        },
+        {
+          "required": [
+            "real_media"
+          ],
+          "properties": {
+            "scenario": {
+              "const": "real-media-frame"
             },
             "outcome": {
               "const": "accepted"

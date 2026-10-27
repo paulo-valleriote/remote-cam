@@ -1,8 +1,8 @@
 """Coverage gate for delivered packages and the product harness.
 
 Enforces ≥ 90 % line coverage for ``desktop/crates/protocol``,
-``desktop/crates/session-core`` and ``desktop/crates/pairing`` (via
-``cargo-llvm-cov``), the product harness (via ``cargo-llvm-cov``), and
+``desktop/crates/session-core``, ``desktop/crates/pairing`` and
+``desktop/crates/media-core`` (via ``cargo-llvm-cov``), the product harness (via ``cargo-llvm-cov``), and
 ``mobile/protocol`` and ``mobile/session-core`` (via JaCoCo). ``spikes/`` is exempt as a recorded deviation
 (T117); the harness has its own REC-25 gate despite not being shipped.
 
@@ -12,6 +12,7 @@ Usage::
         --rust-summary <cargo-llvm-cov --summary-only output for remotecam-protocol> \
         --rust-session-core-summary <cargo-llvm-cov --summary-only output for remotecam-session-core> \
         --rust-pairing-summary <cargo-llvm-cov --summary-only output for remotecam-pairing> \
+        --rust-media-core-summary <cargo-llvm-cov --summary-only output for remotecam-media-core> \
         --rust-harness-summary <cargo-llvm-cov --summary-only output for remotecam-harness> \
         --jacoco-report <jacocoTestReport.xml for mobile/protocol> \
         --jacoco-session-core-report <jacocoTestReport.xml for mobile/session-core>
@@ -77,6 +78,10 @@ def main() -> int:
         help="Text output of `cargo llvm-cov --summary-only` for remotecam-pairing",
     )
     parser.add_argument(
+        "--rust-media-core-summary",
+        help="Text output of `cargo llvm-cov --summary-only` for remotecam-media-core",
+    )
+    parser.add_argument(
         "--rust-harness-summary",
         help="Text output of `cargo llvm-cov --summary-only` for remotecam-harness",
     )
@@ -96,6 +101,7 @@ def main() -> int:
         ("Rust protocol", args.rust_summary),
         ("Rust session core", args.rust_session_core_summary),
         ("Rust pairing", args.rust_pairing_summary),
+        ("Rust media core", args.rust_media_core_summary),
         ("Product harness", args.rust_harness_summary),
     ]
     for label, summary_path in rust_summaries:

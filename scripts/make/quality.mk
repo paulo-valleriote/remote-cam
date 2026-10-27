@@ -24,12 +24,15 @@ coverage: ## Report coverage for the delivered product packages (≥90% required
 	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-session-core --summary-only > .coverage/rust_session_core_summary.txt
 	$(CARGO) llvm-cov clean --workspace --manifest-path desktop/Cargo.toml
 	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-pairing --summary-only > .coverage/rust_pairing_summary.txt
+	$(CARGO) llvm-cov clean --workspace --manifest-path desktop/Cargo.toml
+	$(CARGO) llvm-cov --manifest-path desktop/Cargo.toml --package remotecam-media-core --summary-only > .coverage/rust_media_core_summary.txt
 	cd harness && $(CARGO) llvm-cov clean --workspace && $(CARGO) llvm-cov --package remotecam-harness --summary-only > ../.coverage/rust_harness_summary.txt
 	$(GRADLE) -p mobile :protocol:jacocoTestReport :session-core:jacocoTestReport
 	python3 scripts/ci/coverage_gate.py \
 		--rust-summary .coverage/rust_protocol_summary.txt \
 		--rust-session-core-summary .coverage/rust_session_core_summary.txt \
 		--rust-pairing-summary .coverage/rust_pairing_summary.txt \
+		--rust-media-core-summary .coverage/rust_media_core_summary.txt \
 		--rust-harness-summary .coverage/rust_harness_summary.txt \
 		--jacoco-report mobile/protocol/build/reports/jacoco/test/jacocoTestReport.xml \
 		--jacoco-session-core-report mobile/session-core/build/reports/jacoco/test/jacocoTestReport.xml

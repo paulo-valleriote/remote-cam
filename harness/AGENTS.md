@@ -19,8 +19,8 @@
 - **Workspace:** `harness/Cargo.toml` (resolver 3, edition 2024, MSRV 1.92, version 0.1.0) with two members: `crates/harness` and `crates/residue`.
 - **Toolchain:** `harness/rust-toolchain.toml` — `1.99.1`, components `clippy` + `rustfmt`, profile `minimal`.
 - **Build and run:** `make harness` runs `cargo run --quiet --locked --package remotecam-harness` from inside `harness/`, so rustup honours the pinned toolchain; GNU `timeout` bounds execution externally. `make harness HARNESS_ARGS="--seed 42 --clock-start-millis 100"` overrides the deterministic defaults.
-- **Dependency direction:** the harness consumes `desktop/crates/pairing`, `desktop/crates/session-core` and `desktop/crates/protocol` by relative path; `crates/residue` also consumes `desktop/crates/scrub`. It never reaches into `desktop/crates/app` and never defines the contract, which belongs to `protocol/`.
-- **Output:** one JSON line on stdout per run, containing report version 4, protocol contract version 1, commit, seed, logical clock start, an allowlisted environment, the ordered nine scenario results (`pairing-happy-path`, `pin-mismatch-aborts`, then the seven REC-10 acceptance scenarios), diagnostic state/message/frame/resource/epoch observations, per-scenario verdict and reason code, and a summary. `harness/report.schema.json` is the report contract. Exit code 0 means all scenarios passed; 1 means at least one failed. The REC-10 scenarios are defined in `src/acceptance.rs` and recorded in ADR-0012.
+- **Dependency direction:** the harness consumes `desktop/crates/pairing`, `desktop/crates/session-core`, `desktop/crates/media-core` and `desktop/crates/protocol` by relative path; `crates/residue` also consumes `desktop/crates/scrub`. It never reaches into `desktop/crates/app` and never defines the contract, which belongs to `protocol/`.
+- **Output:** one JSON line on stdout per run, containing report version 5, protocol contract version 1, commit, seed, logical clock start, an allowlisted environment, the ordered ten scenario results (`pairing-happy-path`, `pin-mismatch-aborts`, the seven REC-10 acceptance scenarios, then `real-media-frame`, which drives the real Media Core (the signaling frames still carry placeholder SDP; the real offer/answer is negotiated in-process between the synthetic phone and the Media Core after the handshake) from `desktop/crates/media-core` with a synthetic phone, ADR-0021), diagnostic state/message/frame/resource/epoch observations, per-scenario verdict and reason code, and a summary. `harness/report.schema.json` is the report contract. Exit code 0 means all scenarios passed; 1 means at least one failed. The REC-10 scenarios are defined in `src/acceptance.rs` and recorded in ADR-0012.
 
 ## Harness-specific rules
 
@@ -61,6 +61,8 @@
 - The controls are part of the verdict: `live-control` must find the secrets, the credential-store sweep must find a planted secret, the canary leak must be detected, and no memory region or store may be unreadable. A green run without them is a broken method. The TLS ticket scope is `swept: false` with its unit test as `basis`.
 - The method is the one C-02 requires on the reference devices; the Linux evidence does not close that device run.
 - The binary installs `remotecam_scrub::ZeroizingAllocator`; it is outside the REC-25 coverage gate (`remotecam-harness` only).
+
+- The probe takes one driver turn after the session drops (`yield_now`) while keeping its runtime alive: tokio frees a dropped socket's I/O registration only on a driver turn, and a parked probe never takes one, so the `session-end` sweep found stale stack bytes (a pairing token copy) in that registration when the Media Core's `rt-multi-thread` feature was unified into a workspace build (ADR-0021). Do not replace it with dropping the runtime: that would hide anything the runtime retains.
 
 ### 7. Before modifying
 
