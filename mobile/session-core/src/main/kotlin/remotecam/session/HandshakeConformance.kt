@@ -49,8 +49,6 @@ object HandshakeConformance {
     private const val SEED = 7L
     private const val MAX_EPOCH = 0xFFFF_FFFFL
 
-    fun repositoryRoot(): Path = Conformance.repositoryRoot()
-
     /**
      * Replays every `kind = handshake` scenario under [vectorsDirectory]. A
      * scenario that diverges from its pinned expectation, or that names an
