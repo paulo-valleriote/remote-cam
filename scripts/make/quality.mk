@@ -2,9 +2,7 @@
 
 test: ## Run the desktop, harness, Kotlin and spike-tooling tests
 	$(CARGO) test --manifest-path desktop/Cargo.toml --workspace
-	# Per package, never --workspace: the residue binary must be built without the Media Core's tokio features (ADR-0021).
-	cd harness && $(CARGO) test --package remotecam-harness
-	cd harness && $(CARGO) test --package remotecam-residue
+	cd harness && $(CARGO) test --workspace
 	$(CARGO) test --manifest-path spikes/f0-signaling/Cargo.toml
 	$(CARGO) test --manifest-path spikes/f0-media-core/Cargo.toml
 	$(CARGO) test --manifest-path spikes/f0-injection/Cargo.toml
