@@ -107,6 +107,46 @@ pub fn i420_to_nv12(
     output
 }
 
+/// Packs an NV12 surface locked with `IMF2DBuffer2::Lock2DSize` into the
+/// tightly packed layout of [`Nv12Frame`]. `pitch` is the byte stride of both
+/// planes and `chroma_row_offset` the number of pitch-sized rows the luma
+/// surface occupies before the chroma plane begins (padded height).
+pub fn pitched_nv12_to_packed(
+    width: u32,
+    height: u32,
+    pitch: usize,
+    chroma_row_offset: usize,
+    buffer: &[u8],
+) -> Result<Vec<u8>, FrameError> {
+    let (columns, rows) = (width as usize, height as usize);
+    if width == 0
+        || height == 0
+        || !width.is_multiple_of(2)
+        || !height.is_multiple_of(2)
+        || pitch < columns
+        || chroma_row_offset < rows
+    {
+        return Err(FrameError::InvalidDimensions { width, height });
+    }
+    let expected = pitch * (chroma_row_offset + rows / 2);
+    if buffer.len() < expected {
+        return Err(FrameError::InvalidLength {
+            expected,
+            actual: buffer.len(),
+        });
+    }
+    let chroma_start = pitch * chroma_row_offset;
+    let mut packed = Vec::with_capacity(columns * rows * 3 / 2);
+    for row in 0..rows {
+        packed.extend_from_slice(&buffer[row * pitch..row * pitch + columns]);
+    }
+    for row in 0..rows / 2 {
+        let start = chroma_start + row * pitch;
+        packed.extend_from_slice(&buffer[start..start + columns]);
+    }
+    Ok(packed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,6 +171,32 @@ mod tests {
         let v = [20, 0xEE, 0xEE];
         let nv12 = i420_to_nv12(2, 2, (&y, &u, &v), (4, 3, 3));
         assert_eq!(nv12, vec![0, 1, 2, 3, 10, 20]);
+    }
+
+    #[test]
+    fn pitched_buffer_is_packed_without_row_or_height_padding() {
+        // 2x2 picture, pitch 4, luma surface padded to 4 rows: the chroma plane
+        // starts at pitch * 4, not at pitch * 2.
+        let mut buffer = vec![0xEE_u8; 4 * 4 + 4 * 2];
+        buffer[0..2].copy_from_slice(&[1, 2]);
+        buffer[4..6].copy_from_slice(&[3, 4]);
+        buffer[16..18].copy_from_slice(&[5, 6]);
+        let packed = pitched_nv12_to_packed(2, 2, 4, 4, &buffer).expect("packed");
+        assert_eq!(packed, vec![1, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn pitched_buffer_shorter_than_its_layout_is_refused() {
+        let error = pitched_nv12_to_packed(2, 2, 4, 4, &[0; 19]).expect_err("short");
+        assert_eq!(
+            error,
+            FrameError::InvalidLength {
+                expected: 20,
+                actual: 19
+            }
+        );
+        assert!(pitched_nv12_to_packed(2, 2, 1, 4, &[0; 24]).is_err());
+        assert!(pitched_nv12_to_packed(3, 2, 4, 4, &[0; 24]).is_err());
     }
 
     #[test]

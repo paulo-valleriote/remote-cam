@@ -25,6 +25,7 @@ use webrtc::peer_connection::{
 use webrtc::rtp_transceiver::RTCRtpTransceiverDirection;
 
 use crate::decoder::VideoDecoder;
+use crate::decoder_selection::{DecoderReport, SelectedDecoder};
 use crate::frame_ring::FrameRing;
 use crate::nv12::Nv12Frame;
 use crate::outbound::{OutboundRtpCounter, OutboundRtpTap};
@@ -158,19 +159,40 @@ pub struct MediaCore {
     pipeline: DecodePipeline,
     gathering_complete: Arc<Notify>,
     outbound: OutboundRtpCounter,
+    decoder_report: Option<DecoderReport>,
 }
 
 impl MediaCore {
     #[cfg(not(windows))]
     pub async fn new(bind_address: &str) -> Result<Self, MediaCoreError> {
-        let decoder = crate::software_decoder::SoftwareH264Decoder::new()
-            .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
-        Self::with_decoder(bind_address, Box::new(decoder)).await
+        let selected = crate::decoder_selection::select_decoder(
+            None,
+            Some(&crate::software_decoder::SoftwareH264Factory),
+        )
+        .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
+        Self::with_selection(bind_address, selected).await
+    }
+
+    /// Builds the core around a decoder chosen by `select_decoder`; the active
+    /// backend is then readable through [`MediaCore::decoder_report`].
+    pub async fn with_selection(
+        bind_address: &str,
+        selected: SelectedDecoder,
+    ) -> Result<Self, MediaCoreError> {
+        Self::build(bind_address, selected.decoder, Some(selected.report)).await
     }
 
     pub async fn with_decoder(
         bind_address: &str,
         decoder: Box<dyn VideoDecoder>,
+    ) -> Result<Self, MediaCoreError> {
+        Self::build(bind_address, decoder, None).await
+    }
+
+    async fn build(
+        bind_address: &str,
+        decoder: Box<dyn VideoDecoder>,
+        decoder_report: Option<DecoderReport>,
     ) -> Result<Self, MediaCoreError> {
         let mut media_engine = MediaEngine::default();
         media_engine
@@ -217,7 +239,12 @@ impl MediaCore {
             pipeline,
             gathering_complete,
             outbound,
+            decoder_report,
         })
+    }
+
+    pub fn decoder_report(&self) -> Option<&DecoderReport> {
+        self.decoder_report.as_ref()
     }
 
     pub async fn answer(&self, offer_sdp: &str) -> Result<String, MediaCoreError> {
