@@ -27,7 +27,7 @@ use webrtc::peer_connection::{
 };
 use webrtc::rtp_transceiver::RTCRtpTransceiverDirection;
 
-use crate::decoder::H264Decoder;
+use crate::decoder::VideoDecoder;
 use crate::frame_ring::FrameRing;
 use crate::nv12::Nv12Frame;
 
@@ -167,7 +167,7 @@ impl PeerConnectionEventHandler for EventSink {
 }
 
 fn decode_loop(
-    mut decoder: H264Decoder,
+    mut decoder: Box<dyn VideoDecoder>,
     queue: Receiver<AccessUnit>,
     shared: Arc<Shared>,
     stop: Arc<std::sync::atomic::AtomicBool>,
@@ -205,12 +205,20 @@ pub struct MediaCore {
 }
 
 impl MediaCore {
-    /// Builds a receive-only connection bound to `bind` (host candidates only,
-    /// no ICE servers) and starts the decode thread.
+    /// Linux/CI Media Core with the OpenH264 software decoder.
+    #[cfg(not(windows))]
     pub async fn new(bind: &str) -> Result<Self, MediaCoreError> {
-        let decoder =
-            H264Decoder::new().map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
+        let decoder = crate::software_decoder::SoftwareH264Decoder::new()
+            .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
+        Self::with_decoder(bind, Box::new(decoder)).await
+    }
 
+    /// Builds a receive-only connection bound to `bind` (host candidates only,
+    /// no ICE servers) and starts the decode thread around `decoder`.
+    pub async fn with_decoder(
+        bind: &str,
+        decoder: Box<dyn VideoDecoder>,
+    ) -> Result<Self, MediaCoreError> {
         let mut media_engine = MediaEngine::default();
         media_engine
             .register_default_codecs()

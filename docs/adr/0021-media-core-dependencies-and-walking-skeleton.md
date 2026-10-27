@@ -57,8 +57,14 @@ harness workspace adds the `time` feature to `tokio` and a path dependency on
   the product decode on Windows is Media Foundation (F3-07), and software-decode
   results are never cited for the latency budget (research D-05).
 - Building OpenH264 from source does not carry Cisco's patent grant, which covers
-  only Cisco's own binaries. Shipping the software decoder to users needs a
-  licensing decision before the F3 Device Exit; this ADR does not make it.
+  only Cisco's own binaries. So the software decoder is never distributed:
+  `openh264` is a `cfg(not(windows))` dependency, `software_decoder` and
+  `testing` are not compiled on Windows, and the Media Core takes its decoder
+  through the `VideoDecoder` trait (`MediaCore::with_decoder`). The Windows
+  product supplies the Media Foundation decoder in F3-07. If a software
+  fallback is ever needed in the product, it must load Cisco's binary at run
+  time (`openh264` `libloading`) or carry its own patent licence; that falls
+  under C-05 (2027-01-15). This is not legal advice.
 - Out of scope here: loss recovery (NACK/PLI), adaptive jitter buffer (F3-03),
   audio (F3-04), Media Foundation (F3-07).
 

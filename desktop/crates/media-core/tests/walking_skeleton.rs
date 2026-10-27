@@ -1,3 +1,5 @@
+#![cfg(not(windows))]
+
 //! REC-50: synthetic H.264 RTP arrives as a real NV12 `MediaFrame` through the
 //! Media Port, over a loopback WebRTC connection.
 
