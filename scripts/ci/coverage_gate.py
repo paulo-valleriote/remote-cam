@@ -118,7 +118,8 @@ def main() -> int:
     ]
     for label, report_path in jacoco_reports:
         if not report_path:
-            continue
+            print(f"error: missing {label} JaCoCo report")
+            return 1
         jacoco_pct = jacoco_coverage(report_path)
         if jacoco_pct is None:
             print(f"error: could not parse {label} coverage report")

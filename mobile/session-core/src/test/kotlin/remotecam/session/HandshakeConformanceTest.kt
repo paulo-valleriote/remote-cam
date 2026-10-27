@@ -14,9 +14,10 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import remotecam.protocol.Conformance
 
 class HandshakeConformanceTest {
-    private val vectors = HandshakeConformance.repositoryRoot().resolve("protocol/vectors")
+    private val vectors = Conformance.repositoryRoot().resolve("protocol/vectors")
     private val results by lazy { HandshakeConformance.run(vectors) }
 
     private fun result(id: String) = results.single { it.id == id }
