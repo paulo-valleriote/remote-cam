@@ -386,9 +386,11 @@
     },
     "F3": {
       "status": "conditional",
-      "reason": "F3 depends on the F2 exit and on the carried injection and pipeline obligations.",
+      "reason": "F3 is split by A-2 into the F3 core exit (2026-12-18, no device dependency) and the F3 device exit (2027-01-15). The F2 exit dependency and the carried injection and pipeline obligations are unchanged.",
       "conditions": [
         "F2 exit",
+        "F3 core exit (deadline 2026-12-18)",
+        "F3 device exit (deadline 2027-01-15)",
         "C-05-licensing-decision (deadline 2027-01-15)",
         "camera_injection carried (deadline 2027-02-15)",
         "desktop_receive_pipeline carried (deadline 2027-02-15)"

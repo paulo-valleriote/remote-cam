@@ -2,7 +2,7 @@
 
 **Feature:** 001-f0-technical-spikes
 **Phase review at:** 2026-10-23T17:20:00-03:00
-**Report version:** 3 (Amendment A-1, 2026-10-26; see "Amendments to this report")
+**Report version:** 4 (Amendment A-1, 2026-10-26; see "Amendments to this report") (Amendment A-2, 2026-10-26)
 **Prepared by:** Paulo Valleriote
 
 ## Reference environment
@@ -147,7 +147,7 @@
 - **Closure mode:** closed_with_exceptions
 - **Exit gate:** not_met
 - **Closed at:** 2026-10-23T17:20:00-03:00
-- **Statement:** F0 is closed with recorded exceptions. All five gate verdicts were issued as measured: two no_go (camera injection and the desktop receive pipeline) and three conditional (pairing handshake, codec interoperability, virtual audio and licensing). The phase exit gate is not met. The only matrix evidence recorded is one Google Chrome injection cell of 33.2845 s; it does not satisfy the 1800 s per-cell and five-category matrix criterion, so the injection gate remains no_go. No new matrix evidence was collected at closure. Conditions C-02, C-04 and C-05 are waived with resolution deadlines, and the environmental no_go obligations are carried to F3. Condition C-02 was later amended by A-1 (see "Amendments to this report").
+- **Statement:** F0 is closed with recorded exceptions. All five gate verdicts were issued as measured: two no_go (camera injection and the desktop receive pipeline) and three conditional (pairing handshake, codec interoperability, virtual audio and licensing). The phase exit gate is not met. The only matrix evidence recorded is one Google Chrome injection cell of 33.2845 s; it does not satisfy the 1800 s per-cell and five-category matrix criterion, so the injection gate remains no_go. No new matrix evidence was collected at closure. Conditions C-02, C-04 and C-05 are waived with resolution deadlines, and the environmental no_go obligations are carried to F3. Condition C-02 was later amended by A-1 (see "Amendments to this report"). The F3 exit was later split into a core exit and a device exit by A-2 (see "Amendments to this report").
 
 **Sign-offs**
 
@@ -161,8 +161,8 @@
 
 | Gate | Verdict | Disposition | Target | Owner | Deadline |
 |------|---------|-------------|--------|-------|----------|
-| camera_injection | no_go | carried | F3 | Paulo Valleriote | 2027-02-15 |
-| desktop_receive_pipeline | no_go | carried | F3 | Paulo Valleriote | 2027-02-15 |
+| camera_injection | no_go | carried | F3 | Paulo Valleriote | 2027-02-15 (amended by A-2: resolved by the F3 device exit, 2027-01-15; the 2027-02-15 limit is unchanged) |
+| desktop_receive_pipeline | no_go | carried | F3 | Paulo Valleriote | 2027-02-15 (amended by A-2: resolved by the F3 device exit, 2027-01-15; the 2027-02-15 limit is unchanged) |
 | pairing_handshake | conditional | waived | F1 | Paulo Valleriote | 2026-11-20 (original; amended by A-1: F1 core exit 2026-11-20, C-02-residual 2026-12-20) |
 | codec_interoperability | conditional | waived | F2 | Paulo Valleriote | 2026-12-20 |
 | virtual_audio_and_licensing | conditional | waived | F3 | Paulo Valleriote | 2027-01-15 |
@@ -203,8 +203,8 @@
   - Conditions: F1 core exit (deadline 2026-11-20), C-02-residual (deadline 2026-12-20), C-04-interop-live-run (deadline 2026-12-20)
 - **F2:** conditional — F2 depends on the F1 core exit, C-02-residual and the codec and licensing conditions.
   - Conditions: F1 core exit, C-02-residual (deadline 2026-12-20), C-04-interop-live-run (deadline 2026-12-20), C-05-licensing-decision (deadline 2027-01-15)
-- **F3:** conditional — F3 depends on the F2 exit and on the carried injection and pipeline obligations.
-  - Conditions: F2 exit, C-05-licensing-decision (deadline 2027-01-15), camera_injection carried (deadline 2027-02-15), desktop_receive_pipeline carried (deadline 2027-02-15)
+- **F3:** conditional — F3 is split by A-2 into the F3 core exit (2026-12-18, no device dependency) and the F3 device exit (2027-01-15). The F2 exit dependency and the carried injection and pipeline obligations are unchanged.
+  - Conditions: F2 exit, F3 core exit (deadline 2026-12-18), F3 device exit (deadline 2027-01-15), C-05-licensing-decision (deadline 2027-01-15), camera_injection carried (deadline 2027-02-15), desktop_receive_pipeline carried (deadline 2027-02-15)
 
 ## Amendments to this report
 
@@ -225,6 +225,24 @@
 - **Status effects:** F1 stays `conditional`, but the F1 exit is the core exit only; C-02-residual and C-04 are tracked against F1/F2 and do not gate it; F2 now depends on the F1 core exit and on C-02-residual; F3 is unchanged.
 - **Unchanged:** all five gate verdicts, `pairing_handshake` stays `conditional`; C-04, C-05 and every carried obligation keep their dates.
 - **Note:** the F0 evidence record (`f0_exit.json`, `D-EXIT-f0.md`) is not rewritten; this amendment is layered on top of it by `gate_report_amendments.json`.
+
+### A-2 — Separate the F3 core exit from the F3 device exit (2026-10-26)
+
+- **Amended by:** Paulo Valleriote (technical_lead, as F3 exit owner); the product_owner role keeps the C-05 licensing decision, and the same person signs both roles.
+- **Ticket:** REC-92 (ADR-0019, epic REC-4)
+- **Reason:** the single F3 exit gate in REC-4 mixed criteria that the Linux harness can prove (outbound media RTP at zero, loss resilience, A/V drift, latency budget) with criteria that need the Windows 11 Reference Device (application matrix, glass-to-glass latency, virtual audio path). The F3 date would therefore depend on hardware that is not available and on the C-05 licensing decision.
+- **Change:**
+
+| Item | Scope | Owner role | Deadline | Depends on devices |
+|------|-------|------------|----------|--------------------|
+| F3 core exit | Media Core proven on the Linux harness with an injected clock and emulated network (REC-50 to REC-55) | technical_lead — Paulo Valleriote | 2026-12-18 | no |
+| F3 device exit | Virtual Devices on the Windows 11 Reference Device: Media Foundation decode, virtual camera matrix, WASAPI bridge and virtual audio device (REC-56 to REC-59) | technical_lead — Paulo Valleriote | 2027-01-15 | yes |
+
+- **Deadline rationale:** 2026-12-18 is the REC-4 target and is kept for the core exit. 2027-01-15 was proposed by the amender and accepted by the project owner on 2026-10-26; it aligns with C-05 and falls before the 2027-02-15 limit of the carried camera_injection and desktop_receive_pipeline obligations, which the device exit resolves.
+- **ID mapping:** the F3 core exit and the F3 device exit are new items; no F0 condition is renamed. The carried camera_injection and desktop_receive_pipeline obligations and C-05 keep their IDs and are resolved by the device exit.
+- **Status effects:** F3 stays `conditional`; its exit is two gates. F4 depends on the F3 device exit. The F3 core exit has no device dependency. Audio stories never block the video stories; only the virtual audio device story is subject to C-05, with video-only mode as the approved plan B.
+- **Unchanged:** all five gate verdicts; C-02-residual (A-1), C-04 (VP8 stays out of F3 and opens a story only if C-04 fails), C-05 and the carried obligations keep their dates; the F3 dependency on the F2 exit is not altered by this amendment.
+- **Note:** the F0 evidence record (`f0_exit.json`, `D-EXIT-f0.md`) is not rewritten; this amendment is layered on top of it by `gate_report_amendments.json`, together with A-1.
 
 ## Decision index
 
