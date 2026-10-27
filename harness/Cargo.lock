@@ -1715,6 +1715,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "openh264",
+ "remotecam-protocol",
  "remotecam-session-core",
  "rtc",
  "tokio",
