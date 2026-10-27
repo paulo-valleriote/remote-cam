@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod core;
 pub mod decoder;
 pub mod engine;
