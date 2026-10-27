@@ -452,10 +452,7 @@ pub struct AudioContinuityObservation {
 impl AudioContinuityObservation {
     fn from_report(report: &AudioReport) -> Self {
         Self {
-            profile: match report.label {
-                ProfileLabel::Nominal => "nominal",
-                ProfileLabel::OutOfProfile => "out_of_profile",
-            },
+            profile: av_sync::profile_name(report.label),
             duration_seconds: report.seconds,
             frames_sent: report.frames_sent,
             frames_played: report.frames_played,
@@ -465,10 +462,8 @@ impl AudioContinuityObservation {
             late_packets: report.late,
             underrun_dropouts: report.underrun_dropouts,
             silence_dropouts: report.silence_dropouts,
-            longest_underrun_millis: u64::try_from(report.longest_underrun.as_millis())
-                .unwrap_or(u64::MAX),
-            longest_silent_run_millis: u64::try_from(report.longest_silent_run.as_millis())
-                .unwrap_or(u64::MAX),
+            longest_underrun_millis: av_sync::saturating_millis(report.longest_underrun),
+            longest_silent_run_millis: av_sync::saturating_millis(report.longest_silent_run),
         }
     }
 }

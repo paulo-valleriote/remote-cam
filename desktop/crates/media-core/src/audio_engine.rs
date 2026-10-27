@@ -4,7 +4,7 @@ use std::time::Duration;
 use rtc::rtp::Packet;
 
 use crate::audio::{AudioError, FRAME_SAMPLES, OpusDecoder, SAMPLE_RATE_HZ};
-use crate::av_sync::AudioClock;
+use crate::av_sync::{AudioClock, extend_timestamp, first_extended_timestamp};
 
 const FRAME_TICKS: u64 = FRAME_SAMPLES as u64;
 const PLAYOUT_DEPTH: Duration = Duration::from_millis(60);
@@ -83,13 +83,6 @@ impl AudioEngine {
         self.stats
     }
 
-    /// Lifts a 32-bit RTP timestamp onto the 64-bit schedule. Truncating the cursor to
-    /// `u32` is deliberate: the wrapping signed difference is the distance across a wrap.
-    fn extend(&self, timestamp: u32) -> u64 {
-        let delta = i64::from(timestamp.wrapping_sub(self.cursor as u32) as i32);
-        self.cursor.saturating_add_signed(delta)
-    }
-
     fn anchor_at(&mut self, extended: u64, now: Duration) {
         self.schedule = Some(Schedule {
             anchor: now,
@@ -100,10 +93,10 @@ impl AudioEngine {
 
     pub fn ingest(&mut self, packet: Packet, now: Duration) {
         if self.schedule.is_none() {
-            let first = u64::from(packet.header.timestamp) | (1 << 32);
+            let first = first_extended_timestamp(packet.header.timestamp);
             self.anchor_at(first, now);
         }
-        let extended = self.extend(packet.header.timestamp);
+        let extended = extend_timestamp(self.cursor, packet.header.timestamp);
         if extended.abs_diff(self.cursor) > RESYNC_TICKS {
             self.pending.clear();
             self.anchor_at(extended, now);

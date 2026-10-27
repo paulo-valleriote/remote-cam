@@ -190,3 +190,69 @@ fn the_video_chain_never_sees_the_audio_clock_behind_the_instant_the_audio_chain
     audio_chain.join().expect("audio chain");
     assert!(presented > 30);
 }
+
+#[test]
+fn free_running_chains_never_present_out_of_order_or_read_a_clock_from_the_future() {
+    use remotecam_media_core::Nv12Frame;
+    use remotecam_media_core::audio_engine::AudioEngine;
+    use remotecam_media_core::av_sync::{AudioClock, VideoSync};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    const LAST_MILLI: u64 = 3_000;
+    let clock = AudioClock::new();
+    let now_millis = Arc::new(AtomicU64::new(0));
+    let audio_clock = clock.clone();
+    let published_now = Arc::clone(&now_millis);
+    let audio_chain = std::thread::spawn(move || {
+        let mut engine = AudioEngine::new(Box::new(NullSink))
+            .expect("engine")
+            .with_clock(audio_clock);
+        for step in 0..=LAST_MILLI {
+            let now = Duration::from_millis(step);
+            if step % 20 == 0 {
+                let packet = rtc::rtp::Packet {
+                    header: rtc::rtp::header::Header {
+                        timestamp: u32::try_from(step / 20 * 960).expect("timestamp"),
+                        ..Default::default()
+                    },
+                    payload: vec![0xF8, 0xFF, 0xFE].into(),
+                };
+                engine.ingest(packet, now);
+            }
+            engine.advance(now);
+            published_now.store(step, Ordering::Release);
+        }
+    });
+
+    let mut sync = VideoSync::new(clock.clone());
+    let (mut last_presented, mut next_frame, mut presented) = (None, 0_u64, 0_u32);
+    loop {
+        let step = now_millis.load(Ordering::Acquire);
+        let now = Duration::from_millis(step);
+        while next_frame * 33 <= step {
+            let ticks = u32::try_from(next_frame * 33 * 90).expect("timestamp");
+            sync.offer(Nv12Frame::new(2, 2, ticks, vec![0; 6]).expect("frame"));
+            next_frame += 1;
+        }
+        // The audio thread may be ahead of `now`: it can only have published a position
+        // that real (logical) time had reached by the time it announced it.
+        if let Some(position) = clock.read(now) {
+            assert!(position <= Duration::from_millis(LAST_MILLI));
+        }
+        if let Some(frame) = sync.tick(now).frame {
+            assert!(
+                last_presented.is_none_or(|previous| frame.rtp_timestamp() > previous),
+                "frames are presented in media order"
+            );
+            last_presented = Some(frame.rtp_timestamp());
+            presented += 1;
+        }
+        if step == LAST_MILLI {
+            break;
+        }
+        std::thread::yield_now();
+    }
+    audio_chain.join().expect("audio chain");
+    assert!(presented > 0);
+}

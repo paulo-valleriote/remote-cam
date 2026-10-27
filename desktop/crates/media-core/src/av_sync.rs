@@ -15,11 +15,25 @@ const VIDEO_CLOCK_HZ: u64 = 90_000;
 /// the next one would be, so presenting it keeps the offset inside the target.
 const EARLY_TOLERANCE: Duration = Duration::from_micros(16_667);
 /// Without a publication for this long the audio is gone and the video stops waiting.
+/// Unrelated to `AV_DRIFT_LIMIT`: absent audio never ends the session.
 const AUDIO_STALE_AFTER: Duration = Duration::from_millis(100);
 const QUEUE_CAPACITY: usize = 16;
 /// About one second of 30 fps video. The drift is the median offset over this window,
 /// so a frame delayed by loss recovery is jitter and only a sustained offset is drift.
 const DRIFT_WINDOW: usize = 31;
+
+/// Lifts a 32-bit RTP timestamp onto the 64-bit line next to `reference`; the wrapping
+/// signed difference is the distance across a wrap.
+pub(crate) fn extend_timestamp(reference: u64, timestamp: u32) -> u64 {
+    let delta = i64::from(timestamp.wrapping_sub(reference as u32) as i32);
+    reference.saturating_add_signed(delta)
+}
+
+/// Where the first timestamp of a stream lands on the 64-bit line. The high bit leaves
+/// room below it for a packet that arrives out of order.
+pub(crate) fn first_extended_timestamp(timestamp: u32) -> u64 {
+    u64::from(timestamp) | (1 << 32)
+}
 
 #[derive(Debug, Clone, Copy)]
 struct Reading {
@@ -121,28 +135,19 @@ impl VideoSync {
         self.queue.len()
     }
 
-    /// Lifts the 32-bit RTP timestamp onto a 64-bit line; the wrapping signed
-    /// difference is the distance across a wrap.
-    fn extend(&mut self, timestamp: u32) -> u64 {
-        let delta = i64::from(timestamp.wrapping_sub(self.last_extended as u32) as i32);
-        self.last_extended = self.last_extended.saturating_add_signed(delta);
-        self.last_extended
-    }
-
     /// Queues a decoded frame. Its media time is measured from the first frame, as the
     /// audio's is from its own first packet: both streams start at the same capture
     /// instant on the v1 phone.
     pub fn offer(&mut self, frame: Nv12Frame) {
         let extended = match self.origin {
-            Some(_) => self.extend(frame.rtp_timestamp()),
+            Some(_) => extend_timestamp(self.last_extended, frame.rtp_timestamp()),
             None => {
-                // The high bit leaves room below the first timestamp for a frame that
-                // arrives out of order.
-                self.last_extended = u64::from(frame.rtp_timestamp()) | (1 << 32);
-                self.origin = Some(self.last_extended);
-                self.last_extended
+                let first = first_extended_timestamp(frame.rtp_timestamp());
+                self.origin = Some(first);
+                first
             }
         };
+        self.last_extended = extended;
         let ticks = extended.saturating_sub(self.origin.unwrap_or(extended));
         let media_time = Duration::from_micros(ticks * 1_000_000 / VIDEO_CLOCK_HZ);
         if self.queue.len() == QUEUE_CAPACITY {

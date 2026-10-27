@@ -57,10 +57,7 @@ pub struct DriftLimitRun {
 impl AvRun {
     fn from_report(report: &AvReport) -> Self {
         Self {
-            profile: match report.label {
-                ProfileLabel::Nominal => "nominal",
-                ProfileLabel::OutOfProfile => "out_of_profile",
-            },
+            profile: profile_name(report.label),
             duration_seconds: report.seconds,
             mode: match report.mode {
                 SyncMode::AudioMaster => "audio_master",
@@ -71,13 +68,24 @@ impl AvRun {
             measured: report.measured,
             skipped: report.skipped,
             over_target: report.over_target,
-            max_drift_micros: micros(report.max_drift),
-            max_frame_offset_micros: micros(report.max_frame_offset),
+            max_drift_micros: saturating_micros(report.max_drift),
+            max_frame_offset_micros: saturating_micros(report.max_frame_offset),
         }
     }
 }
 
-fn micros(duration: Duration) -> u64 {
+pub(crate) fn profile_name(label: ProfileLabel) -> &'static str {
+    match label {
+        ProfileLabel::Nominal => "nominal",
+        ProfileLabel::OutOfProfile => "out_of_profile",
+    }
+}
+
+pub(crate) fn saturating_millis(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
+pub(crate) fn saturating_micros(duration: Duration) -> u64 {
     u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
 }
 
@@ -118,6 +126,7 @@ fn connected_core() -> Result<SessionCore<ManualClock, SeededRandomSource>, &'st
 fn drive_session(run_seconds: u64) -> Result<DriftLimitRun, &'static str> {
     let mut core = connected_core()?;
     let mut ending_effects = None;
+    let mut transition_failed = false;
     let config = AvConfig {
         video_delay: INJECTED_VIDEO_DELAY,
         ..AvConfig::nominal(run_seconds)
@@ -130,15 +139,20 @@ fn drive_session(run_seconds: u64) -> Result<DriftLimitRun, &'static str> {
             false
         }
         Ok(_) => true,
-        Err(_) => false,
+        Err(_) => {
+            transition_failed = true;
+            false
+        }
     });
+    if transition_failed {
+        return Err("internal_error");
+    }
     let effects = ending_effects.ok_or("media_failure")?;
     let stopped_at = report.stopped_at.ok_or("internal_error")?;
     Ok(DriftLimitRun {
-        injected_video_delay_millis: u64::try_from(INJECTED_VIDEO_DELAY.as_millis())
-            .unwrap_or(u64::MAX),
-        stopped_at_millis: u64::try_from(stopped_at.as_millis()).unwrap_or(u64::MAX),
-        max_drift_micros: micros(report.max_drift),
+        injected_video_delay_millis: saturating_millis(INJECTED_VIDEO_DELAY),
+        stopped_at_millis: saturating_millis(stopped_at),
+        max_drift_micros: saturating_micros(report.max_drift),
         session_state: core.state().as_str(),
         close_reason: "media_failure",
         close_before_release: effects
@@ -165,7 +179,7 @@ pub(crate) fn observe() -> Result<AvSyncObservation, &'static str> {
         && absent.mode == SyncMode::VideoFree
         && absent.measured == 0
         && absent.presented > 0
-        && drift_limit.max_drift_micros > micros(AV_DRIFT_LIMIT)
+        && drift_limit.max_drift_micros > saturating_micros(AV_DRIFT_LIMIT)
         && drift_limit.close_before_release
         && drift_limit.session_state == SessionState::Ended.as_str();
     if !passes {

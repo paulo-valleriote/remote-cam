@@ -186,6 +186,28 @@ fn audio_and_video_never_share_a_buffer() {
 }
 
 #[test]
+fn draining_one_chain_leaves_the_other_chains_buffer_untouched() {
+    let clock = AudioClock::new();
+    let mut audio = AudioEngine::new(Box::new(NullSink))
+        .expect("engine")
+        .with_clock(clock.clone());
+    let mut video = VideoSync::new(clock);
+    for index in 0..5 {
+        audio.ingest(audio_packet(index), ms(0));
+        video.offer(frame_at(u64::from(index) * 33));
+    }
+
+    audio.advance(ms(1_000));
+    assert_eq!(audio.pending_len(), 0, "the audio buffer drained");
+    assert_eq!(video.queued(), 5, "the video queue was not part of it");
+
+    let _ = video.tick(ms(1_000));
+    assert_eq!(video.queued(), 0, "the video queue drained on its own");
+    audio.ingest(audio_packet(100), ms(1_000));
+    assert_eq!(audio.pending_len(), 1, "the audio buffer is independent");
+}
+
+#[test]
 fn the_audio_engine_publishes_its_presented_position_on_the_shared_clock() {
     let clock = AudioClock::new();
     let mut audio = AudioEngine::new(Box::new(NullSink))
