@@ -1,84 +1,58 @@
-//! Packets in, NV12 frames out, with no network: depacketize RTP into access
-//! units, decode them on a dedicated thread and publish into the Frame Ring.
-//! The network task only calls [`PacketSink::push`]; it never decodes and never
-//! waits for the consumer (a full queue drops the access unit).
+//! Packets in, NV12 frames out, with no network: reorder RTP in the adaptive
+//! jitter buffer, depacketize into access units, decode on a dedicated thread
+//! and publish into the Frame Ring. The network task only calls
+//! [`PacketSink::push`]; it never decodes and never waits for the consumer (a
+//! full queue drops the packet). Loss recovery requests (NACK/PLI) come out of
+//! the same worker through [`DecodePipeline::take_recovery_requests`].
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use rtc::rtp::codec::h264::H264Packet;
-use rtc::rtp::packetizer::Depacketizer;
 use tokio::sync::Notify;
+use tokio::sync::mpsc::{Receiver as RequestReceiver, Sender as RequestSender};
 
 use crate::core::MediaCoreError;
 use crate::decoder::VideoDecoder;
+use crate::engine::{EngineStats, Output, ReceiveEngine};
 use crate::frame_ring::FrameRing;
 use crate::nv12::Nv12Frame;
+use crate::recovery::RecoveryRequest;
 
-const ACCESS_UNIT_QUEUE: usize = 8;
-const DECODE_POLL_INTERVAL: Duration = Duration::from_millis(50);
+const PACKET_QUEUE: usize = 1_024;
+const RECOVERY_REQUEST_QUEUE: usize = 32;
+/// How often the worker wakes to release packets whose playout time arrived.
+const WORKER_TICK: Duration = Duration::from_millis(2);
 
-#[derive(Debug, Default)]
-pub struct MediaStats {
-    packets: AtomicU64,
-    access_units_dropped: AtomicU64,
-    decoded_frames: AtomicU64,
-    decode_errors: AtomicU64,
-}
-
-impl MediaStats {
-    pub fn packets(&self) -> u64 {
-        self.packets.load(Ordering::Relaxed)
-    }
-
-    pub fn access_units_dropped(&self) -> u64 {
-        self.access_units_dropped.load(Ordering::Relaxed)
-    }
-
-    pub fn decoded_frames(&self) -> u64 {
-        self.decoded_frames.load(Ordering::Relaxed)
-    }
-
-    pub fn decode_errors(&self) -> u64 {
-        self.decode_errors.load(Ordering::Relaxed)
-    }
-}
-
-struct AccessUnit {
-    rtp_timestamp: u32,
-    annex_b: Vec<u8>,
-}
-
-struct AccessUnitAssembler {
-    depacketizer: H264Packet,
-    pending: Vec<u8>,
-}
-
-impl AccessUnitAssembler {
-    fn new() -> Self {
-        Self {
-            depacketizer: H264Packet::default(),
-            pending: Vec::new(),
+macro_rules! counters {
+    ($($field:ident),+ $(,)?) => {
+        #[derive(Debug, Default)]
+        pub struct MediaStats {
+            $($field: AtomicU64,)+
         }
-    }
 
-    fn push(&mut self, packet: &rtc::rtp::Packet) -> Option<AccessUnit> {
-        match self.depacketizer.depacketize(&packet.payload) {
-            Ok(nalus) => self.pending.extend_from_slice(&nalus),
-            Err(_) => self.pending.clear(),
+        impl MediaStats {
+            $(pub fn $field(&self) -> u64 {
+                self.$field.load(Ordering::Relaxed)
+            })+
         }
-        if !packet.header.marker || self.pending.is_empty() {
-            return None;
-        }
-        Some(AccessUnit {
-            rtp_timestamp: packet.header.timestamp,
-            annex_b: std::mem::take(&mut self.pending),
-        })
-    }
+    };
 }
+
+counters!(
+    packets,
+    packets_dropped,
+    packets_lost,
+    packets_late,
+    decoded_frames,
+    decode_errors,
+    nack_requests,
+    nacked_packets,
+    plis,
+    jitter_depth_micros,
+);
 
 struct Shared {
     ring: FrameRing<Nv12Frame>,
@@ -88,20 +62,22 @@ struct Shared {
 
 /// The network side of the pipeline.
 pub struct PacketSink {
-    assembler: AccessUnitAssembler,
-    access_units: SyncSender<AccessUnit>,
+    packets: SyncSender<(rtc::rtp::Packet, Duration)>,
+    origin: Instant,
     shared: Arc<Shared>,
 }
 
 impl PacketSink {
     pub fn push(&mut self, packet: &rtc::rtp::Packet) {
         self.shared.stats.packets.fetch_add(1, Ordering::Relaxed);
-        if let Some(unit) = self.assembler.push(packet)
-            && self.access_units.try_send(unit).is_err()
+        if self
+            .packets
+            .try_send((packet.clone(), self.origin.elapsed()))
+            .is_err()
         {
             self.shared
                 .stats
-                .access_units_dropped
+                .packets_dropped
                 .fetch_add(1, Ordering::Relaxed);
         }
     }
@@ -112,31 +88,77 @@ pub struct DecodePipeline {
     shared: Arc<Shared>,
     stop_requested: Arc<AtomicBool>,
     worker: Mutex<Option<JoinHandle<()>>>,
+    requests: Mutex<Option<RequestReceiver<RecoveryRequest>>>,
+}
+
+struct Worker {
+    engine: ReceiveEngine,
+    shared: Arc<Shared>,
+    requests: RequestSender<RecoveryRequest>,
+}
+
+impl Worker {
+    fn deliver(&self, output: Output) {
+        let stats = &self.shared.stats;
+        stats
+            .decode_errors
+            .fetch_add(output.decode_errors, Ordering::Relaxed);
+        for frame in output.frames {
+            stats.decoded_frames.fetch_add(1, Ordering::Relaxed);
+            self.shared.ring.push(frame);
+            self.shared.arrived.notify_one();
+        }
+        for request in output.requests {
+            // A full queue means the consumer is behind; the next poll asks again.
+            let _ = self.requests.try_send(request);
+        }
+        self.publish_stats();
+    }
+
+    fn publish_stats(&self) {
+        let stats = &self.shared.stats;
+        let EngineStats {
+            jitter,
+            recovery,
+            depth,
+        } = self.engine.stats();
+        stats.packets_lost.store(jitter.lost, Ordering::Relaxed);
+        stats.packets_late.store(jitter.late, Ordering::Relaxed);
+        stats
+            .nack_requests
+            .store(recovery.nack_requests, Ordering::Relaxed);
+        stats
+            .nacked_packets
+            .store(recovery.nacked_packets, Ordering::Relaxed);
+        stats.plis.store(recovery.plis, Ordering::Relaxed);
+        stats.jitter_depth_micros.store(
+            u64::try_from(depth.as_micros()).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
+    }
 }
 
 fn decode_loop(
-    mut decoder: Box<dyn VideoDecoder>,
-    queue: Receiver<AccessUnit>,
-    shared: Arc<Shared>,
+    mut worker: Worker,
+    queue: Receiver<(rtc::rtp::Packet, Duration)>,
+    origin: Instant,
     stop_requested: Arc<AtomicBool>,
 ) {
     while !stop_requested.load(Ordering::Acquire) {
-        let unit = match queue.recv_timeout(DECODE_POLL_INTERVAL) {
-            Ok(unit) => unit,
-            Err(RecvTimeoutError::Timeout) => continue,
-            Err(RecvTimeoutError::Disconnected) => return,
-        };
-        match decoder.decode(&unit.annex_b, unit.rtp_timestamp) {
-            Ok(Some(frame)) => {
-                shared.stats.decoded_frames.fetch_add(1, Ordering::Relaxed);
-                shared.ring.push(frame);
-                shared.arrived.notify_one();
-            }
-            Ok(None) => {}
-            Err(_) => {
-                shared.stats.decode_errors.fetch_add(1, Ordering::Relaxed);
+        match queue.recv_timeout(WORKER_TICK) {
+            Ok((packet, arrival)) => worker.engine.ingest(packet, arrival),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => {
+                let flushed = worker.engine.flush();
+                worker.deliver(flushed);
+                return;
             }
         }
+        while let Ok((packet, arrival)) = queue.try_recv() {
+            worker.engine.ingest(packet, arrival);
+        }
+        let output = worker.engine.advance(origin.elapsed());
+        worker.deliver(output);
     }
 }
 
@@ -148,25 +170,32 @@ impl DecodePipeline {
             arrived: Notify::new(),
         });
         let stop_requested = Arc::new(AtomicBool::new(false));
-        let (access_units, queue) = sync_channel(ACCESS_UNIT_QUEUE);
-        let worker = std::thread::Builder::new()
+        let origin = Instant::now();
+        let (packets, queue) = sync_channel(PACKET_QUEUE);
+        let (request_sender, request_receiver) = tokio::sync::mpsc::channel(RECOVERY_REQUEST_QUEUE);
+        let worker = Worker {
+            engine: ReceiveEngine::new(decoder),
+            shared: Arc::clone(&shared),
+            requests: request_sender,
+        };
+        let handle = std::thread::Builder::new()
             .name("media-core-decode".to_owned())
             .spawn({
-                let shared = Arc::clone(&shared);
                 let stop_requested = Arc::clone(&stop_requested);
-                move || decode_loop(decoder, queue, shared, stop_requested)
+                move || decode_loop(worker, queue, origin, stop_requested)
             })
             .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
         let sink = PacketSink {
-            assembler: AccessUnitAssembler::new(),
-            access_units,
+            packets,
+            origin,
             shared: Arc::clone(&shared),
         };
         Ok((
             Self {
                 shared,
                 stop_requested,
-                worker: Mutex::new(Some(worker)),
+                worker: Mutex::new(Some(handle)),
+                requests: Mutex::new(Some(request_receiver)),
             },
             sink,
         ))
@@ -178,6 +207,15 @@ impl DecodePipeline {
 
     pub fn stats(&self) -> &MediaStats {
         &self.shared.stats
+    }
+
+    /// The NACK/PLI requests the caller must send as RTCP, once. The stream ends
+    /// when the worker does.
+    pub fn take_recovery_requests(&self) -> Option<RequestReceiver<RecoveryRequest>> {
+        self.requests
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
     }
 
     /// Resolves once the ring holds a frame.
@@ -204,68 +242,6 @@ impl DecodePipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rtc::rtp::Packet;
-    use rtc::rtp::header::Header;
-
-    fn packet(payload: &[u8], marker: bool, timestamp: u32) -> Packet {
-        Packet {
-            header: Header {
-                marker,
-                timestamp,
-                ..Default::default()
-            },
-            payload: payload.to_vec().into(),
-        }
-    }
-
-    #[test]
-    fn a_single_nal_packet_with_the_marker_closes_an_access_unit() {
-        let mut assembler = AccessUnitAssembler::new();
-        let unit = assembler
-            .push(&packet(&[0x65, 0xAA, 0xBB], true, 9_000))
-            .expect("access unit");
-        assert_eq!(unit.rtp_timestamp, 9_000);
-        assert_eq!(unit.annex_b, [0, 0, 0, 1, 0x65, 0xAA, 0xBB]);
-    }
-
-    #[test]
-    fn nals_accumulate_until_the_marker_bit() {
-        let mut assembler = AccessUnitAssembler::new();
-        assert!(assembler.push(&packet(&[0x67, 1, 2], false, 5)).is_none());
-        let unit = assembler
-            .push(&packet(&[0x65, 3, 4], true, 5))
-            .expect("access unit");
-        assert_eq!(
-            unit.annex_b,
-            [0, 0, 0, 1, 0x67, 1, 2, 0, 0, 0, 1, 0x65, 3, 4]
-        );
-    }
-
-    #[test]
-    fn a_fragmented_nal_is_reassembled_across_fu_a_packets() {
-        let mut assembler = AccessUnitAssembler::new();
-        assert!(
-            assembler
-                .push(&packet(&[0x7C, 0x85, 1, 2], false, 1))
-                .is_none()
-        );
-        let unit = assembler
-            .push(&packet(&[0x7C, 0x45, 3, 4], true, 1))
-            .expect("access unit");
-        assert_eq!(unit.annex_b, [0, 0, 0, 1, 0x65, 1, 2, 3, 4]);
-    }
-
-    #[test]
-    fn a_malformed_payload_discards_the_partial_access_unit() {
-        let mut assembler = AccessUnitAssembler::new();
-        assert!(assembler.push(&packet(&[0x67, 1, 2], false, 1)).is_none());
-        assert!(assembler.push(&packet(&[0x00], true, 1)).is_none());
-        assert!(
-            assembler
-                .push(&packet(&[0x65, 9, 9], true, 2))
-                .is_some_and(|unit| { unit.annex_b == [0, 0, 0, 1, 0x65, 9, 9] })
-        );
-    }
 
     #[test]
     fn stats_start_at_zero() {
@@ -273,7 +249,7 @@ mod tests {
         assert_eq!(
             (
                 stats.packets(),
-                stats.access_units_dropped(),
+                stats.packets_dropped(),
                 stats.decoded_frames(),
                 stats.decode_errors()
             ),

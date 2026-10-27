@@ -11,7 +11,7 @@ const GOLDEN_REPORT: &str = include_str!("fixtures/report.json");
 fn the_reported_scenarios_pass_with_expected_results() {
     let report = run().expect("Git and the pinned Rust toolchain are available");
 
-    assert_eq!(report.report_version, 5);
+    assert_eq!(report.report_version, 6);
     assert_eq!(report.contract_version, 1);
     assert_eq!(report.scenarios.len(), 10);
     assert_eq!(report.verdict, Verdict::Pass);
@@ -101,6 +101,30 @@ fn the_versioned_schema_rejects_results_that_violate_scenario_contracts() {
         assert!(
             validator.iter_errors(&invalid_instance).next().is_some(),
             "schema accepted invalid scenario {index} field {field}"
+        );
+    }
+}
+
+#[test]
+fn the_versioned_schema_rejects_a_loss_recovery_that_cannot_pass_the_gate() {
+    let report = run().expect("Git and the pinned Rust toolchain are available");
+    let schema: Value = serde_json::from_str(REPORT_SCHEMA).unwrap();
+    let validator = jsonschema::validator_for(&schema).expect("report schema is valid");
+    let instance: Value =
+        serde_json::from_str(&report.to_json().expect("report serialises")).unwrap();
+
+    let breaches = [
+        ("profile", serde_json::json!("out_of_profile")),
+        ("absent_ticks", serde_json::json!(1)),
+        ("longest_without_fresh_millis", serde_json::json!(2_000)),
+        ("nack_requests", serde_json::json!(0)),
+    ];
+    for (field, value) in breaches {
+        let mut invalid_instance = instance.clone();
+        invalid_instance["scenarios"][9]["real_media"]["loss_recovery"][field] = value;
+        assert!(
+            validator.iter_errors(&invalid_instance).next().is_some(),
+            "schema accepted a loss_recovery breaching {field}"
         );
     }
 }
@@ -290,6 +314,26 @@ fn real_media_reaches_connected_with_a_decoded_nv12_frame() {
     assert!(media.receive_only);
     assert_eq!(report.resources.media_ports.created, 1);
     assert_eq!(report.resources.media_ports.active_after_close, 0);
+}
+
+#[test]
+fn real_media_reports_the_nominal_loss_profile_with_nack_and_pli_observable() {
+    let report = run_with(ScenarioConfig {
+        scenario: ScenarioKind::RealMediaFrame,
+        seed: 0,
+        clock_start: Timestamp::ZERO,
+    });
+    let loss = report.real_media.expect("real media").loss_recovery;
+
+    assert_eq!(loss.profile, "nominal");
+    assert_eq!(loss.duration_seconds, 10);
+    assert!(loss.nack_requests > 0 && loss.nacked_packets >= loss.nack_requests);
+    assert_eq!(loss.absent_ticks, 0, "frozen video is forbidden");
+    assert!(
+        loss.longest_without_fresh_millis < 2_000,
+        "the video never froze for 2 s: {loss:?}"
+    );
+    assert!(loss.fresh_frames > 0 && loss.packets_sent > 0);
 }
 
 #[test]

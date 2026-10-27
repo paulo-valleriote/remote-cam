@@ -152,7 +152,7 @@ delivered packages and, as a REC-25-specific gate, to the non-shipped Harness.
 workspace, pinned to Rust 1.99.1; `make build-desktop` never compiles it. The
 Harness drives `desktop/crates/pairing`, `desktop/crates/session-core`,
 `desktop/crates/media-core` and `desktop/crates/protocol`, then prints one
-compact JSON line with `report_version: 5` and `contract_version: 1`. GNU `timeout` bounds execution
+compact JSON line with `report_version: 6` and `contract_version: 1`. GNU `timeout` bounds execution
 to 120 seconds. Exit code 0 means all ten scenarios passed; exit code 1 means
 at least one scenario failed.
 

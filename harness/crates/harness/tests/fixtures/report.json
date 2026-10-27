@@ -1,5 +1,5 @@
 {
-  "report_version": 5,
+  "report_version": 6,
   "contract_version": 1,
   "commit": "0000000000000000000000000000000000000000",
   "seed": 0,
@@ -545,7 +545,22 @@
         "frames_decoded": 2,
         "frames_dropped": 0,
         "ring_slots": 3,
-        "receive_only": true
+        "receive_only": true,
+        "loss_recovery": {
+          "profile": "nominal",
+          "duration_seconds": 10,
+          "packets_sent": 319,
+          "packets_lost": 0,
+          "packets_late": 26,
+          "nack_requests": 38,
+          "nacked_packets": 38,
+          "plis": 2,
+          "fresh_frames": 264,
+          "repeated_frames": 32,
+          "absent_ticks": 0,
+          "longest_without_fresh_millis": 100,
+          "jitter_depth_micros": 23006
+        }
       },
       "resources": {
         "listeners": {
