@@ -1,50 +1,15 @@
 #![cfg(not(windows))]
 
+//! Receive-only Invariant at the Media Core boundary.
+//!
+//! ADR-0015 refuses `sendrecv`, direction-less offers and data channels before an offer
+//! reaches the Media Core (protocol and Session Core). These tests are the second line of
+//! defence: even a hostile offer that got through can never make the desktop send.
+
 use remotecam_media_core::MediaCore;
 use remotecam_media_core::testing::SyntheticPhone;
 
 const LOOPBACK: &str = "127.0.0.1:0";
-
-#[tokio::test(flavor = "current_thread")]
-async fn a_fresh_core_has_no_sending_transceiver() {
-    let core = MediaCore::new(LOOPBACK).await.expect("media core");
-    assert_eq!(core.send_transceiver_count().await, 0);
-    core.close().await.expect("close");
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn answering_a_sendonly_offer_adds_no_sending_transceiver() {
-    let core = MediaCore::new(LOOPBACK).await.expect("media core");
-    let phone = SyntheticPhone::new(LOOPBACK).await.expect("phone");
-    let offer = phone.offer().await.expect("offer");
-
-    let answer = core.answer(&offer).await.expect("answer");
-
-    assert!(answer.contains("a=recvonly"), "answer:\n{answer}");
-    assert!(!answer.contains("a=sendrecv"), "answer:\n{answer}");
-    assert!(!answer.contains("a=sendonly"), "answer:\n{answer}");
-    assert_eq!(core.send_transceiver_count().await, 0);
-    assert!(core.is_receive_only().await);
-    core.close().await.expect("close");
-    phone.close().await.expect("phone close");
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn a_closed_core_has_no_sending_transceiver() {
-    let core = MediaCore::new(LOOPBACK).await.expect("media core");
-    let phone = SyntheticPhone::new(LOOPBACK).await.expect("phone");
-    let offer = phone.offer().await.expect("offer");
-    core.answer(&offer).await.expect("answer");
-
-    core.close().await.expect("close");
-
-    assert_eq!(core.send_transceiver_count().await, 0);
-    phone.close().await.expect("phone close");
-}
-
-// ADR-0015 refuses these offers before they reach the Media Core (protocol and Session
-// Core). These tests are the second line of defence: even a hostile offer that got through
-// can never make the desktop send.
 
 struct Section {
     kind: String,
@@ -69,8 +34,15 @@ fn sections(sdp: &str) -> Vec<Section> {
         .collect()
 }
 
+fn accepted(answer: &str) -> Vec<Section> {
+    sections(answer)
+        .into_iter()
+        .filter(|section| section.port != 0)
+        .collect()
+}
+
 fn assert_accepted_sections_are_recvonly(answer: &str) {
-    for section in sections(answer).iter().filter(|section| section.port != 0) {
+    for section in accepted(answer) {
         assert_eq!(
             section.kind, "video",
             "only video may be accepted:\n{answer}"
@@ -82,10 +54,8 @@ fn assert_accepted_sections_are_recvonly(answer: &str) {
     }
 }
 
-async fn answer_to(offer: &str) -> (MediaCore, String) {
-    let core = MediaCore::new(LOOPBACK).await.expect("media core");
-    let answer = core.answer(offer).await.expect("answer");
-    (core, answer)
+async fn assert_no_sending_transceiver(core: &MediaCore) {
+    assert!(!core.has_sending_transceiver().await);
 }
 
 async fn phone_offer() -> String {
@@ -96,16 +66,60 @@ async fn phone_offer() -> String {
     offer
 }
 
+async fn answer_to(offer: &str) -> (MediaCore, String) {
+    let core = MediaCore::new(LOOPBACK).await.expect("media core");
+    let answer = core.answer(offer).await.expect("answer");
+    (core, answer)
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_fresh_core_has_no_sending_transceiver() {
+    let core = MediaCore::new(LOOPBACK).await.expect("media core");
+
+    assert_no_sending_transceiver(&core).await;
+    assert!(core.is_receive_only().await);
+    core.close().await.expect("close");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn answering_a_sendonly_offer_stays_receive_only() {
+    let (core, answer) = answer_to(&phone_offer().await).await;
+
+    assert_eq!(accepted(&answer).len(), 1, "answer:\n{answer}");
+    assert_accepted_sections_are_recvonly(&answer);
+    assert_no_sending_transceiver(&core).await;
+    assert!(core.is_receive_only().await);
+    core.close().await.expect("close");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_closed_core_has_no_sending_transceiver() {
+    let (core, _answer) = answer_to(&phone_offer().await).await;
+
+    core.close().await.expect("close");
+
+    assert_no_sending_transceiver(&core).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_refused_offer_leaves_no_sending_transceiver() {
+    let core = MediaCore::new(LOOPBACK).await.expect("media core");
+
+    assert!(core.answer("not an sdp").await.is_err());
+
+    assert_no_sending_transceiver(&core).await;
+    core.close().await.expect("close");
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn a_sendrecv_offer_is_still_answered_recvonly() {
     let offer = phone_offer().await.replace("a=sendonly", "a=sendrecv");
 
     let (core, answer) = answer_to(&offer).await;
 
-    assert_eq!(sections(&answer).len(), 1, "answer:\n{answer}");
+    assert_eq!(accepted(&answer).len(), 1, "answer:\n{answer}");
     assert_accepted_sections_are_recvonly(&answer);
-    assert!(answer.contains("a=recvonly"), "answer:\n{answer}");
-    assert_eq!(core.send_transceiver_count().await, 0);
+    assert_no_sending_transceiver(&core).await;
     core.close().await.expect("close");
 }
 
@@ -117,10 +131,10 @@ async fn an_offer_without_direction_negotiates_no_media() {
     let (core, answer) = answer_to(&offer).await;
 
     assert!(
-        sections(&answer).iter().all(|section| section.port == 0),
+        accepted(&answer).is_empty(),
         "no media section may be accepted:\n{answer}"
     );
-    assert_eq!(core.send_transceiver_count().await, 0);
+    assert_no_sending_transceiver(&core).await;
     core.close().await.expect("close");
 }
 
@@ -139,7 +153,7 @@ async fn a_data_channel_section_is_rejected() {
         .expect("the answer keeps the m-line slot, rejected");
     assert_eq!(data.port, 0, "answer:\n{answer}");
     assert_accepted_sections_are_recvonly(&answer);
-    assert_eq!(core.send_transceiver_count().await, 0);
+    assert_no_sending_transceiver(&core).await;
     core.close().await.expect("close");
 }
 
@@ -155,22 +169,8 @@ async fn a_second_video_section_is_rejected_and_sends_nothing() {
 
     let (core, answer) = answer_to(&doubled).await;
 
-    let accepted = sections(&answer)
-        .iter()
-        .filter(|section| section.port != 0)
-        .count();
-    assert_eq!(accepted, 1, "answer:\n{answer}");
+    assert_eq!(accepted(&answer).len(), 1, "answer:\n{answer}");
     assert_accepted_sections_are_recvonly(&answer);
-    assert_eq!(core.send_transceiver_count().await, 0);
-    core.close().await.expect("close");
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn a_refused_offer_leaves_no_sending_transceiver() {
-    let core = MediaCore::new(LOOPBACK).await.expect("media core");
-
-    assert!(core.answer("not an sdp").await.is_err());
-
-    assert_eq!(core.send_transceiver_count().await, 0);
+    assert_no_sending_transceiver(&core).await;
     core.close().await.expect("close");
 }
