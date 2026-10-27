@@ -1,14 +1,9 @@
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::thread::JoinHandle;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use rtc::peer_connection::sdp::RTCSessionDescription;
-use rtc::rtp::codec::h264::H264Packet;
-use rtc::rtp::packetizer::Depacketizer;
 use rtc::rtp_transceiver::RTCRtpTransceiverInit;
 use rtc::rtp_transceiver::rtp_sender::RtpCodecKind;
 use tokio::sync::Notify;
@@ -23,9 +18,8 @@ use webrtc::rtp_transceiver::RTCRtpTransceiverDirection;
 use crate::decoder::VideoDecoder;
 use crate::frame_ring::FrameRing;
 use crate::nv12::Nv12Frame;
+use crate::pipeline::{DecodePipeline, MediaStats, PacketSink};
 
-const ACCESS_UNIT_QUEUE: usize = 8;
-const DECODE_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const GATHERING_DEADLINE: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,74 +45,8 @@ fn connection_error(error: impl fmt::Display) -> MediaCoreError {
     MediaCoreError::PeerConnection(error.to_string())
 }
 
-#[derive(Debug, Default)]
-pub struct MediaStats {
-    packets: AtomicU64,
-    access_units_dropped: AtomicU64,
-    decoded_frames: AtomicU64,
-    decode_errors: AtomicU64,
-}
-
-impl MediaStats {
-    pub fn packets(&self) -> u64 {
-        self.packets.load(Ordering::Relaxed)
-    }
-
-    pub fn access_units_dropped(&self) -> u64 {
-        self.access_units_dropped.load(Ordering::Relaxed)
-    }
-
-    pub fn decoded_frames(&self) -> u64 {
-        self.decoded_frames.load(Ordering::Relaxed)
-    }
-
-    pub fn decode_errors(&self) -> u64 {
-        self.decode_errors.load(Ordering::Relaxed)
-    }
-}
-
-struct AccessUnit {
-    rtp_timestamp: u32,
-    annex_b: Vec<u8>,
-}
-
-struct AccessUnitAssembler {
-    depacketizer: H264Packet,
-    pending: Vec<u8>,
-}
-
-impl AccessUnitAssembler {
-    fn new() -> Self {
-        Self {
-            depacketizer: H264Packet::default(),
-            pending: Vec::new(),
-        }
-    }
-
-    fn push(&mut self, packet: &rtc::rtp::Packet) -> Option<AccessUnit> {
-        match self.depacketizer.depacketize(&packet.payload) {
-            Ok(nalus) => self.pending.extend_from_slice(&nalus),
-            Err(_) => self.pending.clear(),
-        }
-        if !packet.header.marker || self.pending.is_empty() {
-            return None;
-        }
-        Some(AccessUnit {
-            rtp_timestamp: packet.header.timestamp,
-            annex_b: std::mem::take(&mut self.pending),
-        })
-    }
-}
-
-struct Shared {
-    ring: FrameRing<Nv12Frame>,
-    stats: MediaStats,
-    arrived: Notify,
-}
-
 struct EventSink {
-    shared: Arc<Shared>,
-    access_units: SyncSender<AccessUnit>,
+    packets: Mutex<Option<PacketSink>>,
     gathering_complete: Arc<Notify>,
 }
 
@@ -134,60 +62,28 @@ impl PeerConnectionEventHandler for EventSink {
         if track.kind().await != RtpCodecKind::Video {
             return;
         }
-        let shared = Arc::clone(&self.shared);
-        let access_units = self.access_units.clone();
+        let Some(mut packets) = self
+            .packets
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+        else {
+            return;
+        };
         tokio::spawn(async move {
-            let mut assembler = AccessUnitAssembler::new();
             while let Some(event) = track.poll().await {
-                let TrackRemoteEvent::OnRtpPacket(packet) = event else {
-                    continue;
-                };
-                shared.stats.packets.fetch_add(1, Ordering::Relaxed);
-                if let Some(unit) = assembler.push(&packet)
-                    && access_units.try_send(unit).is_err()
-                {
-                    shared
-                        .stats
-                        .access_units_dropped
-                        .fetch_add(1, Ordering::Relaxed);
+                if let TrackRemoteEvent::OnRtpPacket(packet) = event {
+                    packets.push(&packet);
                 }
             }
         });
     }
 }
 
-fn decode_loop(
-    mut decoder: Box<dyn VideoDecoder>,
-    queue: Receiver<AccessUnit>,
-    shared: Arc<Shared>,
-    stop_requested: Arc<AtomicBool>,
-) {
-    while !stop_requested.load(Ordering::Acquire) {
-        let unit = match queue.recv_timeout(DECODE_POLL_INTERVAL) {
-            Ok(unit) => unit,
-            Err(RecvTimeoutError::Timeout) => continue,
-            Err(RecvTimeoutError::Disconnected) => return,
-        };
-        match decoder.decode(&unit.annex_b, unit.rtp_timestamp) {
-            Ok(Some(frame)) => {
-                shared.stats.decoded_frames.fetch_add(1, Ordering::Relaxed);
-                shared.ring.push(frame);
-                shared.arrived.notify_one();
-            }
-            Ok(None) => {}
-            Err(_) => {
-                shared.stats.decode_errors.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-    }
-}
-
 pub struct MediaCore {
     connection: Arc<dyn PeerConnection>,
-    shared: Arc<Shared>,
+    pipeline: DecodePipeline,
     gathering_complete: Arc<Notify>,
-    stop_requested: Arc<AtomicBool>,
-    worker: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl MediaCore {
@@ -209,16 +105,10 @@ impl MediaCore {
         let registry = register_default_interceptors(Registry::new(), &mut media_engine)
             .map_err(connection_error)?;
 
-        let shared = Arc::new(Shared {
-            ring: FrameRing::new(),
-            stats: MediaStats::default(),
-            arrived: Notify::new(),
-        });
+        let (pipeline, packets) = DecodePipeline::new(decoder)?;
         let gathering_complete = Arc::new(Notify::new());
-        let (access_units, queue) = sync_channel(ACCESS_UNIT_QUEUE);
         let sink = EventSink {
-            shared: Arc::clone(&shared),
-            access_units,
+            packets: Mutex::new(Some(packets)),
             gathering_complete: Arc::clone(&gathering_complete),
         };
 
@@ -247,22 +137,10 @@ impl MediaCore {
             .await
             .map_err(connection_error)?;
 
-        let stop_requested = Arc::new(AtomicBool::new(false));
-        let worker = std::thread::Builder::new()
-            .name("media-core-decode".to_owned())
-            .spawn({
-                let shared = Arc::clone(&shared);
-                let stop_requested = Arc::clone(&stop_requested);
-                move || decode_loop(decoder, queue, shared, stop_requested)
-            })
-            .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
-
         Ok(Self {
             connection,
-            shared,
+            pipeline,
             gathering_complete,
-            stop_requested,
-            worker: Mutex::new(Some(worker)),
         })
     }
 
@@ -292,17 +170,15 @@ impl MediaCore {
     }
 
     pub async fn frame_available(&self) {
-        while self.shared.ring.is_empty() {
-            self.shared.arrived.notified().await;
-        }
+        self.pipeline.frame_available().await;
     }
 
     pub fn ring(&self) -> &FrameRing<Nv12Frame> {
-        &self.shared.ring
+        self.pipeline.ring()
     }
 
     pub fn stats(&self) -> &MediaStats {
-        &self.shared.stats
+        self.pipeline.stats()
     }
 
     pub async fn is_receive_only(&self) -> bool {
@@ -316,23 +192,18 @@ impl MediaCore {
     }
 
     pub async fn close(&self) -> Result<(), MediaCoreError> {
-        self.stop_requested.store(true, Ordering::Release);
-        let worker = self
-            .worker
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take();
-        if let Some(worker) = worker {
+        self.pipeline.request_stop();
+        if let Some(worker) = self.pipeline.take_worker() {
             let joined = tokio::task::spawn_blocking(move || worker.join())
                 .await
                 .map_err(|error| MediaCoreError::Decoder(error.to_string()))?;
             if joined.is_err() {
-                self.shared.ring.clear();
+                self.pipeline.ring().clear();
                 let _ = self.connection.close().await;
                 return Err(MediaCoreError::Decoder("decode thread panicked".to_owned()));
             }
         }
-        self.shared.ring.clear();
+        self.pipeline.ring().clear();
         self.connection.close().await.map_err(connection_error)
     }
 }
@@ -340,68 +211,6 @@ impl MediaCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rtc::rtp::Packet;
-    use rtc::rtp::header::Header;
-
-    fn packet(payload: &[u8], marker: bool, timestamp: u32) -> Packet {
-        Packet {
-            header: Header {
-                marker,
-                timestamp,
-                ..Default::default()
-            },
-            payload: payload.to_vec().into(),
-        }
-    }
-
-    #[test]
-    fn a_single_nal_packet_with_the_marker_closes_an_access_unit() {
-        let mut assembler = AccessUnitAssembler::new();
-        let unit = assembler
-            .push(&packet(&[0x65, 0xAA, 0xBB], true, 9_000))
-            .expect("access unit");
-        assert_eq!(unit.rtp_timestamp, 9_000);
-        assert_eq!(unit.annex_b, [0, 0, 0, 1, 0x65, 0xAA, 0xBB]);
-    }
-
-    #[test]
-    fn nals_accumulate_until_the_marker_bit() {
-        let mut assembler = AccessUnitAssembler::new();
-        assert!(assembler.push(&packet(&[0x67, 1, 2], false, 5)).is_none());
-        let unit = assembler
-            .push(&packet(&[0x65, 3, 4], true, 5))
-            .expect("access unit");
-        assert_eq!(
-            unit.annex_b,
-            [0, 0, 0, 1, 0x67, 1, 2, 0, 0, 0, 1, 0x65, 3, 4]
-        );
-    }
-
-    #[test]
-    fn a_fragmented_nal_is_reassembled_across_fu_a_packets() {
-        let mut assembler = AccessUnitAssembler::new();
-        assert!(
-            assembler
-                .push(&packet(&[0x7C, 0x85, 1, 2], false, 1))
-                .is_none()
-        );
-        let unit = assembler
-            .push(&packet(&[0x7C, 0x45, 3, 4], true, 1))
-            .expect("access unit");
-        assert_eq!(unit.annex_b, [0, 0, 0, 1, 0x65, 1, 2, 3, 4]);
-    }
-
-    #[test]
-    fn a_malformed_payload_discards_the_partial_access_unit() {
-        let mut assembler = AccessUnitAssembler::new();
-        assert!(assembler.push(&packet(&[0x67, 1, 2], false, 1)).is_none());
-        assert!(assembler.push(&packet(&[0x00], true, 1)).is_none());
-        assert!(
-            assembler
-                .push(&packet(&[0x65, 9, 9], true, 2))
-                .is_some_and(|unit| { unit.annex_b == [0, 0, 0, 1, 0x65, 9, 9] })
-        );
-    }
 
     #[test]
     fn errors_describe_their_cause() {
@@ -419,20 +228,6 @@ mod tests {
             MediaCoreError::GatheringTimedOut
                 .to_string()
                 .contains("ICE")
-        );
-    }
-
-    #[test]
-    fn stats_start_at_zero() {
-        let stats = MediaStats::default();
-        assert_eq!(
-            (
-                stats.packets(),
-                stats.access_units_dropped(),
-                stats.decoded_frames(),
-                stats.decode_errors()
-            ),
-            (0, 0, 0, 0)
         );
     }
 }
