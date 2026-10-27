@@ -19,7 +19,7 @@ evidence and the carried obligations are recorded in the
 | Gate | Verdict | Disposition |
 | --- | --- | --- |
 | Virtual camera injection | `no_go` | carried to F3 — only one Google Chrome cell was collected (33.2845 s) |
-| Pairing handshake | `conditional` | C-02 waived for F1, deadline 2026-11-20 |
+| Pairing handshake | `conditional` | C-02 waived; amended by A-1 — F1 core exit 2026-11-20, device residue (C-02-residual) 2026-12-20 |
 | Desktop receive pipeline | `no_go` | carried to F3 — PC-1 failed on the F0 host |
 | Codec interoperability | `conditional` | C-04 waived for F1/F2, deadline 2026-12-20 |
 | Virtual audio and licensing | `conditional` | C-05 waived for F2/F3, deadline 2027-01-15 |

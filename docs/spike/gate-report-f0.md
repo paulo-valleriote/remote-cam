@@ -2,7 +2,7 @@
 
 **Feature:** 001-f0-technical-spikes
 **Phase review at:** 2026-10-23T17:20:00-03:00
-**Report version:** 2
+**Report version:** 3 (Amendment A-1, 2026-10-26; see "Amendments to this report")
 **Prepared by:** Paulo Valleriote
 
 ## Reference environment
@@ -75,6 +75,7 @@
 - **Conditions:**
   - C-02-residue-restart: Residue inspection after application restart must be empty using the same method as the session-end inspection, on two named reference devices. (status: waived, conditioned phases: F1)
     - Waiver: waived by Paulo Valleriote on 2026-10-23T17:20:00-03:00, deadline 2026-11-20
+    - Amended by A-1 (2026-10-26): the F1 core exit no longer depends on this condition; the residue-on-devices part is tracked as C-02-residual with its own deadline 2026-12-20 (see "Amendments to this report").
 
 ### desktop_receive_pipeline — Desktop receive pipeline: latency, resilience, resources, drift, stall recovery
 
@@ -170,7 +171,7 @@
 
 | Condition | Phases | Waived by | Deadline | Resolution conditions |
 |-----------|--------|-----------|----------|-----------------------|
-| C-02-residue-restart | F1 | Paulo Valleriote | 2026-11-20 | F1 may build the protocol core without the restart inspection, but the inspection must be recorded with the same method before the F1 exit gate. |
+| C-02-residue-restart | F1 | Paulo Valleriote | 2026-11-20 | Amended by A-1: split into the F1 core exit (2026-11-20, no device dependency) and C-02-residual (device inspection, 2026-12-20). The inspection must still be recorded with the same method. |
 | C-04-interop-live-run | F1, F2 | Paulo Valleriote | 2026-12-20 | The F1 contract may use the documented H.264 High Profile Level 3.1 baseline with VP8 fallback while the live run is pending; the run must be recorded before the F2 exit gate. |
 | C-05-licensing-decision | F2, F3 | Paulo Valleriote | 2027-01-15 | Licensing does not block the start of F1 or F2; the decision must be signed, or video-only selected, before the F3 audio scope begins. |
 
@@ -198,12 +199,30 @@
 
 ## Downstream status (F1 / F2 / F3)
 
-- **F1:** conditional — F0 is closed with exceptions; F1 may proceed under the C-02 and C-04 waivers.
-  - Conditions: C-02-residue-restart (deadline 2026-11-20), C-04-interop-live-run (deadline 2026-12-20)
-- **F2:** conditional — F2 depends on the F1 exit and on the codec and licensing conditions.
-  - Conditions: F1 exit, C-04-interop-live-run (deadline 2026-12-20), C-05-licensing-decision (deadline 2027-01-15)
+- **F1:** conditional — F0 is closed with exceptions; the F1 core exit (2026-11-20) does not depend on unavailable devices. The device residue inspection (C-02-residual, 2026-12-20) and C-04 remain open (amended by A-1).
+  - Conditions: F1 core exit (deadline 2026-11-20), C-02-residual (deadline 2026-12-20), C-04-interop-live-run (deadline 2026-12-20)
+- **F2:** conditional — F2 depends on the F1 core exit, C-02-residual and the codec and licensing conditions.
+  - Conditions: F1 core exit, C-02-residual (deadline 2026-12-20), C-04-interop-live-run (deadline 2026-12-20), C-05-licensing-decision (deadline 2027-01-15)
 - **F3:** conditional — F3 depends on the F2 exit and on the carried injection and pipeline obligations.
   - Conditions: F2 exit, C-05-licensing-decision (deadline 2027-01-15), camera_injection carried (deadline 2027-02-15), desktop_receive_pipeline carried (deadline 2027-02-15)
+
+## Amendments to this report
+
+### A-1 — Separate the F1 core exit from the C-02 device residue (2026-10-26)
+
+- **Amended by:** Paulo Valleriote (technical_lead, as F1 exit owner); security_reviewer role retains C-02-residual.
+- **Ticket:** REC-16
+- **Reason:** the single C-02 waiver (deadline 2026-11-20) tied the F1 exit to a residue-restart inspection that needs two named reference devices (Windows 11 and Android) that are not available. The F1 date would therefore depend on unavailable hardware.
+- **Change:**
+
+| Item | Scope | Owner role | Deadline | Depends on devices |
+|------|-------|------------|----------|--------------------|
+| F1 core exit | Protocol core, session core and product harness exit gate | technical_lead — Paulo Valleriote | 2026-11-20 | no |
+| C-02-residual | Residue inspection after application restart, same method as the session-end inspection, on two named reference devices | security_reviewer — Paulo Valleriote | 2026-12-20 | yes |
+
+- **Status effects:** F1 stays `conditional` (core exit plus C-02-residual and C-04); F2 now depends on the F1 core exit and on C-02-residual; F3 is unchanged.
+- **Unchanged:** all five gate verdicts, `pairing_handshake` stays `conditional`; C-04, C-05 and every carried obligation keep their dates.
+- **Note:** this report was originally rendered from `spikes/evidence/gate_report.json`; A-1 is a dated manual amendment and the F0 evidence record is not rewritten.
 
 ## Decision index
 
