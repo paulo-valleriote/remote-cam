@@ -16,7 +16,7 @@
 ## Context and architecture
 
 - **Rust workspace:** `Cargo.toml` resolver 3, edition 2024, MSRV 1.92, version 0.1.0.
-- **Crates (6):** `media-core` (receive-only webrtc-rs peer connection, OpenH264 decode to NV12, Frame Ring and the real `MediaPort`; ADR-0021), `protocol` (delivered contract), `session-core` (product session state machine), `pairing` (ephemeral certificate, pairing material, pinned TLS 1.3 listener/client; ADR-0009), `app` (product shell and structured logging) and `scrub` (zeroizing global allocator and stack scrub; the only crate allowed `unsafe`; ADR-0017).
+- **Crates (6):** `media-core` (receive-only webrtc-rs peer connection, OpenH264 decode to NV12, Frame Ring, the real `MediaPort` and the `VirtualCameraPublisher` seam with its `VirtualCameraProducer` and CI `RecordingPublisher`; ADR-0021), `protocol` (delivered contract), `session-core` (product session state machine), `pairing` (ephemeral certificate, pairing material, pinned TLS 1.3 listener/client; ADR-0009), `app` (product shell and structured logging) and `scrub` (zeroizing global allocator and stack scrub; the only crate allowed `unsafe`; ADR-0017).
 - **Toolchain:** `rust-toolchain.toml` — `1.99.1`, components `clippy` + `rustfmt`, profile `minimal`.
 - **Build:** `make build-desktop` = `cargo build --manifest-path desktop/Cargo.toml --workspace`. It does not build `harness/`, which is a separate workspace.
 - **No executable entry point** (`main`) in this phase; the product harness is under `harness/` and the F0 harnesses are under `spikes/`.
