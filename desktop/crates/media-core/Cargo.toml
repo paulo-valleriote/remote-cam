@@ -20,3 +20,13 @@ webrtc.workspace = true
 # distributed with the product (ADR-0021).
 [target.'cfg(not(windows))'.dependencies]
 openh264.workspace = true
+
+# Windows only: the Media Foundation hardware decoder (REC-56). `unsafe` COM
+# calls are confined to `mf_decoder` (ADR-0025).
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com",
+] }

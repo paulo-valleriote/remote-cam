@@ -30,6 +30,7 @@ decision was made and why.
 | [0022](0022-video-under-loss-jitter-buffer-recovery-and-output-modes.md) | Video under loss: jitter buffer, loss recovery and output modes |
 | [0023](0023-continuous-audio-opus-jitter-buffer-and-silence.md) | Continuous audio: libopus, audio jitter buffer and uninterrupted silence |
 | [0024](0024-av-sync-audio-master-clock-and-drift-limit.md) | A/V sync: audio as the master clock and the hard drift limit |
+| [0025](0025-media-foundation-decoder-backend-and-selection.md) | Media Foundation decoder backend, selection and the `unsafe` boundary |
 
 Add a new ADR by scanning this directory for the highest number and
 incrementing it. To revisit a decision, write a new ADR that supersedes the old

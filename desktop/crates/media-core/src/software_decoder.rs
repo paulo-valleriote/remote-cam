@@ -2,6 +2,7 @@ use openh264::decoder::Decoder;
 use openh264::formats::YUVSource;
 
 use crate::decoder::{DecodeError, VideoDecoder};
+use crate::decoder_selection::{DecoderBackend, DecoderFactory};
 use crate::nv12::{Nv12Frame, i420_to_nv12};
 
 pub struct SoftwareH264Decoder {
@@ -13,6 +14,18 @@ impl SoftwareH264Decoder {
         Decoder::new()
             .map(|decoder| Self { decoder })
             .map_err(|error| DecodeError::Decoder(error.to_string()))
+    }
+}
+
+pub struct SoftwareH264Factory;
+
+impl DecoderFactory for SoftwareH264Factory {
+    fn backend(&self) -> DecoderBackend {
+        DecoderBackend::OpenH264
+    }
+
+    fn open(&self) -> Result<Box<dyn VideoDecoder>, DecodeError> {
+        Ok(Box::new(SoftwareH264Decoder::new()?))
     }
 }
 
