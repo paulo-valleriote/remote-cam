@@ -26,6 +26,7 @@ pub mod scaler;
 pub mod software_decoder;
 #[cfg(not(windows))]
 pub mod testing;
+pub mod virtual_camera;
 
 pub use core::{MediaCore, MediaCoreError, receive_only_registry};
 pub use decoder::{DecodeError, VideoDecoder};
@@ -39,3 +40,6 @@ pub use pipeline::{DecodePipeline, MediaStats, PacketSink};
 pub use port::RingMediaPort;
 #[cfg(not(windows))]
 pub use software_decoder::{SoftwareH264Decoder, SoftwareH264Factory};
+pub use virtual_camera::{
+    FrameSource, PublishError, VirtualCameraProducer, VirtualCameraPublisher,
+};
