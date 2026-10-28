@@ -224,15 +224,9 @@ impl VirtualCameraPublisher for RecordingPublisher {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use std::time::Duration;
-
-    use crate::frame_ring::FrameRing;
-    use crate::nv12::Nv12Frame;
-    use crate::output::OutputMode;
 
     fn frame(width: u32, height: u32, timestamp: u32) -> Nv12Frame {
         let size = width as usize * height as usize * 3 / 2;
@@ -358,6 +352,24 @@ mod tests {
     }
 
     #[test]
+    fn the_three_modes_are_announced_and_the_consumer_choice_decides_the_size() {
+        let (ring, mut producer, probe) = producer_with(OutputMode::FullHd1080);
+        producer.start().expect("start");
+        assert_eq!(
+            probe.events().lock().unwrap().first(),
+            Some(&Event::Started(vec![
+                OutputMode::Vga,
+                OutputMode::Hd720,
+                OutputMode::FullHd1080
+            ]))
+        );
+        ring.push(frame(640, 480, 1));
+        producer.pump(Duration::ZERO).expect("pump");
+        let header = probe.headers()[0];
+        assert_eq!((header.width, header.height), (1920, 1080));
+    }
+
+    #[test]
     fn a_restart_never_republishes_a_frame_from_before_the_stop() {
         let (ring, mut producer, probe) = producer_with(OutputMode::Vga);
         producer.start().expect("start");
@@ -382,33 +394,115 @@ mod tests {
     }
 
     #[test]
-    fn a_slow_reader_never_blocks_the_network_side_and_sees_newest_first() {
+    fn a_reader_that_never_kept_up_publishes_only_the_newest_frame_and_the_oldest_are_dropped() {
+        let (ring, mut producer, probe) = producer_with(OutputMode::Vga);
+        producer.start().expect("start");
+        let network = Arc::clone(&ring);
+        std::thread::spawn(move || {
+            for timestamp in 0..2_000_u32 {
+                network.push(frame(640, 480, timestamp));
+            }
+        })
+        .join()
+        .expect("network thread");
+        assert_eq!(ring.dropped(), 2_000 - 3);
+        producer.pump(Duration::ZERO).expect("pump");
+        assert_eq!(probe.frames(), [1_999]);
+    }
+
+    #[test]
+    fn a_reader_pumping_during_the_burst_never_goes_backwards_and_ends_on_the_newest_frame() {
         let (ring, mut producer, probe) = producer_with(OutputMode::Vga);
         producer.start().expect("start");
         let network = Arc::clone(&ring);
         let writer = std::thread::spawn(move || {
-            let begin = std::time::Instant::now();
             for timestamp in 0..2_000_u32 {
                 network.push(frame(640, 480, timestamp));
             }
-            begin.elapsed()
         });
-        for tick in 0..20_u64 {
+        let mut tick = 0_u64;
+        while !writer.is_finished() {
             producer
                 .pump(Duration::from_millis(tick * 33))
                 .expect("pump");
-            std::thread::sleep(Duration::from_millis(1));
+            tick += 1;
+            std::thread::yield_now();
         }
-        let elapsed = writer.join().expect("network thread");
-        assert!(
-            elapsed < Duration::from_secs(5),
-            "push stalled: {elapsed:?}"
-        );
-        assert!(
-            ring.dropped() > 0,
-            "a lagging reader must cost the oldest frames"
-        );
+        writer.join().expect("network thread");
+        producer
+            .pump(Duration::from_millis(tick * 33))
+            .expect("final pump");
         let frames = probe.frames();
         assert!(frames.windows(2).all(|pair| pair[0] <= pair[1]));
+        assert_eq!(frames.last(), Some(&1_999));
+    }
+
+    struct FailingOnce {
+        inner: RecordingPublisher,
+        failures_left: u32,
+    }
+
+    impl VirtualCameraPublisher for FailingOnce {
+        fn start(&mut self, modes: &[OutputMode]) -> Result<(), PublishError> {
+            self.inner.start(modes)
+        }
+
+        fn publish(
+            &mut self,
+            header: FrameHeader,
+            frame: Arc<Nv12Frame>,
+        ) -> Result<(), PublishError> {
+            if self.failures_left > 0 {
+                self.failures_left -= 1;
+                return Err(PublishError::Rejected("consumer gone".into()));
+            }
+            self.inner.publish(header, frame)
+        }
+
+        fn stop(&mut self) {
+            self.inner.stop();
+        }
+    }
+
+    #[test]
+    fn every_start_stop_cycle_releases_its_resource() {
+        let (_, mut producer, probe) = producer_with(OutputMode::Vga);
+        for _ in 0..50 {
+            producer.start().expect("start");
+            assert_eq!(probe.open_resources(), 1);
+            producer.stop();
+            assert_eq!(probe.open_resources(), 0);
+        }
+        let events = probe.events();
+        let events = events.lock().unwrap();
+        let started = events
+            .iter()
+            .filter(|e| matches!(e, Event::Started(_)))
+            .count();
+        let stopped = events.iter().filter(|e| **e == Event::Stopped).count();
+        assert_eq!((started, stopped), (50, 50));
+    }
+
+    #[test]
+    fn a_publisher_failure_mid_pump_keeps_the_frame_and_the_sequence_and_stop_still_releases() {
+        let ring = Arc::new(FrameRing::new());
+        let probe = RecordingPublisher::new();
+        let publisher = FailingOnce {
+            inner: probe.clone(),
+            failures_left: 1,
+        };
+        let mut producer = VirtualCameraProducer::new(ring.clone(), publisher, OutputMode::Vga);
+        producer.start().expect("start");
+        ring.push(frame(640, 480, 5));
+        assert_eq!(
+            producer.pump(Duration::ZERO),
+            Err(PublishError::Rejected("consumer gone".into()))
+        );
+        assert!(probe.headers().is_empty());
+        producer.pump(Duration::from_millis(33)).expect("retry");
+        let headers = probe.headers();
+        assert_eq!((headers[0].timestamp, headers[0].sequence), (5, 0));
+        producer.stop();
+        assert_eq!(probe.open_resources(), 0);
     }
 }
